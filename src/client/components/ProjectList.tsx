@@ -1,0 +1,165 @@
+import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../context/AuthContext.js";
+import { api } from "../lib/api.js";
+import { CreateProjectModal } from "./CreateProjectModal.js";
+import { InviteModal } from "./InviteModal.js";
+
+interface Project {
+  id: string;
+  name: string;
+  role: string;
+  created_at: string;
+}
+
+interface Invitation {
+  id: string;
+  project_id: string;
+  projects: { name: string };
+}
+
+export function ProjectList({
+  onOpenProject,
+}: {
+  onOpenProject: (id: string) => void;
+}) {
+  const { user, signOut } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [projData, invData] = await Promise.all([
+        api.get<{ projects: Project[] }>("/api/projects"),
+        api.get<{ invitations: Invitation[] }>("/api/invitations"),
+      ]);
+      setProjects(projData.projects);
+      setInvitations(invData.invitations);
+    } catch {
+      // Ignore
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleAcceptInvite = async (invId: string) => {
+    try {
+      await api.post(`/api/invitations/${invId}/accept`);
+      await loadData();
+    } catch {
+      // Ignore
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-bg">
+      {/* Header */}
+      <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-text">Perchpad</h1>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-text-muted">
+            {user?.email}
+          </span>
+          <button
+            onClick={signOut}
+            className="text-sm text-text-muted hover:text-text transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <div className="max-w-4xl mx-auto p-8">
+        {/* Invitations */}
+        {invitations.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-text mb-3">
+              Pending invitations
+            </h2>
+            <div className="space-y-2">
+              {invitations.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between bg-surface rounded-xl p-4 border border-border"
+                >
+                  <span className="text-text">
+                    You've been invited to{" "}
+                    <strong>{inv.projects.name}</strong>
+                  </span>
+                  <button
+                    onClick={() => handleAcceptInvite(inv.id)}
+                    className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors text-sm"
+                  >
+                    Accept
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Projects */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-semibold text-text">
+            Your workspaces
+          </h2>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover transition-colors text-sm font-medium"
+          >
+            + New workspace
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-center text-text-muted py-12">Loading...</div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="text-5xl mb-4">📝</div>
+            <p className="text-text-muted text-lg mb-2">
+              No workspaces yet
+            </p>
+            <p className="text-text-muted text-sm">
+              Create your first workspace to start writing!
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects.map((project) => (
+              <button
+                key={project.id}
+                onClick={() => onOpenProject(project.id)}
+                className="text-left bg-surface rounded-xl p-5 border border-border hover:border-accent hover:shadow-md transition-all group"
+              >
+                <h3 className="font-semibold text-text group-hover:text-accent transition-colors mb-1">
+                  {project.name}
+                </h3>
+                <p className="text-xs text-text-muted">
+                  {project.role === "owner" ? "Owner" : project.role === "editor" ? "Editor" : "Viewer"}
+                  {" · "}
+                  Created{" "}
+                  {new Date(project.created_at).toLocaleDateString()}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showCreate && (
+        <CreateProjectModal
+          onClose={() => setShowCreate(false)}
+          onCreated={(project) => {
+            setShowCreate(false);
+            onOpenProject(project.id);
+          }}
+        />
+      )}
+    </div>
+  );
+}

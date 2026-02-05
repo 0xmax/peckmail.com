@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #faf5ff;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f0e6ff;
+  --color-accent: #b48ead;
+  --color-accent-hover: #a07da3;
+  --color-text: #4a4458;
+  --color-text-muted: #8e849b;
+  --color-border: #e8dff0;
+  --color-chat-user: #e8f5e9;
+  --color-chat-ai: #fce4ec;
+  --color-success: #81c784;
+  --color-danger: #e57373;
+}
+
+/* Base styles */
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* CodeMirror pastel theme overrides */
+.cm-editor {
+  height: 100%;
+  font-size: 15px;
+}
+
+.cm-editor .cm-scroller {
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  line-height: 1.6;
+}
+
+.cm-editor .cm-content {
+  padding: 1rem 0;
+}
+
+.cm-editor .cm-gutters {
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.cm-editor .cm-activeLineGutter {
+  background: var(--color-surface-alt);
+}
+
+.cm-editor .cm-activeLine {
+  background: rgba(240, 230, 255, 0.3);
+}
+
+.cm-editor .cm-selectionBackground {
+  background: rgba(180, 142, 173, 0.2) !important;
+}
+
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: rgba(180, 142, 173, 0.3) !important;
+}
+
+.cm-editor .cm-cursor {
+  border-left-color: var(--color-accent);
+}
+
+/* Toast animation */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(1rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.toast-enter {
+  animation: toast-in 0.2s ease-out;
+}
+
+/* Pulse animation for chat loading */
+@keyframes pulse-dot {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.4s infinite ease-in-out;
+}
+
+.pulse-dot:nth-child(2) { animation-delay: 0.2s; }
+.pulse-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Transitions */
+.transition-fade {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}

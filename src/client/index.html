@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perchpad</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-[#faf5ff] text-[#4a4458]">
+  <div id="root"></div>
+  <script>
+    // Inject Supabase config from server
+    window.__SUPABASE_URL__ = "__SUPABASE_URL__";
+    window.__SUPABASE_ANON_KEY__ = "__SUPABASE_ANON_KEY__";
+  </script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

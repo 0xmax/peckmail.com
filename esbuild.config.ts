@@ -1,0 +1,35 @@
+import * as esbuild from "esbuild";
+import { mkdirSync } from "fs";
+
+mkdirSync("dist/public", { recursive: true });
+
+const isWatch = !process.argv.includes("--once");
+
+const ctx = await esbuild.context({
+  entryPoints: ["src/client/main.tsx"],
+  bundle: true,
+  outfile: "dist/public/app.js",
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  jsx: "automatic",
+  jsxImportSource: "react",
+  sourcemap: true,
+  define: {
+    "process.env.NODE_ENV": isWatch ? '"development"' : '"production"',
+  },
+  loader: {
+    ".tsx": "tsx",
+    ".ts": "ts",
+  },
+  logLevel: "info",
+});
+
+if (isWatch) {
+  await ctx.watch();
+  console.log("[esbuild] watching for changes...");
+} else {
+  await ctx.rebuild();
+  await ctx.dispose();
+  console.log("[esbuild] build complete.");
+}
