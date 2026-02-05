@@ -60,7 +60,10 @@ export function ProjectList({
     <div className="min-h-screen bg-bg">
       {/* Header */}
       <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-text">Perchpad</h1>
+        <div className="flex items-center gap-2">
+          <img src="/assets/logo.png" alt="Perchpad" className="h-7 w-auto" />
+          <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</h1>
+        </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-text-muted">
             {user?.email}

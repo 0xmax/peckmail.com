@@ -1,8 +1,13 @@
 import * as esbuild from "esbuild";
-import { mkdirSync, copyFileSync } from "fs";
+import { mkdirSync, copyFileSync, readdirSync } from "fs";
 
-mkdirSync("dist/public", { recursive: true });
+mkdirSync("dist/public/assets", { recursive: true });
 copyFileSync("src/client/index.html", "dist/public/index.html");
+
+// Copy static assets
+for (const file of readdirSync("src/client/assets")) {
+  copyFileSync(`src/client/assets/${file}`, `dist/public/assets/${file}`);
+}
 
 const isWatch = !process.argv.includes("--once");
 

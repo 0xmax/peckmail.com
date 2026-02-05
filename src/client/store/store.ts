@@ -33,6 +33,7 @@ export class WorkspaceStore {
       chatMessages: [],
       chatStreaming: false,
       chatError: null,
+      ttsFromLine: null,
     };
   }
 
@@ -402,6 +403,7 @@ export class WorkspaceStore {
           type: "chat:send",
           sessionId,
           message: action.message,
+          thinking: action.thinking || false,
           context: {
             openFilePath: this.state.openFilePath,
             fileContent: this.state.fileContent,
@@ -445,6 +447,17 @@ export class WorkspaceStore {
 
       case "chat:streaming": {
         this.setState({ chatStreaming: action.streaming });
+        break;
+      }
+
+      // TTS
+      case "tts:play-from": {
+        this.setState({ ttsFromLine: action.fromLine });
+        break;
+      }
+
+      case "tts:clear": {
+        this.setState({ ttsFromLine: null });
         break;
       }
 

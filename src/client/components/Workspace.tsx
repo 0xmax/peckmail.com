@@ -6,6 +6,7 @@ import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
 import { InviteModal } from "./InviteModal.js";
 import { ShareButton } from "./ShareButton.js";
+import { AudioBar } from "./ReadAloud.js";
 
 export function Workspace({ onBack }: { onBack: () => void }) {
   const { path: openFilePath } = useOpenFile();
@@ -19,7 +20,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   return (
     <div className="h-screen flex flex-col bg-bg">
       {/* Top bar */}
-      <header className="bg-surface border-b border-border px-4 py-2 flex items-center justify-between shrink-0">
+      <header className="bg-surface border-b border-border px-4 py-2 flex items-center justify-between shrink-0 relative">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -32,6 +33,12 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             {openFilePath
               ? openFilePath.split("/").pop()
               : "No file open"}
+          </span>
+        </div>
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
+          <img src="/assets/logo.png" alt="Perchpad" className="h-6 w-auto" />
+          <span style={{ fontFamily: "'Playfair Display', serif" }} className="text-lg font-medium text-text -tracking-[0.01em]">
+            Perchpad
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -118,6 +125,9 @@ export function Workspace({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
+
+      {/* Audio player bar */}
+      <AudioBar />
 
       {showInvite && (
         <InviteModal

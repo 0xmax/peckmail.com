@@ -45,6 +45,7 @@ export function Editor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; line: number } | null>(null);
   const lastWrittenContent = useRef<string>("");
   const lastBroadcastContent = useRef<string>("");
   const diskWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -110,6 +111,16 @@ export function Editor() {
               }
             }, DISK_WRITE_DELAY);
           }
+        }),
+        EditorView.domEventHandlers({
+          contextmenu(event, view) {
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (pos === null) return false;
+            const line = view.state.doc.lineAt(pos);
+            event.preventDefault();
+            setCtxMenu({ x: event.clientX, y: event.clientY, line: line.number });
+            return true;
+          },
         }),
         EditorView.theme({
           "&": {
@@ -178,6 +189,21 @@ export function Editor() {
     lastBroadcastContent.current = fileContent;
   }, [fileContent]);
 
+  // Close context menu on click outside / escape
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const onClick = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCtxMenu(null);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [ctxMenu]);
+
   // Handle AI highlight
   useEffect(() => {
     const view = viewRef.current;
@@ -233,6 +259,28 @@ export function Editor() {
             className="text-text-muted hover:text-surface ml-1"
           >
             ×
+          </button>
+        </div>
+      )}
+
+      {/* Context menu */}
+      {ctxMenu && (
+        <div
+          className="fixed z-50 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[160px]"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+            onClick={() => {
+              dispatch({ type: "tts:play-from", fromLine: ctxMenu.line });
+              setCtxMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
+              <path d="M4.5 2v12l9-6z" />
+            </svg>
+            Read from line {ctxMenu.line}
           </button>
         </div>
       )}

@@ -8,10 +8,11 @@ export interface AuthUser {
 
 // Hono middleware: extract and verify Supabase JWT
 export async function authMiddleware(c: Context, next: Next) {
-  // Check Authorization header first, then cookie
+  // Check Authorization header, then cookie, then query param (for audio streaming)
   let token =
     c.req.header("Authorization")?.replace("Bearer ", "") ||
-    getCookie(c, "sb-access-token");
+    getCookie(c, "sb-access-token") ||
+    c.req.query("token");
 
   if (!token) {
     return c.json({ error: "Unauthorized" }, 401);

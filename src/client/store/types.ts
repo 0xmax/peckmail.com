@@ -38,6 +38,7 @@ export interface StoreState {
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   chatError: string | null;
+  ttsFromLine: number | null;
 }
 
 export type StoreAction =
@@ -67,11 +68,14 @@ export type StoreAction =
   | { type: "chat:set-sessions"; sessions: ChatSession[] }
   | { type: "chat:load-session"; sessionId: string }
   | { type: "chat:set-messages"; messages: ChatMessage[] }
-  | { type: "chat:send"; sessionId: string; message: string }
+  | { type: "chat:send"; sessionId: string; message: string; thinking?: boolean }
   | { type: "chat:new-session" }
   | { type: "chat:delete-session"; sessionId: string }
   | { type: "chat:delta"; sessionId: string; text: string }
   | { type: "chat:tool-use"; sessionId: string; tool: string; input: any }
   | { type: "chat:done"; sessionId: string; title: string }
   | { type: "chat:error"; sessionId: string; error: string }
-  | { type: "chat:streaming"; streaming: boolean };
+  | { type: "chat:streaming"; streaming: boolean }
+  // TTS
+  | { type: "tts:play-from"; fromLine: number }
+  | { type: "tts:clear" };

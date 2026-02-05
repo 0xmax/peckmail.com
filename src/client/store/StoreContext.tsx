@@ -111,6 +111,10 @@ export function useHighlight(): { fromLine: number; toLine: number } | null {
   return useSelector((s) => s.highlight);
 }
 
+export function useTtsFromLine(): number | null {
+  return useSelector((s) => s.ttsFromLine);
+}
+
 export function useLoadFileContent(): (path: string) => Promise<void> {
   const store = useStore();
   return (path: string) => store.loadFileContent(path);

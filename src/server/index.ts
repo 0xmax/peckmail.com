@@ -23,6 +23,7 @@ import {
   supabaseAdmin,
 } from "./db.js";
 import { initRepo, getHistory, getCommitDiff } from "./git.js";
+import { ttsRouter } from "./tts.js";
 import { promises as fs } from "fs";
 import { join } from "path";
 
@@ -201,6 +202,7 @@ api.get("/projects/:id/revisions/:hash", async (c) => {
 
 // Mount API
 app.route("/api", api);
+app.route("/api", ttsRouter);
 
 // --- WebSocket ---
 app.get(

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { promises as fs } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, relative, basename } from "path";
 import { v4 as uuidv4 } from "uuid";
 import type { WebSocket } from "ws";
 import { PROJECTS_DIR, safePath, listTree } from "./files.js";
@@ -200,7 +200,312 @@ const tools: Anthropic.Tool[] = [
       required: ["path", "from_line", "to_line"],
     },
   },
-];
+  {
+    name: "grep",
+    description:
+      "Search for a pattern across files in the workspace. Returns matching lines with file paths and line numbers. Supports regular expressions.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        pattern: {
+          type: "string",
+          description: "Regex pattern to search for",
+        },
+        path: {
+          type: "string",
+          description:
+            "Optional file or directory path to search in (relative to project root). Defaults to entire project.",
+        },
+        case_insensitive: {
+          type: "boolean",
+          description: "Whether to ignore case. Defaults to false.",
+        },
+      },
+      required: ["pattern"],
+    },
+  },
+  {
+    name: "find",
+    description:
+      "Find files by name pattern (glob-style). Returns a list of matching file paths.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        pattern: {
+          type: "string",
+          description:
+            "Glob-style pattern to match file names (e.g. '*.md', 'chapter-*', '*.txt')",
+        },
+        path: {
+          type: "string",
+          description:
+            "Directory to search in (relative to project root). Defaults to project root.",
+        },
+      },
+      required: ["pattern"],
+    },
+  },
+  {
+    name: "head",
+    description:
+      "Show the first N lines of a file. Useful for previewing file contents.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+        lines: {
+          type: "number",
+          description: "Number of lines to show. Defaults to 10.",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "tail",
+    description:
+      "Show the last N lines of a file. Useful for checking the end of a file.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+        lines: {
+          type: "number",
+          description: "Number of lines to show. Defaults to 10.",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "wc",
+    description:
+      "Count lines, words, and characters in a file or in given text.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description:
+            "Path to the file relative to the project root. If omitted, counts the provided text instead.",
+        },
+        text: {
+          type: "string",
+          description: "Text to count (used when path is not provided).",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "sort_lines",
+    description:
+      "Sort lines in a file or text alphabetically. Can sort in reverse or remove duplicates.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description:
+            "Path to the file relative to the project root. If omitted, sorts the provided text.",
+        },
+        text: {
+          type: "string",
+          description: "Text to sort (used when path is not provided).",
+        },
+        reverse: {
+          type: "boolean",
+          description: "Sort in reverse order. Defaults to false.",
+        },
+        unique: {
+          type: "boolean",
+          description: "Remove duplicate lines. Defaults to false.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "sed",
+    description:
+      "Find and replace using a regex pattern across a file. Like sed 's/pattern/replacement/g'. Can replace all occurrences or just the first in each line.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+        pattern: {
+          type: "string",
+          description: "Regex pattern to find",
+        },
+        replacement: {
+          type: "string",
+          description:
+            "Replacement string. Supports $1, $2 etc. for capture groups.",
+        },
+        global: {
+          type: "boolean",
+          description:
+            "Replace all occurrences per line (true) or just the first (false). Defaults to true.",
+        },
+      },
+      required: ["path", "pattern", "replacement"],
+    },
+  },
+  {
+    name: "uniq",
+    description:
+      "Remove or count duplicate adjacent lines in a file, like the Unix uniq command.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+        count: {
+          type: "boolean",
+          description:
+            "Prefix each line with the number of occurrences. Defaults to false.",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "diff",
+    description:
+      "Show a simple diff between two files, line by line.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path_a: {
+          type: "string",
+          description: "Path to the first file",
+        },
+        path_b: {
+          type: "string",
+          description: "Path to the second file",
+        },
+      },
+      required: ["path_a", "path_b"],
+    },
+  },
+  {
+    name: "append",
+    description:
+      "Append text to the end of a file. Creates the file if it doesn't exist.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+        text: {
+          type: "string",
+          description: "Text to append",
+        },
+      },
+      required: ["path", "text"],
+    },
+  },
+  {
+    name: "slice",
+    description:
+      "Extract a range of lines from a file. Returns lines with line numbers. Useful for reading a specific section without loading the entire file.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+        from: {
+          type: "number",
+          description: "Starting line number (1-based, inclusive)",
+        },
+        to: {
+          type: "number",
+          description: "Ending line number (1-based, inclusive)",
+        },
+      },
+      required: ["path", "from", "to"],
+    },
+  },
+  {
+    name: "delete_lines",
+    description:
+      "Delete a range of lines from a file. The file is modified in place.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+        from: {
+          type: "number",
+          description: "Starting line number to delete (1-based, inclusive)",
+        },
+        to: {
+          type: "number",
+          description: "Ending line number to delete (1-based, inclusive)",
+        },
+      },
+      required: ["path", "from", "to"],
+    },
+  },
+  {
+    name: "outline",
+    description:
+      "Extract the markdown heading structure from a file. Returns headings with their line numbers and nesting level. Great for understanding document structure.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to a markdown file relative to the project root",
+        },
+      },
+      required: ["path"],
+    },
+    cache_control: { type: "ephemeral" },
+  },
+] as Anthropic.Tool[];
+
+// Recursively collect all file paths under a directory (excluding hidden dirs)
+async function walkFiles(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...(await walkFiles(full)));
+    } else {
+      results.push(full);
+    }
+  }
+  return results;
+}
+
+// Simple glob match (supports * and ?)
+function globMatch(name: string, pattern: string): boolean {
+  const regex = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".");
+  return new RegExp(`^${regex}$`, "i").test(name);
+}
 
 // Execute a tool call
 async function executeTool(
@@ -268,6 +573,271 @@ async function executeTool(
       return `Highlighted lines ${input.from_line}-${input.to_line} in "${input.path}"`;
     }
 
+    case "grep": {
+      try {
+        const searchDir = input.path ? safePath(projectId, input.path) : dir;
+        const stat = await fs.stat(searchDir);
+        const files = stat.isDirectory()
+          ? await walkFiles(searchDir)
+          : [searchDir];
+
+        const flags = input.case_insensitive ? "i" : "";
+        const regex = new RegExp(input.pattern, flags);
+        const matches: string[] = [];
+
+        for (const file of files) {
+          try {
+            const content = await fs.readFile(file, "utf-8");
+            const lines = content.split("\n");
+            const relPath = relative(dir, file);
+            for (let i = 0; i < lines.length; i++) {
+              if (regex.test(lines[i])) {
+                matches.push(`${relPath}:${i + 1}: ${lines[i]}`);
+                if (matches.length >= 200) break;
+              }
+            }
+          } catch {
+            // Skip binary/unreadable files
+          }
+          if (matches.length >= 200) break;
+        }
+
+        if (matches.length === 0) return "No matches found.";
+        const suffix = matches.length >= 200 ? "\n... (truncated at 200 matches)" : "";
+        return matches.join("\n") + suffix;
+      } catch {
+        return `Error: Could not search "${input.path || "."}"`;
+      }
+    }
+
+    case "find": {
+      try {
+        const searchDir = input.path ? safePath(projectId, input.path) : dir;
+        const allFiles = await walkFiles(searchDir);
+        const matched = allFiles
+          .filter((f) => globMatch(basename(f), input.pattern))
+          .map((f) => relative(dir, f));
+
+        if (matched.length === 0) return "No files found.";
+        return matched.slice(0, 200).join("\n") +
+          (matched.length > 200 ? `\n... (${matched.length} total)` : "");
+      } catch {
+        return `Error: Could not search "${input.path || "."}"`;
+      }
+    }
+
+    case "head": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        const content = await fs.readFile(resolved, "utf-8");
+        const n = input.lines || 10;
+        const lines = content.split("\n").slice(0, n);
+        return lines.map((l: string, i: number) => `${i + 1}: ${l}`).join("\n");
+      } catch {
+        return `Error: Could not read file "${input.path}"`;
+      }
+    }
+
+    case "tail": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        const content = await fs.readFile(resolved, "utf-8");
+        const allLines = content.split("\n");
+        const n = input.lines || 10;
+        const start = Math.max(0, allLines.length - n);
+        const lines = allLines.slice(start);
+        return lines.map((l: string, i: number) => `${start + i + 1}: ${l}`).join("\n");
+      } catch {
+        return `Error: Could not read file "${input.path}"`;
+      }
+    }
+
+    case "wc": {
+      try {
+        let content: string;
+        if (input.path) {
+          const resolved = safePath(projectId, input.path);
+          content = await fs.readFile(resolved, "utf-8");
+        } else if (input.text) {
+          content = input.text;
+        } else {
+          return "Error: Provide either a path or text.";
+        }
+        const lines = content.split("\n").length;
+        const words = content.split(/\s+/).filter(Boolean).length;
+        const chars = content.length;
+        return `Lines: ${lines}\nWords: ${words}\nCharacters: ${chars}`;
+      } catch {
+        return `Error: Could not read "${input.path}"`;
+      }
+    }
+
+    case "sort_lines": {
+      try {
+        let content: string;
+        if (input.path) {
+          const resolved = safePath(projectId, input.path);
+          content = await fs.readFile(resolved, "utf-8");
+        } else if (input.text) {
+          content = input.text;
+        } else {
+          return "Error: Provide either a path or text.";
+        }
+        let lines = content.split("\n");
+        lines.sort((a, b) => a.localeCompare(b));
+        if (input.reverse) lines.reverse();
+        if (input.unique) lines = [...new Set(lines)];
+        return lines.join("\n");
+      } catch {
+        return `Error: Could not read "${input.path}"`;
+      }
+    }
+
+    case "sed": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        const content = await fs.readFile(resolved, "utf-8");
+        const flags = input.global !== false ? "g" : "";
+        const regex = new RegExp(input.pattern, flags);
+        const lines = content.split("\n");
+        let changeCount = 0;
+        const newLines = lines.map((line) => {
+          const replaced = line.replace(regex, input.replacement);
+          if (replaced !== line) changeCount++;
+          return replaced;
+        });
+        const newContent = newLines.join("\n");
+        await fs.writeFile(resolved, newContent, "utf-8");
+        return `Replaced ${changeCount} line(s) in "${input.path}"`;
+      } catch (err: any) {
+        if (err?.message === "Path traversal detected") {
+          return "Error: Invalid path";
+        }
+        return `Error: Could not process "${input.path}"`;
+      }
+    }
+
+    case "uniq": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        const content = await fs.readFile(resolved, "utf-8");
+        const lines = content.split("\n");
+
+        if (input.count) {
+          const result: string[] = [];
+          let i = 0;
+          while (i < lines.length) {
+            let count = 1;
+            while (i + count < lines.length && lines[i + count] === lines[i]) count++;
+            result.push(`${count} ${lines[i]}`);
+            i += count;
+          }
+          return result.join("\n");
+        } else {
+          const result: string[] = [];
+          for (let i = 0; i < lines.length; i++) {
+            if (i === 0 || lines[i] !== lines[i - 1]) result.push(lines[i]);
+          }
+          return result.join("\n");
+        }
+      } catch {
+        return `Error: Could not read "${input.path}"`;
+      }
+    }
+
+    case "diff": {
+      try {
+        const resolvedA = safePath(projectId, input.path_a);
+        const resolvedB = safePath(projectId, input.path_b);
+        const contentA = await fs.readFile(resolvedA, "utf-8");
+        const contentB = await fs.readFile(resolvedB, "utf-8");
+        const linesA = contentA.split("\n");
+        const linesB = contentB.split("\n");
+        const result: string[] = [];
+        const maxLen = Math.max(linesA.length, linesB.length);
+
+        for (let i = 0; i < maxLen; i++) {
+          const a = linesA[i];
+          const b = linesB[i];
+          if (a === undefined) {
+            result.push(`+ ${i + 1}: ${b}`);
+          } else if (b === undefined) {
+            result.push(`- ${i + 1}: ${a}`);
+          } else if (a !== b) {
+            result.push(`- ${i + 1}: ${a}`);
+            result.push(`+ ${i + 1}: ${b}`);
+          }
+        }
+
+        if (result.length === 0) return "Files are identical.";
+        return result.join("\n");
+      } catch {
+        return `Error: Could not diff files`;
+      }
+    }
+
+    case "append": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        await fs.mkdir(dirname(resolved), { recursive: true });
+        await fs.appendFile(resolved, input.text, "utf-8");
+        return `Appended to "${input.path}"`;
+      } catch {
+        return `Error: Could not append to "${input.path}"`;
+      }
+    }
+
+    case "slice": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        const content = await fs.readFile(resolved, "utf-8");
+        const allLines = content.split("\n");
+        const from = Math.max(1, input.from);
+        const to = Math.min(allLines.length, input.to);
+        const sliced = allLines.slice(from - 1, to);
+        return sliced.map((l: string, i: number) => `${from + i}: ${l}`).join("\n");
+      } catch {
+        return `Error: Could not read "${input.path}"`;
+      }
+    }
+
+    case "delete_lines": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        const content = await fs.readFile(resolved, "utf-8");
+        const allLines = content.split("\n");
+        const from = Math.max(1, input.from);
+        const to = Math.min(allLines.length, input.to);
+        const deleted = to - from + 1;
+        allLines.splice(from - 1, deleted);
+        await fs.writeFile(resolved, allLines.join("\n"), "utf-8");
+        return `Deleted lines ${from}-${to} (${deleted} lines) from "${input.path}"`;
+      } catch {
+        return `Error: Could not edit "${input.path}"`;
+      }
+    }
+
+    case "outline": {
+      try {
+        const resolved = safePath(projectId, input.path);
+        const content = await fs.readFile(resolved, "utf-8");
+        const lines = content.split("\n");
+        const headings: string[] = [];
+        for (let i = 0; i < lines.length; i++) {
+          const match = lines[i].match(/^(#{1,6})\s+(.+)/);
+          if (match) {
+            const level = match[1].length;
+            const indent = "  ".repeat(level - 1);
+            headings.push(`${indent}${match[1]} ${match[2]}  (line ${i + 1})`);
+          }
+        }
+        if (headings.length === 0) return "No headings found.";
+        return headings.join("\n");
+      } catch {
+        return `Error: Could not read "${input.path}"`;
+      }
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }
@@ -282,6 +852,7 @@ export async function handleChatMessage(
     type: string;
     sessionId: string;
     message: string;
+    thinking?: boolean;
     context?: {
       openFilePath: string | null;
       fileContent: string | null;
@@ -314,46 +885,77 @@ export async function handleChatMessage(
 
   // Call Anthropic with tools in a loop
   try {
-    let messages: Anthropic.MessageParam[] = session.messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    let messages: Anthropic.MessageParam[] = session.messages.map((m, i) => {
+      const param: Anthropic.MessageParam = {
+        role: m.role,
+        content: m.content,
+      };
+      // Cache the second-to-last message so all prior history is cached
+      if (i === session.messages.length - 2 && typeof m.content === "string") {
+        param.content = [
+          {
+            type: "text",
+            text: m.content,
+            cache_control: { type: "ephemeral" },
+          },
+        ];
+      }
+      return param;
+    });
 
     let continueLoop = true;
     while (continueLoop) {
-      // Build context-aware system prompt
-      let systemPrompt =
-        "You are a friendly writing assistant in Perchpad, a collaborative markdown workspace. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. You can also use the highlight tool to draw attention to specific lines in the editor. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.";
+      // Build context-aware system prompt with caching
+      const systemBlocks: Anthropic.TextBlockParam[] = [
+        {
+          type: "text",
+          text: "You are a friendly writing assistant in Perchpad, a collaborative markdown workspace. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. You can also use the highlight tool to draw attention to specific lines in the editor. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.",
+          cache_control: { type: "ephemeral" },
+        },
+      ];
 
       if (msg.context?.openFilePath && msg.context.fileContent !== null) {
-        systemPrompt += `\n\nThe user currently has "${msg.context.openFilePath}" open in their editor. Here is its content:\n\`\`\`\n${msg.context.fileContent}\n\`\`\``;
+        let contextText = `\n\nThe user currently has "${msg.context.openFilePath}" open in their editor. Here is its content:\n\`\`\`\n${msg.context.fileContent}\n\`\`\``;
         if (msg.context.cursorPosition) {
-          systemPrompt += `\n\nTheir cursor is at line ${msg.context.cursorPosition.line}, column ${msg.context.cursorPosition.col}.`;
+          contextText += `\n\nTheir cursor is at line ${msg.context.cursorPosition.line}, column ${msg.context.cursorPosition.col}.`;
         }
+        systemBlocks.push({ type: "text", text: contextText });
       }
 
-      const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 4096,
-        system: systemPrompt,
+      const streamParams: any = {
+        model: "claude-opus-4-6",
+        max_tokens: 16384,
+        system: systemBlocks,
         tools,
         messages,
-      });
+      };
+      if (msg.thinking) {
+        streamParams.thinking = {
+          type: "enabled",
+          budget_tokens: 10000,
+        };
+      }
+      const stream = anthropic.messages.stream(streamParams);
 
       let fullContent: any[] = [];
       let currentText = "";
 
       for await (const event of stream) {
-        if (
-          event.type === "content_block_delta" &&
-          event.delta.type === "text_delta"
-        ) {
-          currentText += event.delta.text;
-          sendTo(ws, {
-            type: "chat:delta",
-            sessionId: session.id,
-            text: event.delta.text,
-          });
+        if (event.type === "content_block_delta") {
+          if (event.delta.type === "text_delta") {
+            currentText += event.delta.text;
+            sendTo(ws, {
+              type: "chat:delta",
+              sessionId: session.id,
+              text: event.delta.text,
+            });
+          } else if (event.delta.type === "thinking_delta") {
+            sendTo(ws, {
+              type: "chat:thinking",
+              sessionId: session.id,
+              text: (event.delta as any).thinking,
+            });
+          }
         }
       }
 

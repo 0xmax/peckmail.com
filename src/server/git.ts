@@ -17,7 +17,7 @@ export async function initRepo(projectId: string) {
   await git.init({ fs, dir });
 
   // Create initial .gitignore
-  await fs.writeFile(join(dir, ".gitignore"), ".perchpad/\n", "utf-8");
+  await fs.writeFile(join(dir, ".gitignore"), ".perchpad/\n.tts/\n", "utf-8");
 
   // Create .perchpad/chats directory
   await fs.mkdir(join(dir, ".perchpad", "chats"), { recursive: true });

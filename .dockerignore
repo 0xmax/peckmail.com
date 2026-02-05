@@ -1,0 +1,7 @@
+node_modules
+dist
+projects
+.env
+.git
+supabase/.temp
+supabase/.branches

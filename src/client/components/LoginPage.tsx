@@ -28,20 +28,21 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#faf5ff]">
-      <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-lg border border-[#e8dff0]">
+    <div className="min-h-screen flex items-center justify-center bg-bg">
+      <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-[#4a4458] mb-2">
+          <img src="/assets/logo.png" alt="Perchpad" className="h-14 w-auto mx-auto mb-3" />
+          <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-4xl font-semibold text-text mb-2 -tracking-[0.01em]">
             Perchpad
           </h1>
-          <p className="text-[#8e849b]">
+          <p className="text-text-muted">
             Your friendly writing workspace
           </p>
         </div>
 
         <button
           onClick={signInWithGoogle}
-          className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border border-[#e8dff0] rounded-xl text-[#4a4458] hover:bg-[#f0e6ff] transition-colors mb-6"
+          className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-surface border border-border rounded-xl text-text hover:bg-surface-alt transition-colors mb-6"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -66,10 +67,10 @@ export function LoginPage() {
 
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-[#e8dff0]" />
+            <div className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-white text-[#8e849b]">or</span>
+            <span className="px-4 bg-surface text-text-muted">or</span>
           </div>
         </div>
 
@@ -80,7 +81,7 @@ export function LoginPage() {
               placeholder="Display name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full py-3 px-4 bg-[#faf5ff] border border-[#e8dff0] rounded-xl text-[#4a4458] placeholder-[#8e849b] focus:outline-none focus:ring-2 focus:ring-[#b48ead] focus:border-transparent transition-all"
+              className="w-full py-3 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
             />
           )}
           <input
@@ -89,7 +90,7 @@ export function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full py-3 px-4 bg-[#faf5ff] border border-[#e8dff0] rounded-xl text-[#4a4458] placeholder-[#8e849b] focus:outline-none focus:ring-2 focus:ring-[#b48ead] focus:border-transparent transition-all"
+            className="w-full py-3 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
           />
           <input
             type="password"
@@ -98,17 +99,17 @@ export function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={6}
-            className="w-full py-3 px-4 bg-[#faf5ff] border border-[#e8dff0] rounded-xl text-[#4a4458] placeholder-[#8e849b] focus:outline-none focus:ring-2 focus:ring-[#b48ead] focus:border-transparent transition-all"
+            className="w-full py-3 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
           />
 
           {error && (
-            <p className="text-sm text-[#e57373] text-center">{error}</p>
+            <p className="text-sm text-danger text-center">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 bg-[#b48ead] text-white rounded-xl hover:bg-[#a07da3] disabled:opacity-50 transition-colors font-medium"
+            className="w-full py-3 px-4 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors font-medium"
           >
             {loading
               ? "Please wait..."
@@ -118,14 +119,14 @@ export function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-[#8e849b]">
+        <p className="mt-6 text-center text-sm text-text-muted">
           {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
           <button
             onClick={() => {
               setIsSignUp(!isSignUp);
               setError("");
             }}
-            className="text-[#b48ead] hover:underline font-medium"
+            className="text-accent hover:underline font-medium"
           >
             {isSignUp ? "Sign in" : "Sign up"}
           </button>
