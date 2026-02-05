@@ -138,6 +138,94 @@ Description:`,
   console.log(`[git] ${projectId}: ${commitMessage}`);
 }
 
+// Check for uncommitted changes and generate a commit message
+export async function getUncommittedStatus(projectId: string): Promise<{ hasChanges: boolean; files: string[]; suggestedMessage: string }> {
+  const dir = join(PROJECTS_DIR, projectId);
+  const matrix = await git.statusMatrix({ fs, dir });
+  const changed = matrix.filter(([filepath, head, workdir, stage]) => {
+    if (filepath.startsWith(".perchpad/") || filepath.startsWith(".git/")) return false;
+    return head !== workdir || head !== stage;
+  });
+
+  if (changed.length === 0) {
+    return { hasChanges: false, files: [], suggestedMessage: "" };
+  }
+
+  const files = changed.map(([f]) => f);
+  return { hasChanges: true, files, suggestedMessage: "" };
+}
+
+// Manual commit with custom message
+export async function manualCommit(projectId: string, message?: string): Promise<{ hash: string; message: string }> {
+  const dir = join(PROJECTS_DIR, projectId);
+  const matrix = await git.statusMatrix({ fs, dir });
+  const changed = matrix.filter(([filepath, head, workdir, stage]) => {
+    if (filepath.startsWith(".perchpad/") || filepath.startsWith(".git/")) return false;
+    return head !== workdir || head !== stage;
+  });
+
+  if (changed.length === 0) {
+    throw new Error("No changes to commit");
+  }
+
+  // Stage all changed files
+  for (const [filepath, _head, workdir] of changed) {
+    if (workdir === 0) {
+      await git.remove({ fs, dir, filepath });
+    } else {
+      await git.add({ fs, dir, filepath });
+    }
+  }
+
+  // Generate or use provided message
+  let commitMessage = message?.trim() || "";
+  if (!commitMessage) {
+    const diffParts: string[] = [];
+    for (const [filepath, head, workdir] of changed) {
+      if (head === 0 && workdir === 2) {
+        diffParts.push(`New file: ${filepath}`);
+      } else if (workdir === 0) {
+        diffParts.push(`Deleted: ${filepath}`);
+      } else {
+        try {
+          const content = await fs.readFile(join(dir, filepath), "utf-8");
+          const preview = content.slice(0, 500);
+          diffParts.push(`Modified: ${filepath}\n  Preview: ${preview}`);
+        } catch {
+          diffParts.push(`Modified: ${filepath}`);
+        }
+      }
+    }
+
+    try {
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 200,
+        messages: [{
+          role: "user",
+          content: `You are generating a friendly, concise description of changes to a writing project. No technical jargon — this is for writers, not developers. Write a single sentence, max 100 characters.\n\nChanges:\n${diffParts.join("\n")}\n\nDescription:`,
+        }],
+      });
+      const block = response.content[0];
+      commitMessage = block.type === "text" ? block.text.trim() : "Updated files";
+    } catch {
+      commitMessage = changed.length === 1
+        ? `Updated ${changed[0][0]}`
+        : `Updated ${changed.length} files`;
+    }
+  }
+
+  const hash = await git.commit({
+    fs,
+    dir,
+    message: commitMessage,
+    author: { name: "Perchpad", email: "perchpad@local" },
+  });
+
+  console.log(`[git] ${projectId}: ${commitMessage}`);
+  return { hash, message: commitMessage };
+}
+
 // Get commit history
 export async function getHistory(
   projectId: string,

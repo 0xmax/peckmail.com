@@ -2,19 +2,23 @@ import { useState } from "react";
 import { useOpenFile, useConnected, useProjectId } from "../store/StoreContext.js";
 import { FileTree } from "./FileTree.js";
 import { Editor } from "./Editor.js";
+import { Preview } from "./Preview.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
 import { InviteModal } from "./InviteModal.js";
 import { ShareButton } from "./ShareButton.js";
 import { AudioBar } from "./ReadAloud.js";
+import { SaveIndicator } from "./SaveIndicator.js";
 
 export function Workspace({ onBack }: { onBack: () => void }) {
-  const { path: openFilePath } = useOpenFile();
+  const { path: openFilePath, content: fileContent } = useOpenFile();
   const connected = useConnected();
   const projectId = useProjectId();
-  const [showChat, setShowChat] = useState(true);
+  const [showChat, setShowChat] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarWidth] = useState(240);
 
   return (
@@ -29,11 +33,23 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             ← Back
           </button>
           <div className="w-px h-5 bg-border" />
+          <button
+            onClick={() => setShowSidebar(!showSidebar)}
+            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+              showSidebar
+                ? "bg-surface-alt text-accent"
+                : "text-text-muted hover:text-text hover:bg-surface-alt"
+            }`}
+          >
+            Pages
+          </button>
+          <div className="w-px h-5 bg-border" />
           <span className="text-sm font-medium text-text">
             {openFilePath
               ? openFilePath.split("/").pop()
               : "No file open"}
           </span>
+          <SaveIndicator projectId={projectId} />
         </div>
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
           <img src="/assets/logo.png" alt="Perchpad" className="h-6 w-auto" />
@@ -48,10 +64,23 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             </span>
           )}
           {openFilePath && (
-            <ShareButton
-              projectId={projectId}
-              filePath={openFilePath}
-            />
+            <>
+              <ShareButton
+                projectId={projectId}
+                filePath={openFilePath}
+              />
+              <button
+                onClick={() => setShowPreview(!showPreview)}
+                className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+                  showPreview
+                    ? "bg-surface-alt text-accent"
+                    : "text-text-muted hover:text-text hover:bg-surface-alt"
+                }`}
+                title={showPreview ? "Edit mode" : "Preview mode"}
+              >
+                {showPreview ? "Edit" : "Preview"}
+              </button>
+            </>
           )}
           <button
             onClick={() => setShowRevisions(!showRevisions)}
@@ -85,17 +114,23 @@ export function Workspace({ onBack }: { onBack: () => void }) {
       {/* Main area */}
       <div className="flex flex-1 min-h-0">
         {/* Sidebar - File tree */}
-        <div
-          className="bg-surface border-r border-border flex flex-col shrink-0"
-          style={{ width: sidebarWidth }}
-        >
-          <FileTree />
-        </div>
+        {showSidebar && (
+          <div
+            className="bg-surface border-r border-border flex flex-col shrink-0"
+            style={{ width: sidebarWidth }}
+          >
+            <FileTree />
+          </div>
+        )}
 
-        {/* Editor area */}
+        {/* Editor / Preview area */}
         <div className="flex-1 min-w-0 flex flex-col">
           {openFilePath ? (
-            <Editor />
+            showPreview ? (
+              <Preview content={fileContent ?? ""} />
+            ) : (
+              <Editor />
+            )
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">

@@ -22,7 +22,7 @@ import {
   getShareLink,
   supabaseAdmin,
 } from "./db.js";
-import { initRepo, getHistory, getCommitDiff } from "./git.js";
+import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit } from "./git.js";
 import { ttsRouter } from "./tts.js";
 import { promises as fs } from "fs";
 import { join } from "path";
@@ -55,6 +55,25 @@ app.get("/s/:token", async (c) => {
 // --- API: Auth required ---
 const api = new Hono();
 api.use("/*", authMiddleware);
+
+// User preferences
+api.get("/user/preferences", async (c) => {
+  const user = getUser(c);
+  const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  if (!authUser) return c.json({ error: "User not found" }, 404);
+  return c.json(authUser.user_metadata?.preferences || {});
+});
+
+api.put("/user/preferences", async (c) => {
+  const user = getUser(c);
+  const preferences = await c.req.json();
+  const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  if (!authUser) return c.json({ error: "User not found" }, 404);
+  await supabaseAdmin.auth.admin.updateUserById(user.id, {
+    user_metadata: { ...authUser.user_metadata, preferences },
+  });
+  return c.json({ ok: true });
+});
 
 // Projects
 api.get("/projects", async (c) => {
@@ -178,6 +197,32 @@ api.delete("/chat/:projectId/sessions/:sessionId", async (c) => {
   return c.json({ ok: true });
 });
 
+// Project settings (.perchpad.json)
+api.get("/projects/:id/settings", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  const settingsPath = join(PROJECTS_DIR, projectId, ".perchpad.json");
+  try {
+    const raw = await fs.readFile(settingsPath, "utf-8");
+    return c.json(JSON.parse(raw));
+  } catch {
+    return c.json({});
+  }
+});
+
+api.put("/projects/:id/settings", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  const settings = await c.req.json();
+  const settingsPath = join(PROJECTS_DIR, projectId, ".perchpad.json");
+  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+  return c.json({ ok: true });
+});
+
 // Git history (revisions)
 api.get("/projects/:id/revisions", async (c) => {
   const user = getUser(c);
@@ -188,6 +233,29 @@ api.get("/projects/:id/revisions", async (c) => {
   const offset = parseInt(c.req.query("offset") || "0");
   const history = await getHistory(projectId, { limit, offset });
   return c.json({ revisions: history });
+});
+
+api.get("/projects/:id/status", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  const status = await getUncommittedStatus(projectId);
+  return c.json(status);
+});
+
+api.post("/projects/:id/commit", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  const { message } = await c.req.json<{ message?: string }>();
+  try {
+    const result = await manualCommit(projectId, message);
+    return c.json(result);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
 });
 
 api.get("/projects/:id/revisions/:hash", async (c) => {

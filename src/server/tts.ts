@@ -55,15 +55,15 @@ interface TtsJob {
   model: string;
   userId: string;
   projectId: string;
-  startLine: number;
+  lineOffset: number;
   cacheFile: string;
   v2Settings?: { stability: number; similarityBoost: number; style: number; speed: number };
   createdAt: number;
 }
 
 interface TimestampResult {
-  timestamps: Array<{ start: number; end: number; line: number }>;
-  fromLine: number;
+  timestamps: Array<{ start: number; end: number; line: number; fromChar: number; toChar: number }>;
+  lineOffset: number;
   createdAt: number;
 }
 
@@ -191,7 +191,7 @@ async function transcribeWithWhisper(
 function mapSegmentsToLines(
   originalText: string,
   segments: Array<{ start: number; end: number; text: string }>
-): Array<{ start: number; end: number; line: number }> {
+): Array<{ start: number; end: number; line: number; fromChar: number; toChar: number }> {
   const lines = originalText.split("\n");
   const lineStarts: number[] = [0];
   for (let i = 0; i < lines.length - 1; i++) {
@@ -207,7 +207,7 @@ function mapSegmentsToLines(
 
   const lowerOriginal = originalText.toLowerCase();
   let cursor = 0;
-  const result: Array<{ start: number; end: number; line: number }> = [];
+  const result: Array<{ start: number; end: number; line: number; fromChar: number; toChar: number }> = [];
 
   for (const seg of segments) {
     const clean = seg.text.trim().toLowerCase();
@@ -218,8 +218,11 @@ function mapSegmentsToLines(
     if (idx === -1) idx = lowerOriginal.indexOf(searchKey);
     if (idx === -1) idx = cursor;
 
-    result.push({ start: seg.start, end: seg.end, line: lineAtOffset(idx) });
-    cursor = idx + clean.length;
+    const fromChar = idx;
+    const toChar = Math.min(idx + clean.length, originalText.length);
+
+    result.push({ start: seg.start, end: seg.end, line: lineAtOffset(idx), fromChar, toChar });
+    cursor = toChar;
   }
 
   return result;
@@ -259,6 +262,34 @@ ttsRouter.get("/tts/voices", authMiddleware, async (c) => {
   return c.json({ voices: VOICES });
 });
 
+// Preview a voice sample (proxied from ElevenLabs)
+const previewCache = new Map<string, { url: string; expiresAt: number }>();
+
+ttsRouter.get("/tts/preview/:voiceId", authMiddleware, async (c) => {
+  if (!ELEVENLABS_API_KEY) return c.json({ error: "TTS not configured" }, 500);
+
+  const vid = c.req.param("voiceId");
+  if (!VOICES.some((v) => v.id === vid)) return c.json({ error: "Unknown voice" }, 404);
+
+  // Check cache (preview URLs are stable but let's refresh hourly)
+  const cached = previewCache.get(vid);
+  if (cached && cached.expiresAt > Date.now()) {
+    return c.redirect(cached.url);
+  }
+
+  const resp = await fetch(`https://api.elevenlabs.io/v1/voices/${vid}`, {
+    headers: { "xi-api-key": ELEVENLABS_API_KEY },
+  });
+  if (!resp.ok) return c.json({ error: "Failed to fetch voice info" }, 502);
+
+  const data: any = await resp.json();
+  const previewUrl = data.preview_url;
+  if (!previewUrl) return c.json({ error: "No preview available" }, 404);
+
+  previewCache.set(vid, { url: previewUrl, expiresAt: Date.now() + 60 * 60 * 1000 });
+  return c.redirect(previewUrl);
+});
+
 // Prepare TTS: check disk cache or create streaming job
 ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
   const user = getUser(c);
@@ -272,16 +303,14 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
   }
 
   const body = await c.req.json<TtsRequest>();
-  const { text, voiceId, model = "v3", fromLine } = body;
+  const { text, voiceId, model = "v3", lineOffset = 1 } = body;
 
   if (!text?.trim()) {
     return c.json({ error: "Text is required" }, 400);
   }
 
-  const allLines = text.split("\n");
-  const startLine = fromLine && fromLine > 1 ? fromLine - 1 : 0;
-  const slicedText = allLines.slice(startLine).join("\n");
-  const originalText = slicedText.slice(0, 5000);
+  // Client already slices text from lineOffset; just apply char limit
+  const originalText = text.slice(0, 5000);
 
   const voice = voiceId || DEFAULT_VOICE_ID;
   const v2Settings =
@@ -301,18 +330,28 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
   // Check disk cache
   try {
     const audioBuffer = await fs.readFile(cachePath);
-    // Cache hit: return audio + timestamps
-    const segments = await transcribeWithWhisper(audioBuffer);
-    const timestamps = mapSegmentsToLines(originalText, segments).map((t) => ({
-      ...t,
-      line: t.line + startLine,
-    }));
+    const tsPath = cachePath.replace(/\.mp3$/, ".ts.json");
+    let timestamps: Array<{ start: number; end: number; line: number }>;
+    try {
+      // Read cached timestamps
+      const tsRaw = await fs.readFile(tsPath, "utf-8");
+      const base = JSON.parse(tsRaw) as Array<{ start: number; end: number; line: number }>;
+      timestamps = base;
+    } catch {
+      // No cached timestamps — generate with Whisper and save
+      const segments = await transcribeWithWhisper(audioBuffer);
+      timestamps = mapSegmentsToLines(originalText, segments).map((t) => ({
+        ...t,
+        line: t.line + (lineOffset - 1),
+      }));
+      fs.writeFile(tsPath, JSON.stringify(timestamps), "utf-8").catch(() => {});
+    }
     const base64 = audioBuffer.toString("base64");
     return c.json({
       cached: true,
       audioUrl: `data:audio/mpeg;base64,${base64}`,
       timestamps,
-      fromLine: startLine + 1,
+      lineOffset,
     });
   } catch {
     // Cache miss — continue to streaming
@@ -336,7 +375,7 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
     model,
     userId: user.id,
     projectId,
-    startLine,
+    lineOffset,
     cacheFile: cachePath,
     v2Settings,
     createdAt: Date.now(),
@@ -345,7 +384,7 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
   return c.json({
     cached: false,
     streamId,
-    fromLine: startLine + 1,
+    lineOffset,
   });
 });
 
@@ -399,13 +438,16 @@ ttsRouter.get("/tts/:projectId/stream/:streamId", authMiddleware, async (c) => {
             .then((segments) => {
               const timestamps = mapSegmentsToLines(job.originalText, segments).map((t) => ({
                 ...t,
-                line: t.line + job.startLine,
+                line: t.line + (job.lineOffset - 1),
               }));
               completedTimestamps.set(streamId, {
                 timestamps,
-                fromLine: job.startLine + 1,
+                lineOffset: job.lineOffset,
                 createdAt: Date.now(),
               });
+              // Cache timestamps to disk
+              const tsPath = job.cacheFile.replace(/\.mp3$/, ".ts.json");
+              fs.writeFile(tsPath, JSON.stringify(timestamps), "utf-8").catch(() => {});
             })
             .catch((err) => {
               console.error("[tts] Whisper background error:", err);
@@ -434,7 +476,7 @@ ttsRouter.get("/tts/:projectId/timestamps/:streamId", authMiddleware, async (c) 
   const data = completedTimestamps.get(streamId);
   if (!data) return c.json({ ready: false });
   completedTimestamps.delete(streamId);
-  return c.json({ ready: true, timestamps: data.timestamps, fromLine: data.fromLine });
+  return c.json({ ready: true, timestamps: data.timestamps, lineOffset: data.lineOffset });
 });
 
 // List cached audio files for a project

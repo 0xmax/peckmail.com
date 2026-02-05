@@ -23,6 +23,32 @@ export interface CursorPosition {
   col: number;
 }
 
+export interface UserPreferences {
+  tts?: {
+    voiceId?: string;
+    model?: "v2" | "v3";
+    v2?: {
+      stability: number;
+      similarityBoost: number;
+      style: number;
+      speed: number;
+    };
+  };
+}
+
+export interface ProjectSettings {
+  tts?: {
+    voiceId?: string;
+    model?: "v2" | "v3";
+    v2?: {
+      stability: number;
+      similarityBoost: number;
+      style: number;
+      speed: number;
+    };
+  };
+}
+
 export interface StoreState {
   projectId: string;
   connected: boolean;
@@ -32,13 +58,14 @@ export interface StoreState {
   fileContent: string | null;
   fileLoading: boolean;
   cursorPosition: CursorPosition | null;
-  highlight: { fromLine: number; toLine: number } | null;
+  highlight: { fromLine: number; toLine: number; fromChar?: number; toChar?: number } | null;
   chatSessions: ChatSession[];
   currentSessionId: string | null;
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   chatError: string | null;
   ttsFromLine: number | null;
+  projectSettings: ProjectSettings;
 }
 
 export type StoreAction =
@@ -78,4 +105,9 @@ export type StoreAction =
   | { type: "chat:streaming"; streaming: boolean }
   // TTS
   | { type: "tts:play-from"; fromLine: number }
-  | { type: "tts:clear" };
+  | { type: "tts:clear" }
+  | { type: "tts:highlight"; line: number; fromChar?: number; toChar?: number }
+  | { type: "tts:highlight-clear" }
+  // Settings
+  | { type: "settings:set"; settings: ProjectSettings }
+  | { type: "settings:save"; settings: ProjectSettings };

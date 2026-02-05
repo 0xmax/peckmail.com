@@ -262,6 +262,24 @@ export function FileTree() {
           className="fixed bg-surface border border-border rounded-xl shadow-lg py-1 z-50"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
+          {contextMenu.node!.type === "file" && (
+            <button
+              onClick={() => {
+                openFile(contextMenu.node!.path);
+                // Small delay so file content loads before TTS triggers
+                setTimeout(() => {
+                  dispatch({ type: "tts:play-from", fromLine: 1 });
+                }, 300);
+                closeContextMenu();
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
+                <path d="M4.5 2v12l9-6z" />
+              </svg>
+              Read aloud
+            </button>
+          )}
           <button
             onClick={() => {
               setShowRename(contextMenu.node);

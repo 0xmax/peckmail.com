@@ -8,7 +8,7 @@ import {
 } from "react";
 import { WorkspaceStore } from "./store.js";
 import { useAuth } from "../context/AuthContext.js";
-import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession } from "./types.js";
+import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession, ProjectSettings } from "./types.js";
 
 const StoreContext = createContext<WorkspaceStore | null>(null);
 
@@ -37,6 +37,7 @@ export function StoreProvider({
     }
     store.loadTree();
     store.loadChatSessions();
+    store.loadSettings();
 
     return () => {
       store.dispose();
@@ -107,12 +108,16 @@ export function useStoreDispatch(): (action: StoreAction) => void {
   return store.dispatch;
 }
 
-export function useHighlight(): { fromLine: number; toLine: number } | null {
+export function useHighlight(): { fromLine: number; toLine: number; fromChar?: number; toChar?: number } | null {
   return useSelector((s) => s.highlight);
 }
 
 export function useTtsFromLine(): number | null {
   return useSelector((s) => s.ttsFromLine);
+}
+
+export function useProjectSettings(): ProjectSettings {
+  return useSelector((s) => s.projectSettings);
 }
 
 export function useLoadFileContent(): (path: string) => Promise<void> {

@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession } from "./types.js";
+import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession, ProjectSettings } from "./types.js";
 import { treeAddNode, treeRemoveNode, treeRenameNode } from "./tree-ops.js";
 import { api } from "../lib/api.js";
 
@@ -34,6 +34,7 @@ export class WorkspaceStore {
       chatStreaming: false,
       chatError: null,
       ttsFromLine: null,
+      projectSettings: {},
     };
   }
 
@@ -457,7 +458,32 @@ export class WorkspaceStore {
       }
 
       case "tts:clear": {
-        this.setState({ ttsFromLine: null });
+        this.setState({ ttsFromLine: null, highlight: null });
+        break;
+      }
+
+      case "tts:highlight": {
+        const cur = this.state.highlight;
+        if (!cur || cur.fromLine !== action.line || cur.toLine !== action.line || cur.fromChar !== action.fromChar || cur.toChar !== action.toChar) {
+          this.setState({ highlight: { fromLine: action.line, toLine: action.line, fromChar: action.fromChar, toChar: action.toChar } });
+        }
+        break;
+      }
+
+      case "tts:highlight-clear": {
+        this.setState({ highlight: null });
+        break;
+      }
+
+      // Settings
+      case "settings:set": {
+        this.setState({ projectSettings: action.settings });
+        break;
+      }
+
+      case "settings:save": {
+        this.setState({ projectSettings: action.settings });
+        api.put(`/api/projects/${this.state.projectId}/settings`, action.settings).catch(() => {});
         break;
       }
 
@@ -512,6 +538,17 @@ export class WorkspaceStore {
       this.setState({ chatSessions: data.sessions });
     } catch {
       // Ignore
+    }
+  }
+
+  async loadSettings() {
+    try {
+      const data = await api.get<ProjectSettings>(
+        `/api/projects/${this.state.projectId}/settings`
+      );
+      this.setState({ projectSettings: data });
+    } catch {
+      // Ignore — defaults to {}
     }
   }
 

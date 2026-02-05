@@ -2,38 +2,33 @@ import { useState, useEffect } from "react";
 import { useAuth } from "./context/AuthContext.js";
 import { LoginPage } from "./components/LoginPage.js";
 import { ProjectList } from "./components/ProjectList.js";
+import { AccountSettings } from "./components/AccountSettings.js";
 import { Workspace } from "./components/Workspace.js";
 import { StoreProvider } from "./store/StoreContext.js";
 
+type Route = { page: "projects" } | { page: "settings" } | { page: "workspace"; projectId: string };
+
+function parseRoute(): Route {
+  const path = window.location.pathname;
+  if (path === "/settings") return { page: "settings" };
+  const match = path.match(/^\/p\/([a-f0-9-]+)/);
+  if (match) return { page: "workspace", projectId: match[1] };
+  return { page: "projects" };
+}
+
 export function App() {
   const { user, loading } = useAuth();
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [route, setRoute] = useState<Route>(parseRoute);
 
-  // Check URL for project route
-  useEffect(() => {
-    const path = window.location.pathname;
-    const match = path.match(/^\/p\/([a-f0-9-]+)/);
-    if (match) {
-      setCurrentProjectId(match[1]);
-    }
-  }, []);
-
-  // Update URL when project changes
-  useEffect(() => {
-    if (currentProjectId) {
-      window.history.pushState(null, "", `/p/${currentProjectId}`);
-    } else if (user) {
-      window.history.pushState(null, "", "/");
-    }
-  }, [currentProjectId, user]);
+  const navigate = (r: Route) => {
+    setRoute(r);
+    const url = r.page === "settings" ? "/settings" : r.page === "workspace" ? `/p/${r.projectId}` : "/";
+    window.history.pushState(null, "", url);
+  };
 
   // Handle browser back/forward
   useEffect(() => {
-    const handler = () => {
-      const path = window.location.pathname;
-      const match = path.match(/^\/p\/([a-f0-9-]+)/);
-      setCurrentProjectId(match ? match[1] : null);
-    };
+    const handler = () => setRoute(parseRoute());
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
   }, []);
@@ -50,13 +45,22 @@ export function App() {
     return <LoginPage />;
   }
 
-  if (!currentProjectId) {
-    return <ProjectList onOpenProject={setCurrentProjectId} />;
+  if (route.page === "settings") {
+    return <AccountSettings onBack={() => navigate({ page: "projects" })} />;
+  }
+
+  if (route.page === "workspace") {
+    return (
+      <StoreProvider projectId={route.projectId}>
+        <Workspace onBack={() => navigate({ page: "projects" })} />
+      </StoreProvider>
+    );
   }
 
   return (
-    <StoreProvider projectId={currentProjectId}>
-      <Workspace onBack={() => setCurrentProjectId(null)} />
-    </StoreProvider>
+    <ProjectList
+      onOpenProject={(id) => navigate({ page: "workspace", projectId: id })}
+      onOpenSettings={() => navigate({ page: "settings" })}
+    />
   );
 }

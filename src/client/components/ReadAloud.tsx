@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useOpenFile,
   useProjectId,
+  useProjectSettings,
   useStoreDispatch,
   useTtsFromLine,
 } from "../store/StoreContext.js";
+import { useAuth } from "../context/AuthContext.js";
 import { supabase } from "../lib/supabase.js";
 
 // Pastel palette for generative art
@@ -128,6 +130,8 @@ interface LineTimestamp {
   start: number;
   end: number;
   line: number;
+  fromChar: number;
+  toChar: number;
 }
 
 interface V2Settings {
@@ -144,11 +148,28 @@ const DEFAULT_V2: V2Settings = {
   speed: 1.0,
 };
 
+/** Find 1-indexed line numbers where new chunks (paragraphs / headings) start */
+function getChunkStartLines(content: string): number[] {
+  const lines = content.split("\n");
+  const starts: number[] = [1];
+  for (let i = 1; i < lines.length; i++) {
+    const prev = lines[i - 1];
+    const cur = lines[i];
+    if ((prev.trim() === "" && cur.trim() !== "") || /^#{1,6}\s/.test(cur)) {
+      const lineNum = i + 1; // 1-indexed
+      if (starts[starts.length - 1] !== lineNum) starts.push(lineNum);
+    }
+  }
+  return starts;
+}
+
 export function AudioBar() {
   const { path: openFilePath, content } = useOpenFile();
   const projectId = useProjectId();
   const dispatch = useStoreDispatch();
   const ttsFromLine = useTtsFromLine();
+  const projectSettings = useProjectSettings();
+  const { preferences: userPrefs } = useAuth();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const activeStreamId = useRef<string | null>(null);
   const [state, setState] = useState<PlayState>("idle");
@@ -156,13 +177,29 @@ export function AudioBar() {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [model, setModel] = useState<TtsModel>("v3");
+  const [model, setModel] = useState<TtsModel>("v2");
   const [voiceId, setVoiceId] = useState(VOICES[0].id);
   const [v2Settings, setV2Settings] = useState<V2Settings>(DEFAULT_V2);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const timestampsRef = useRef<LineTimestamp[]>([]);
+  const settingsInitialized = useRef(false);
+  const lastHighlightLine = useRef<number | null>(null);
+  const charOffsetRef = useRef(0);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize from project settings, falling back to user preferences
+  useEffect(() => {
+    if (settingsInitialized.current) return;
+    const tts = projectSettings.tts || userPrefs.tts;
+    if (!tts) return;
+    settingsInitialized.current = true;
+    if (tts.voiceId) setVoiceId(tts.voiceId);
+    if (tts.model) setModel(tts.model);
+    if (tts.v2) setV2Settings(tts.v2);
+  }, [projectSettings, userPrefs]);
 
   // Close settings on outside click
   useEffect(() => {
@@ -178,6 +215,68 @@ export function AudioBar() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showSettings]);
+
+  // Stop preview when settings panel closes
+  useEffect(() => {
+    if (!showSettings && previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+      setPreviewingVoice(null);
+    }
+  }, [showSettings]);
+
+  const previewVoice = useCallback(
+    async (vid: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+
+      // Toggle off if same voice
+      if (previewingVoice === vid && previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+        setPreviewingVoice(null);
+        return;
+      }
+
+      // Stop any existing preview
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+
+      setPreviewingVoice(vid);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token ?? "";
+        const audio = new Audio();
+        audio.src = `/api/tts/preview/${vid}?token=${encodeURIComponent(token)}`;
+        audio.volume = volume;
+        audio.addEventListener("ended", () => {
+          setPreviewingVoice(null);
+          previewAudioRef.current = null;
+        });
+        previewAudioRef.current = audio;
+        await audio.play();
+      } catch {
+        setPreviewingVoice(null);
+        previewAudioRef.current = null;
+      }
+    },
+    [previewingVoice, volume]
+  );
+
+  // Auto-save TTS settings to project when changed
+  useEffect(() => {
+    if (!settingsInitialized.current) return;
+    const settings = {
+      ...projectSettings,
+      tts: {
+        voiceId,
+        model,
+        v2: v2Settings,
+      },
+    };
+    dispatch({ type: "settings:save", settings });
+  }, [voiceId, model, v2Settings]); // intentionally omit dispatch/projectSettings to avoid loops
 
   const cleanup = useCallback(() => {
     activeStreamId.current = null;
@@ -257,10 +356,15 @@ export function AudioBar() {
         // Slice text from target line — don't send/process earlier content
         let textToSend = content;
         const lineOffset = fromLine && fromLine > 1 ? fromLine : 1;
+        let charOff = 0;
         if (lineOffset > 1) {
           const lines = content.split("\n");
+          for (let i = 0; i < lineOffset - 1 && i < lines.length; i++) {
+            charOff += lines[i].length + 1;
+          }
           textToSend = lines.slice(lineOffset - 1).join("\n");
         }
+        charOffsetRef.current = charOff;
 
         const body: Record<string, any> = {
           text: textToSend,
@@ -327,17 +431,23 @@ export function AudioBar() {
           if (Number.isFinite(audio.duration) && audio.duration > 0)
             setProgress(audio.currentTime / audio.duration);
 
-          // Highlight current line
+          // Highlight current line — look slightly ahead so highlight leads the voice
           const ts = timestampsRef.current;
           if (ts.length > 0) {
-            const t = audio.currentTime;
-            const seg = ts.find((s) => t >= s.start && t <= s.end);
-            if (seg) {
+            const t = audio.currentTime + 0.4; // look-ahead
+            let best: LineTimestamp | null = null;
+            for (const s of ts) {
+              if (t >= s.start) best = s;
+              else break;
+            }
+            if (best) {
+              lastHighlightLine.current = best.line;
               dispatch({
-                type: "file:cursor",
-                line: seg.line,
-                col: 1,
-              } as any);
+                type: "tts:highlight",
+                line: best.line,
+                fromChar: charOffsetRef.current + best.fromChar,
+                toChar: charOffsetRef.current + best.toChar,
+              });
             }
           }
         });
@@ -346,6 +456,8 @@ export function AudioBar() {
           setProgress(0);
           setCurrentTime(0);
           timestampsRef.current = [];
+          lastHighlightLine.current = null;
+          dispatch({ type: "tts:highlight-clear" });
         });
 
         // Set src after listeners are attached, then play
@@ -382,6 +494,29 @@ export function AudioBar() {
     setState("paused");
   }, []);
 
+  const skipBack15 = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Math.max(0, audio.currentTime - 15);
+  }, []);
+
+  const skipNextChunk = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const ts = timestampsRef.current;
+    if (ts.length === 0) return;
+
+    const currentLine = lastHighlightLine.current ?? 1;
+    const chunks = getChunkStartLines(content || "");
+    const nextChunkLine = chunks.find((l) => l > currentLine);
+    if (!nextChunkLine) return;
+
+    const entry = ts.find((t) => t.line >= nextChunkLine);
+    if (entry) {
+      audio.currentTime = entry.start;
+    }
+  }, [content]);
+
   const seek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const audio = audioRef.current;
@@ -402,31 +537,34 @@ export function AudioBar() {
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
+  const downloadAudio = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio?.src) return;
+    try {
+      const res = await fetch(audio.src);
+      const blob = await res.blob();
+      const voiceName = VOICES.find((v) => v.id === voiceId)?.name ?? "voice";
+      const baseName = (openFilePath?.split("/").pop() ?? "audio").replace(/\.[^.]+$/, "");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${baseName}-${voiceName}.mp3`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Download failed");
+    }
+  }, [voiceId, openFilePath]);
+
   const hasContent = !!content?.trim();
   const isActive = state !== "idle";
   const hasDuration = Number.isFinite(duration) && duration > 0;
+  const hasAudio = !!audioRef.current?.src;
   const fileName = openFilePath?.split("/").pop() ?? "No file";
   const currentVoice = VOICES.find((v) => v.id === voiceId);
 
   return (
-    <div className="h-16 bg-surface border-t border-border shrink-0 flex items-center px-4 gap-4 relative">
-      {/* Progress bar */}
-      <div
-        className="absolute top-0 left-0 right-0 h-1 bg-border/50 cursor-pointer group"
-        onClick={seek}
-      >
-        <div
-          className="h-full bg-accent transition-[width] duration-100"
-          style={{ width: `${progress * 100}%` }}
-        />
-        {isActive && (
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-accent rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow"
-            style={{ left: `${progress * 100}%`, marginLeft: "-6px" }}
-          />
-        )}
-      </div>
-
+    <div className="h-16 bg-surface border-t border-border shrink-0 flex items-center px-4 gap-4">
       {/* Left: file info */}
       <div className="flex items-center gap-3 w-56 min-w-0">
         <AlbumArt text={content || ""} />
@@ -436,7 +574,12 @@ export function AudioBar() {
           </div>
           <div className="text-xs truncate">
             {error ? (
-              <span className="text-danger">{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="text-danger hover:underline"
+              >
+                Error &middot; Click to dismiss
+              </button>
             ) : (
               <span className="text-text-muted">
                 {currentVoice?.name ?? "Rachel"} &middot;{" "}
@@ -447,16 +590,30 @@ export function AudioBar() {
         </div>
       </div>
 
-      {/* Center: transport */}
-      <div className="flex-1 flex flex-col items-center gap-1">
-        <div className="flex items-center gap-4">
+      {/* Center: transport + progress */}
+      <div className="flex-1 flex flex-col items-center gap-0.5 max-w-lg mx-auto">
+        {/* Controls */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={skipBack15}
+            disabled={!isActive}
+            className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+            title="Back 15 seconds"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 4v6h6" />
+              <path d="M3.51 15a9 9 0 105.64-11.36L1 10" />
+              <text x="12" y="16" textAnchor="middle" fill="currentColor" stroke="none" fontSize="8" fontWeight="bold">15</text>
+            </svg>
+          </button>
+
           <button
             onClick={stop}
             disabled={!isActive}
             className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             title="Stop"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
               <rect x="3" y="3" width="10" height="10" rx="1.5" />
             </svg>
           </button>
@@ -464,10 +621,10 @@ export function AudioBar() {
           {state === "playing" ? (
             <button
               onClick={pause}
-              className="w-9 h-9 rounded-full bg-text text-surface flex items-center justify-center hover:scale-105 transition-transform"
+              className="w-8 h-8 rounded-full bg-text text-surface flex items-center justify-center hover:scale-105 transition-transform"
               title="Pause"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                 <rect x="3" y="2" width="3.5" height="12" rx="1" />
                 <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
               </svg>
@@ -476,39 +633,87 @@ export function AudioBar() {
             <button
               onClick={play}
               disabled={!hasContent || state === "loading"}
-              className="w-9 h-9 rounded-full bg-text text-surface flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="w-8 h-8 rounded-full bg-text text-surface flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
               title="Read aloud"
             >
               {state === "loading" ? (
-                <svg width="16" height="16" viewBox="0 0 16 16" className="animate-spin" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="14" height="14" viewBox="0 0 16 16" className="animate-spin" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="8" cy="8" r="5" strokeDasharray="20" strokeDashoffset="5" strokeLinecap="round" />
                 </svg>
               ) : (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M4.5 2v12l9-6z" />
                 </svg>
               )}
             </button>
           )}
 
-          <div className="w-4" />
+          <button
+            onClick={skipNextChunk}
+            disabled={!isActive}
+            className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+            title="Skip to next paragraph"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 2v12l7-6z" />
+              <rect x="11" y="2" width="3" height="12" rx="0.5" />
+            </svg>
+          </button>
         </div>
 
-        {isActive && (
-          <div className="flex items-center gap-2 text-[10px] text-text-muted tabular-nums">
-            <span>{fmt(currentTime)}</span>
-            {hasDuration && (
+        {/* Progress bar row: time — bar — time */}
+        <div className="flex items-center gap-2 w-full">
+          <span className="text-[10px] text-text-muted tabular-nums w-8 text-right shrink-0">
+            {isActive ? fmt(currentTime) : "0:00"}
+          </span>
+          <div
+            className="flex-1 h-1 bg-border/50 rounded-full cursor-pointer group relative"
+            onClick={seek}
+          >
+            {isActive && !hasDuration ? (
+              <div className="h-full w-full overflow-hidden rounded-full">
+                <div
+                  className="h-full w-1/3 bg-accent rounded-full"
+                  style={{
+                    animation: "indeterminate-slide 1.5s ease-in-out infinite",
+                  }}
+                />
+              </div>
+            ) : (
               <>
-                <span>/</span>
-                <span>{fmt(duration)}</span>
+                <div
+                  className="h-full bg-accent rounded-full transition-[width] duration-100"
+                  style={{ width: `${progress * 100}%` }}
+                />
+                {isActive && (
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-accent rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                    style={{ left: `${progress * 100}%`, marginLeft: "-5px" }}
+                  />
+                )}
               </>
             )}
           </div>
-        )}
+          <span className="text-[10px] text-text-muted tabular-nums w-8 shrink-0">
+            {hasDuration ? fmt(duration) : "0:00"}
+          </span>
+        </div>
       </div>
 
-      {/* Right: volume + settings */}
+      {/* Right: download + volume + settings */}
       <div className="flex items-center gap-3 w-56 justify-end">
+        <button
+          onClick={downloadAudio}
+          disabled={!hasAudio}
+          className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+          title="Download audio"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setVolume(volume > 0 ? 0 : 1)}
@@ -556,6 +761,32 @@ export function AudioBar() {
             </svg>
           </button>
 
+          {/* Error popup */}
+          {error && (
+            <div className="absolute right-0 bottom-full mb-2 w-72 bg-surface border border-danger/30 rounded-lg shadow-lg p-4 z-50">
+              <div className="flex items-start gap-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-danger shrink-0 mt-0.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-text mb-1">Playback Error</div>
+                  <div className="text-xs text-text-muted break-words">{error}</div>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-text-muted hover:text-text transition-colors shrink-0"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
           {showSettings && (
             <div
               ref={settingsRef}
@@ -568,14 +799,33 @@ export function AudioBar() {
                   <button
                     key={v.id}
                     onClick={() => setVoiceId(v.id)}
-                    className={`text-left text-xs px-2 py-1.5 rounded-md transition-colors ${
+                    className={`text-left text-xs px-2 py-1.5 rounded-md transition-colors flex items-center justify-between gap-1 ${
                       voiceId === v.id
                         ? "bg-accent text-white"
                         : "bg-surface-alt text-text-muted hover:text-text"
                     }`}
                     title={v.desc}
                   >
-                    {v.name}
+                    <span className="truncate">{v.name}</span>
+                    <span
+                      onClick={(e) => previewVoice(v.id, e)}
+                      className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full transition-colors ${
+                        voiceId === v.id
+                          ? "hover:bg-white/20"
+                          : "hover:bg-border"
+                      }`}
+                      title={previewingVoice === v.id ? "Stop preview" : `Preview ${v.name}`}
+                    >
+                      {previewingVoice === v.id ? (
+                        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                          <rect x="1" y="1" width="6" height="6" rx="1" />
+                        </svg>
+                      ) : (
+                        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                          <path d="M2 1v6l5-3z" />
+                        </svg>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>

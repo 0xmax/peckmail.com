@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, Decoration, type DecorationSet } from "@codemirror/view";
-import { EditorState, StateField, StateEffect } from "@codemirror/state";
+import { EditorState, StateField, StateEffect, Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -12,10 +12,10 @@ import { useOpenFile, useStoreDispatch, useLoadFileContent, useHighlight } from 
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
 
-// CodeMirror effect + field for AI highlights
+// CodeMirror effect + field for AI/TTS highlights (line decoration for full-line highlight)
 const setHighlightEffect = StateEffect.define<{ from: number; to: number } | null>();
 
-const highlightMark = Decoration.mark({ class: "cm-ai-highlight" });
+const highlightLineDeco = Decoration.line({ class: "cm-ai-highlight" });
 
 const highlightField = StateField.define<DecorationSet>({
   create() {
@@ -27,9 +27,36 @@ const highlightField = StateField.define<DecorationSet>({
         if (effect.value === null) {
           return Decoration.none;
         }
-        return Decoration.set([
-          highlightMark.range(effect.value.from, effect.value.to),
-        ]);
+        const doc = tr.state.doc;
+        const decos: any[] = [];
+        const fromLine = doc.lineAt(effect.value.from).number;
+        const toLine = doc.lineAt(effect.value.to).number;
+        for (let i = fromLine; i <= toLine; i++) {
+          decos.push(highlightLineDeco.range(doc.line(i).from));
+        }
+        return Decoration.set(decos);
+      }
+    }
+    return decorations.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+// Sentence-level mark decoration (highlights the specific sentence within the paragraph)
+const setSentenceEffect = StateEffect.define<{ from: number; to: number } | null>();
+
+const sentenceDeco = Decoration.mark({ class: "cm-sentence-highlight" });
+
+const sentenceField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setSentenceEffect)) {
+        if (effect.value === null) return Decoration.none;
+        const { from, to } = effect.value;
+        return Decoration.set([sentenceDeco.range(from, to)]);
       }
     }
     return decorations.map(tr.changes);
@@ -44,6 +71,8 @@ export function Editor() {
   const highlight = useHighlight();
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const wrapCompartment = useRef(new Compartment());
+  const [wordWrap, setWordWrap] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; line: number } | null>(null);
   const lastWrittenContent = useRef<string>("");
@@ -72,6 +101,8 @@ export function Editor() {
         syntaxHighlighting(defaultHighlightStyle),
         markdown({ codeLanguages: languages }),
         highlightField,
+        sentenceField,
+        wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
@@ -128,11 +159,23 @@ export function Editor() {
           },
           ".cm-content": {
             caretColor: "#c4956a",
+            maxWidth: "760px",
+            margin: "0 auto",
+            padding: "2rem 1.5rem",
+            fontFamily: "'Georgia', 'Times New Roman', serif",
+            fontSize: "16px",
+            lineHeight: "1.75",
+          },
+          ".cm-line": {
+            padding: "0",
           },
           ".cm-ai-highlight": {
-            backgroundColor: "#f0e6d3",
+            backgroundColor: "rgba(196, 149, 106, 0.1)",
+            borderLeft: "3px solid #c4956a",
+          },
+          ".cm-sentence-highlight": {
+            backgroundColor: "rgba(196, 149, 106, 0.3)",
             borderRadius: "2px",
-            transition: "background-color 0.3s ease",
           },
         }),
       ],
@@ -162,6 +205,16 @@ export function Editor() {
       viewRef.current = null;
     };
   }, [openFilePath, fileContent === null]); // Only recreate on file change
+
+  // Toggle word wrap
+  useEffect(() => {
+    if (!viewRef.current) return;
+    viewRef.current.dispatch({
+      effects: wrapCompartment.current.reconfigure(
+        wordWrap ? EditorView.lineWrapping : []
+      ),
+    });
+  }, [wordWrap]);
 
   // Handle external content updates (file:live / file:updated from other clients)
   useEffect(() => {
@@ -204,7 +257,8 @@ export function Editor() {
     };
   }, [ctxMenu]);
 
-  // Handle AI highlight
+  // Handle AI / TTS highlight
+  const lastScrolledLine = useRef<number | null>(null);
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -216,15 +270,32 @@ export function Editor() {
       const from = doc.line(fromLine).from;
       const to = doc.line(toLine).to;
 
-      view.dispatch({
-        effects: [
-          setHighlightEffect.of({ from, to }),
-          EditorView.scrollIntoView(from, { y: "center" }),
-        ],
-      });
+      const effects: any[] = [setHighlightEffect.of({ from, to })];
+
+      // Sentence-level highlight
+      if (highlight.fromChar !== undefined && highlight.toChar !== undefined) {
+        const docLen = doc.length;
+        const sFrom = Math.max(0, Math.min(highlight.fromChar, docLen));
+        const sTo = Math.max(sFrom, Math.min(highlight.toChar, docLen));
+        if (sTo > sFrom) {
+          effects.push(setSentenceEffect.of({ from: sFrom, to: sTo }));
+        } else {
+          effects.push(setSentenceEffect.of(null));
+        }
+      } else {
+        effects.push(setSentenceEffect.of(null));
+      }
+
+      // Only scroll when the line changes to avoid jitter
+      if (lastScrolledLine.current !== fromLine) {
+        lastScrolledLine.current = fromLine;
+        effects.push(EditorView.scrollIntoView(from, { y: "center" }));
+      }
+      view.dispatch({ effects });
     } else {
+      lastScrolledLine.current = null;
       view.dispatch({
-        effects: setHighlightEffect.of(null),
+        effects: [setHighlightEffect.of(null), setSentenceEffect.of(null)],
       });
     }
   }, [highlight]);
@@ -232,8 +303,17 @@ export function Editor() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Status bar */}
-      <div className="flex items-center px-4 py-1.5 bg-surface border-b border-border text-xs">
+      <div className="flex items-center justify-between px-4 py-1.5 bg-surface border-b border-border text-xs">
         <span className="text-text-muted">{openFilePath}</span>
+        <button
+          onClick={() => setWordWrap((w) => !w)}
+          className={`px-2 py-0.5 rounded transition-colors ${
+            wordWrap ? "text-accent" : "text-text-muted hover:text-text"
+          }`}
+          title={wordWrap ? "Disable word wrap" : "Enable word wrap"}
+        >
+          Wrap
+        </button>
       </div>
 
       {/* Editor container */}
