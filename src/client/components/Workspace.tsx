@@ -1,6 +1,5 @@
-import { useState, useCallback } from "react";
-import { useProject } from "../context/ProjectContext.js";
-import { useWs } from "../context/WsContext.js";
+import { useState } from "react";
+import { useOpenFile, useConnected, useProjectId } from "../store/StoreContext.js";
 import { FileTree } from "./FileTree.js";
 import { Editor } from "./Editor.js";
 import { ChatPanel } from "./ChatPanel.js";
@@ -9,8 +8,9 @@ import { InviteModal } from "./InviteModal.js";
 import { ShareButton } from "./ShareButton.js";
 
 export function Workspace({ onBack }: { onBack: () => void }) {
-  const { state } = useProject();
-  const { connected } = useWs();
+  const { path: openFilePath } = useOpenFile();
+  const connected = useConnected();
+  const projectId = useProjectId();
   const [showChat, setShowChat] = useState(true);
   const [showRevisions, setShowRevisions] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -29,8 +29,8 @@ export function Workspace({ onBack }: { onBack: () => void }) {
           </button>
           <div className="w-px h-5 bg-border" />
           <span className="text-sm font-medium text-text">
-            {state.openFilePath
-              ? state.openFilePath.split("/").pop()
+            {openFilePath
+              ? openFilePath.split("/").pop()
               : "No file open"}
           </span>
         </div>
@@ -40,10 +40,10 @@ export function Workspace({ onBack }: { onBack: () => void }) {
               Reconnecting...
             </span>
           )}
-          {state.openFilePath && (
+          {openFilePath && (
             <ShareButton
-              projectId={state.projectId}
-              filePath={state.openFilePath}
+              projectId={projectId}
+              filePath={openFilePath}
             />
           )}
           <button
@@ -87,7 +87,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
 
         {/* Editor area */}
         <div className="flex-1 min-w-0 flex flex-col">
-          {state.openFilePath ? (
+          {openFilePath ? (
             <Editor />
           ) : (
             <div className="flex-1 flex items-center justify-center">
@@ -107,21 +107,21 @@ export function Workspace({ onBack }: { onBack: () => void }) {
         {/* Chat panel */}
         {showChat && (
           <div className="w-80 border-l border-border bg-surface flex flex-col shrink-0">
-            <ChatPanel projectId={state.projectId} />
+            <ChatPanel />
           </div>
         )}
 
         {/* Revisions panel */}
         {showRevisions && (
           <div className="w-72 border-l border-border bg-surface flex flex-col shrink-0">
-            <Revisions projectId={state.projectId} />
+            <Revisions projectId={projectId} />
           </div>
         )}
       </div>
 
       {showInvite && (
         <InviteModal
-          projectId={state.projectId}
+          projectId={projectId}
           onClose={() => setShowInvite(false)}
         />
       )}

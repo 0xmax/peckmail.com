@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #faf5ff;
+  --color-bg: #faf6f1;
   --color-surface: #ffffff;
-  --color-surface-alt: #f0e6ff;
-  --color-accent: #b48ead;
-  --color-accent-hover: #a07da3;
-  --color-text: #4a4458;
-  --color-text-muted: #8e849b;
-  --color-border: #e8dff0;
-  --color-chat-user: #e8f5e9;
-  --color-chat-ai: #fce4ec;
+  --color-surface-alt: #f5ebe0;
+  --color-accent: #c4956a;
+  --color-accent-hover: #b07d52;
+  --color-text: #3d3229;
+  --color-text-muted: #9a8b7a;
+  --color-border: #e8ddd0;
+  --color-chat-user: #e5eed8;
+  --color-chat-ai: #f5ebe0;
   --color-success: #81c784;
   --color-danger: #e57373;
 }
@@ -66,15 +66,15 @@ body {
 }
 
 .cm-editor .cm-activeLine {
-  background: rgba(240, 230, 255, 0.3);
+  background: rgba(245, 235, 224, 0.3);
 }
 
 .cm-editor .cm-selectionBackground {
-  background: rgba(180, 142, 173, 0.2) !important;
+  background: rgba(196, 149, 106, 0.15) !important;
 }
 
 .cm-editor.cm-focused .cm-selectionBackground {
-  background: rgba(180, 142, 173, 0.3) !important;
+  background: rgba(196, 149, 106, 0.25) !important;
 }
 
 .cm-editor .cm-cursor {

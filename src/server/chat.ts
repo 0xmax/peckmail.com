@@ -177,13 +177,37 @@ const tools: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "highlight",
+    description:
+      "Highlight a range of text in the user's editor to draw their attention to it. Use this when referring to specific lines or passages.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file (must be the currently open file)",
+        },
+        from_line: {
+          type: "number",
+          description: "Starting line number (1-based)",
+        },
+        to_line: {
+          type: "number",
+          description: "Ending line number (1-based, inclusive)",
+        },
+      },
+      required: ["path", "from_line", "to_line"],
+    },
+  },
 ];
 
 // Execute a tool call
 async function executeTool(
   projectId: string,
   toolName: string,
-  input: any
+  input: any,
+  ws: WebSocket
 ): Promise<string> {
   const dir = join(PROJECTS_DIR, projectId);
 
@@ -233,6 +257,17 @@ async function executeTool(
       }
     }
 
+    case "highlight": {
+      // Send highlight command to the client's editor
+      sendTo(ws, {
+        type: "editor:highlight",
+        path: input.path,
+        fromLine: input.from_line,
+        toLine: input.to_line,
+      });
+      return `Highlighted lines ${input.from_line}-${input.to_line} in "${input.path}"`;
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }
@@ -243,7 +278,16 @@ export async function handleChatMessage(
   projectId: string,
   userId: string,
   ws: WebSocket,
-  msg: { type: string; sessionId: string; message: string }
+  msg: {
+    type: string;
+    sessionId: string;
+    message: string;
+    context?: {
+      openFilePath: string | null;
+      fileContent: string | null;
+      cursorPosition: { line: number; col: number } | null;
+    };
+  }
 ) {
   let session = await getSession(projectId, msg.sessionId);
   if (!session) {
@@ -277,11 +321,21 @@ export async function handleChatMessage(
 
     let continueLoop = true;
     while (continueLoop) {
+      // Build context-aware system prompt
+      let systemPrompt =
+        "You are a friendly writing assistant in Perchpad, a collaborative markdown workspace. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. You can also use the highlight tool to draw attention to specific lines in the editor. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.";
+
+      if (msg.context?.openFilePath && msg.context.fileContent !== null) {
+        systemPrompt += `\n\nThe user currently has "${msg.context.openFilePath}" open in their editor. Here is its content:\n\`\`\`\n${msg.context.fileContent}\n\`\`\``;
+        if (msg.context.cursorPosition) {
+          systemPrompt += `\n\nTheir cursor is at line ${msg.context.cursorPosition.line}, column ${msg.context.cursorPosition.col}.`;
+        }
+      }
+
       const stream = anthropic.messages.stream({
         model: "claude-sonnet-4-5-20250929",
         max_tokens: 4096,
-        system:
-          "You are a friendly writing assistant in Perchpad, a collaborative markdown workspace. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.",
+        system: systemPrompt,
         tools,
         messages,
       });
@@ -325,17 +379,33 @@ export async function handleChatMessage(
           const result = await executeTool(
             projectId,
             block.name,
-            block.input
+            block.input,
+            ws
           );
 
-          // Broadcast file change if a file was modified
-          if (
-            block.name === "edit_file" ||
-            block.name === "create_file"
-          ) {
+          // Broadcast incremental updates for file modifications
+          if (block.name === "edit_file") {
+            // Read the updated content and broadcast to all clients
+            try {
+              const updatedPath = safePath(projectId, (block.input as any).path);
+              const updatedContent = await fs.readFile(updatedPath, "utf-8");
+              broadcast(projectId, {
+                type: "file:updated",
+                path: (block.input as any).path,
+                content: updatedContent,
+              });
+            } catch {
+              // Fallback to generic change
+              broadcast(projectId, {
+                type: "file:changed",
+                path: (block.input as any).path,
+              });
+            }
+          } else if (block.name === "create_file") {
             broadcast(projectId, {
-              type: "file:changed",
+              type: "tree:add",
               path: (block.input as any).path,
+              nodeType: "file",
             });
           }
 
@@ -381,6 +451,13 @@ export async function handleChatMessage(
       type: "chat:done",
       sessionId: session.id,
       title: session.title,
+    });
+
+    // Push updated sessions list to all clients
+    const sessions = await listSessions(projectId);
+    broadcast(projectId, {
+      type: "chat:sessions",
+      sessions,
     });
   } catch (err: any) {
     console.error("[chat] Error:", err);

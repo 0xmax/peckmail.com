@@ -1,13 +1,6 @@
 import { useState, useCallback } from "react";
-import { useProject } from "../context/ProjectContext.js";
-import { useFileTree } from "../hooks/useFileTree.js";
-
-interface FileNode {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  children?: FileNode[];
-}
+import { useTree, useOpenFile, useStoreDispatch, useLoadFileContent } from "../store/StoreContext.js";
+import type { FileNode } from "../store/types.js";
 
 function FileIcon({ type }: { type: "file" | "directory" }) {
   if (type === "directory") {
@@ -87,9 +80,11 @@ function TreeItem({
 }
 
 export function FileTree() {
-  const { state, openFile, createFile, createFolder, deleteFile, renameFile } =
-    useProject();
-  const { tree } = useFileTree();
+  const { tree, loading: treeLoading } = useTree();
+  const { path: openFilePath } = useOpenFile();
+  const dispatch = useStoreDispatch();
+  const loadFileContent = useLoadFileContent();
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -101,6 +96,13 @@ export function FileTree() {
   const [showRename, setShowRename] = useState<FileNode | null>(null);
   const [renameName, setRenameName] = useState("");
 
+  const openFile = useCallback(
+    (path: string) => {
+      loadFileContent(path);
+    },
+    [loadFileContent]
+  );
+
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, node: FileNode) => {
       e.preventDefault();
@@ -111,33 +113,39 @@ export function FileTree() {
 
   const closeContextMenu = () => setContextMenu(null);
 
-  const handleNewFile = async () => {
+  const handleNewFile = () => {
     if (!newName.trim()) return;
     const name = newName.trim().endsWith(".md")
       ? newName.trim()
       : `${newName.trim()}.md`;
-    await createFile(name, `# ${newName.trim().replace(/\.md$/, "")}\n\n`);
+    const content = `# ${newName.trim().replace(/\.md$/, "")}\n\n`;
+    dispatch({ type: "file:create", path: name, content });
     setShowNewFile(false);
     setNewName("");
-    openFile(name);
+    // Open the newly created file
+    dispatch({ type: "file:open", path: name, content });
   };
 
-  const handleNewFolder = async () => {
+  const handleNewFolder = () => {
     if (!newName.trim()) return;
-    await createFolder(newName.trim());
+    dispatch({ type: "file:mkdir", path: newName.trim() });
     setShowNewFolder(false);
     setNewName("");
   };
 
-  const handleRename = async () => {
+  const handleRename = () => {
     if (!showRename || !renameName.trim()) return;
     const newPath =
       showRename.path.includes("/")
         ? showRename.path.replace(/[^/]+$/, renameName.trim())
         : renameName.trim();
-    await renameFile(showRename.path, newPath);
+    dispatch({ type: "file:rename", from: showRename.path, to: newPath });
     setShowRename(null);
     setRenameName("");
+  };
+
+  const handleDelete = (path: string) => {
+    dispatch({ type: "file:delete", path });
   };
 
   return (
@@ -229,7 +237,7 @@ export function FileTree() {
 
       {/* File tree */}
       <div className="flex-1 overflow-y-auto p-2">
-        {tree.length === 0 && !state.treeLoading ? (
+        {tree.length === 0 && !treeLoading ? (
           <div className="text-center py-6 text-text-muted text-sm">
             <p>No pages yet</p>
             <p className="mt-1">Create your first one!</p>
@@ -241,7 +249,7 @@ export function FileTree() {
               node={node}
               depth={0}
               onSelect={openFile}
-              selectedPath={state.openFilePath}
+              selectedPath={openFilePath}
               onContextMenu={handleContextMenu}
             />
           ))
@@ -265,13 +273,13 @@ export function FileTree() {
             Rename
           </button>
           <button
-            onClick={async () => {
+            onClick={() => {
               if (
                 confirm(
                   `Delete "${contextMenu.node!.name}"?`
                 )
               ) {
-                await deleteFile(contextMenu.node!.path);
+                handleDelete(contextMenu.node!.path);
               }
               closeContextMenu();
             }}

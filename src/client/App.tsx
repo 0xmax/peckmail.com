@@ -3,8 +3,7 @@ import { useAuth } from "./context/AuthContext.js";
 import { LoginPage } from "./components/LoginPage.js";
 import { ProjectList } from "./components/ProjectList.js";
 import { Workspace } from "./components/Workspace.js";
-import { ProjectProvider } from "./context/ProjectContext.js";
-import { WsProvider } from "./context/WsContext.js";
+import { StoreProvider } from "./store/StoreContext.js";
 
 export function App() {
   const { user, loading } = useAuth();
@@ -56,10 +55,8 @@ export function App() {
   }
 
   return (
-    <ProjectProvider projectId={currentProjectId}>
-      <WsProvider projectId={currentProjectId}>
-        <Workspace onBack={() => setCurrentProjectId(null)} />
-      </WsProvider>
-    </ProjectProvider>
+    <StoreProvider projectId={currentProjectId}>
+      <Workspace onBack={() => setCurrentProjectId(null)} />
+    </StoreProvider>
   );
 }

@@ -250,8 +250,8 @@ app.get("*", async (c) => {
   let html = await fs.readFile("dist/public/index.html", "utf-8");
   // Inject Supabase config
   html = html
-    .replace("__SUPABASE_URL__", process.env.SUPABASE_URL || "")
-    .replace("__SUPABASE_ANON_KEY__", process.env.SUPABASE_ANON_KEY || "");
+    .replace("%%SUPABASE_URL%%", process.env.SUPABASE_URL || "")
+    .replace("%%SUPABASE_ANON_KEY%%", process.env.SUPABASE_ANON_KEY || "");
   return c.html(html);
 });
 

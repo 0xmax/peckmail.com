@@ -1,19 +1,10 @@
-import { useState, useRef, useEffect } from "react";
-import { useChat } from "../hooks/useChat.js";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useChatState, useStoreDispatch } from "../store/StoreContext.js";
 import { ChatMessage } from "./ChatMessage.js";
 
-export function ChatPanel({ projectId }: { projectId: string }) {
-  const {
-    sessions,
-    currentSessionId,
-    messages,
-    streaming,
-    error,
-    sendMessage,
-    loadSession,
-    newSession,
-    deleteSession,
-  } = useChat(projectId);
+export function ChatPanel() {
+  const { sessions, currentSessionId, messages, streaming, error } = useChatState();
+  const dispatch = useStoreDispatch();
 
   const [input, setInput] = useState("");
   const [showSessions, setShowSessions] = useState(false);
@@ -24,11 +15,15 @@ export function ChatPanel({ projectId }: { projectId: string }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (!input.trim() || streaming) return;
-    sendMessage(input.trim());
+    dispatch({
+      type: "chat:send",
+      sessionId: currentSessionId ?? "",
+      message: input.trim(),
+    });
     setInput("");
-  };
+  }, [input, streaming, currentSessionId, dispatch]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -55,7 +50,7 @@ export function ChatPanel({ projectId }: { projectId: string }) {
             </svg>
           </button>
           <button
-            onClick={newSession}
+            onClick={() => dispatch({ type: "chat:new-session" })}
             className="text-xs text-text-muted hover:text-text p-1 transition-colors"
             title="New chat"
           >
@@ -81,7 +76,7 @@ export function ChatPanel({ projectId }: { projectId: string }) {
               >
                 <button
                   onClick={() => {
-                    loadSession(s.id);
+                    dispatch({ type: "chat:load-session", sessionId: s.id });
                     setShowSessions(false);
                   }}
                   className="flex-1 text-left text-text truncate"
@@ -89,7 +84,7 @@ export function ChatPanel({ projectId }: { projectId: string }) {
                   {s.title}
                 </button>
                 <button
-                  onClick={() => deleteSession(s.id)}
+                  onClick={() => dispatch({ type: "chat:delete-session", sessionId: s.id })}
                   className="text-text-muted hover:text-danger ml-2 shrink-0"
                 >
                   ×

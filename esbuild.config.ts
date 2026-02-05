@@ -1,7 +1,8 @@
 import * as esbuild from "esbuild";
-import { mkdirSync } from "fs";
+import { mkdirSync, copyFileSync } from "fs";
 
 mkdirSync("dist/public", { recursive: true });
+copyFileSync("src/client/index.html", "dist/public/index.html");
 
 const isWatch = !process.argv.includes("--once");
 

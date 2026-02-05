@@ -1,9 +1,11 @@
 import { watch, type FSWatcher } from "fs";
+import { promises as fs } from "fs";
 import type { WebSocket } from "ws";
-import { join } from "path";
-import { PROJECTS_DIR } from "./files.js";
+import { join, dirname } from "path";
+import { PROJECTS_DIR, safePath } from "./files.js";
 import { handleChatMessage } from "./chat.js";
 import { startGitManager, stopGitManager } from "./git.js";
+import { getProjectMembership } from "./db.js";
 
 interface ClientInfo {
   ws: WebSocket;
@@ -14,6 +16,8 @@ interface ClientInfo {
 const projectClients = new Map<string, Set<ClientInfo>>();
 // Track file watchers per project
 const projectWatchers = new Map<string, FSWatcher>();
+// Suppress set: paths recently mutated by a client (skip watcher events)
+const suppressedPaths = new Map<string, Set<string>>();
 
 export function addClient(projectId: string, ws: WebSocket, userId: string) {
   if (!projectClients.has(projectId)) {
@@ -45,8 +49,19 @@ export function addClient(projectId: string, ws: WebSocket, userId: string) {
       stopWatcher(projectId);
       stopGitManager(projectId);
       projectClients.delete(projectId);
+      suppressedPaths.delete(projectId);
     }
   });
+}
+
+// Suppress a path from watcher events for a short time
+function suppressPath(projectId: string, path: string) {
+  if (!suppressedPaths.has(projectId)) {
+    suppressedPaths.set(projectId, new Set());
+  }
+  const set = suppressedPaths.get(projectId)!;
+  set.add(path);
+  setTimeout(() => set.delete(path), 500);
 }
 
 function startWatcher(projectId: string) {
@@ -60,6 +75,10 @@ function startWatcher(projectId: string) {
       // Ignore .git and .perchpad directories
       if (filename.startsWith(".git") || filename.startsWith(".perchpad"))
         return;
+
+      // Skip if this path was recently mutated by a client
+      const suppressed = suppressedPaths.get(projectId);
+      if (suppressed?.has(filename)) return;
 
       changedPaths.add(filename);
 
@@ -124,6 +143,35 @@ async function routeMessage(
       await handleChatMessage(projectId, userId, ws, msg);
       break;
 
+    case "file:live":
+      // Broadcast live content to other clients — no disk write
+      broadcast(projectId, {
+        type: "file:live",
+        path: msg.path,
+        content: msg.content,
+      }, ws);
+      break;
+
+    case "file:write":
+      await handleFileWrite(projectId, userId, ws, msg);
+      break;
+
+    case "file:create":
+      await handleFileCreate(projectId, userId, ws, msg);
+      break;
+
+    case "file:mkdir":
+      await handleFileMkdir(projectId, userId, ws, msg);
+      break;
+
+    case "file:delete":
+      await handleFileDelete(projectId, userId, ws, msg);
+      break;
+
+    case "file:rename":
+      await handleFileRename(projectId, userId, ws, msg);
+      break;
+
     case "ping":
       sendTo(ws, { type: "pong" });
       break;
@@ -133,6 +181,154 @@ async function routeMessage(
         type: "error",
         message: `Unknown message type: ${msg.type}`,
       });
+  }
+}
+
+// --- File mutation handlers ---
+
+async function checkWriteAccess(projectId: string, userId: string): Promise<boolean> {
+  const membership = await getProjectMembership(projectId, userId);
+  return !!membership && ["owner", "editor"].includes(membership.role);
+}
+
+async function handleFileWrite(
+  projectId: string,
+  userId: string,
+  ws: WebSocket,
+  msg: { path: string; content: string }
+) {
+  if (!(await checkWriteAccess(projectId, userId))) {
+    sendTo(ws, { type: "mutation:nack", reason: "Access denied" });
+    return;
+  }
+
+  try {
+    const resolved = safePath(projectId, msg.path);
+    suppressPath(projectId, msg.path);
+    await fs.mkdir(dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, msg.content, "utf-8");
+    sendTo(ws, { type: "mutation:ack", path: msg.path });
+    // Broadcast file:updated to others with content
+    broadcast(projectId, {
+      type: "file:updated",
+      path: msg.path,
+      content: msg.content,
+    }, ws);
+  } catch {
+    sendTo(ws, { type: "mutation:nack", path: msg.path, reason: "Write failed" });
+  }
+}
+
+async function handleFileCreate(
+  projectId: string,
+  userId: string,
+  ws: WebSocket,
+  msg: { path: string; content: string }
+) {
+  if (!(await checkWriteAccess(projectId, userId))) {
+    sendTo(ws, { type: "mutation:nack", reason: "Access denied" });
+    return;
+  }
+
+  try {
+    const resolved = safePath(projectId, msg.path);
+    suppressPath(projectId, msg.path);
+    await fs.mkdir(dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, msg.content ?? "", "utf-8");
+    sendTo(ws, { type: "mutation:ack", path: msg.path });
+    // Broadcast tree:add to others
+    broadcast(projectId, {
+      type: "tree:add",
+      path: msg.path,
+      nodeType: "file",
+    }, ws);
+  } catch {
+    sendTo(ws, { type: "mutation:nack", path: msg.path, reason: "Create failed" });
+  }
+}
+
+async function handleFileMkdir(
+  projectId: string,
+  userId: string,
+  ws: WebSocket,
+  msg: { path: string }
+) {
+  if (!(await checkWriteAccess(projectId, userId))) {
+    sendTo(ws, { type: "mutation:nack", reason: "Access denied" });
+    return;
+  }
+
+  try {
+    const resolved = safePath(projectId, msg.path);
+    suppressPath(projectId, msg.path);
+    await fs.mkdir(resolved, { recursive: true });
+    sendTo(ws, { type: "mutation:ack", path: msg.path });
+    broadcast(projectId, {
+      type: "tree:add",
+      path: msg.path,
+      nodeType: "directory",
+    }, ws);
+  } catch {
+    sendTo(ws, { type: "mutation:nack", path: msg.path, reason: "Mkdir failed" });
+  }
+}
+
+async function handleFileDelete(
+  projectId: string,
+  userId: string,
+  ws: WebSocket,
+  msg: { path: string }
+) {
+  if (!(await checkWriteAccess(projectId, userId))) {
+    sendTo(ws, { type: "mutation:nack", reason: "Access denied" });
+    return;
+  }
+
+  try {
+    const resolved = safePath(projectId, msg.path);
+    suppressPath(projectId, msg.path);
+    const stat = await fs.stat(resolved);
+    if (stat.isDirectory()) {
+      await fs.rm(resolved, { recursive: true });
+    } else {
+      await fs.unlink(resolved);
+    }
+    sendTo(ws, { type: "mutation:ack", path: msg.path });
+    broadcast(projectId, {
+      type: "tree:remove",
+      path: msg.path,
+    }, ws);
+  } catch {
+    sendTo(ws, { type: "mutation:nack", path: msg.path, reason: "Delete failed" });
+  }
+}
+
+async function handleFileRename(
+  projectId: string,
+  userId: string,
+  ws: WebSocket,
+  msg: { from: string; to: string }
+) {
+  if (!(await checkWriteAccess(projectId, userId))) {
+    sendTo(ws, { type: "mutation:nack", reason: "Access denied" });
+    return;
+  }
+
+  try {
+    const fromResolved = safePath(projectId, msg.from);
+    const toResolved = safePath(projectId, msg.to);
+    suppressPath(projectId, msg.from);
+    suppressPath(projectId, msg.to);
+    await fs.mkdir(dirname(toResolved), { recursive: true });
+    await fs.rename(fromResolved, toResolved);
+    sendTo(ws, { type: "mutation:ack", from: msg.from, to: msg.to });
+    broadcast(projectId, {
+      type: "tree:rename",
+      from: msg.from,
+      to: msg.to,
+    }, ws);
+  } catch {
+    sendTo(ws, { type: "mutation:nack", from: msg.from, to: msg.to, reason: "Rename failed" });
   }
 }
 
