@@ -65,7 +65,6 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   const [voiceId, setVoiceId] = useState(preferences.tts?.voiceId || "pqHfZKP75CvOlQylNhV4");
   const [model, setModel] = useState<TtsModel>(preferences.tts?.model || "v3");
   const [v2Settings, setV2Settings] = useState<V2Settings>(preferences.tts?.v2 || DEFAULT_V2);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -209,18 +208,28 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
     [previewingVoice]
   );
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const prefs: UserPreferences = {
-        tts: { voiceId, model, v2: v2Settings },
-      };
+  // Auto-save preferences when voice/model/settings change
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const initialRender = useRef(true);
+  useEffect(() => {
+    if (initialRender.current) {
+      initialRender.current = false;
+      return;
+    }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      const prefs: UserPreferences = { tts: { voiceId, model, v2: v2Settings } };
       await updatePreferences(prefs);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } finally {
-      setSaving(false);
-    }
+    }, 600);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [voiceId, model, v2Settings, updatePreferences]);
+
+  const handleResetDefaults = () => {
+    setVoiceId("pqHfZKP75CvOlQylNhV4"); // Bill
+    setModel("v2");
+    setV2Settings(DEFAULT_V2);
   };
 
   return (
@@ -643,14 +652,13 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
           </div>
         </section>
 
-        {/* Save */}
+        {/* Reset / auto-save indicator */}
         <div className="flex items-center gap-3">
           <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2.5 bg-accent text-white rounded-xl hover:bg-accent-hover transition-colors text-sm font-medium disabled:opacity-50"
+            onClick={handleResetDefaults}
+            className="px-4 py-2 text-sm text-text-muted hover:text-text border border-border rounded-xl hover:bg-surface-alt transition-colors"
           >
-            {saving ? "Saving..." : "Save preferences"}
+            Reset to defaults
           </button>
           {saved && (
             <span className="text-sm text-success">Saved!</span>
