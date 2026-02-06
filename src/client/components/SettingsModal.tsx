@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { MembersPanel } from "./MembersPanel.js";
-import { GitPanel } from "./GitPanel.js";
 import { EmailPanel } from "./EmailPanel.js";
 import { InviteForm } from "./InviteModal.js";
 
-type Tab = "members" | "git" | "email" | "invite";
+type Tab = "members" | "email" | "invite";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "members", label: "Members" },
-  { key: "git", label: "Git" },
   { key: "email", label: "Email" },
   { key: "invite", label: "Invite" },
 ];
@@ -74,7 +72,6 @@ export function SettingsModal({
           {activeTab === "members" && (
             <MembersPanel projectId={projectId} />
           )}
-          {activeTab === "git" && <GitPanel projectId={projectId} />}
           {activeTab === "email" && <EmailPanel projectId={projectId} />}
           {activeTab === "invite" && <InviteForm projectId={projectId} />}
         </div>

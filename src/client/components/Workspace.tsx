@@ -5,34 +5,49 @@ import {
   useConnected,
   useProjectId,
   useLoadFileContent,
+  useTree,
 } from "../store/StoreContext.js";
+import type { FileNode } from "../store/types.js";
 import { FileTree } from "./FileTree.js";
 import { Editor } from "./Editor.js";
 import { Preview } from "./Preview.js";
 import { EditorToolbar } from "./EditorToolbar.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
+import { ConnectPanel } from "./ConnectPanel.js";
 import { ShareButton } from "./ShareButton.js";
 import { AudioBar } from "./ReadAloud.js";
 import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { useAuth } from "../context/AuthContext.js";
-import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, GearSix } from "@phosphor-icons/react";
+import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut } from "@phosphor-icons/react";
+
+function fileExistsInTree(tree: FileNode[], path: string): boolean {
+  for (const node of tree) {
+    if (node.path === path) return true;
+    if (node.children && fileExistsInTree(node.children, path)) return true;
+  }
+  return false;
+}
 
 const MODE_PREVIEW = "preview";
 const MODE_EDIT = "edit";
 const FILE_PARAM = "file";
 
+type Panel = "connect" | "revisions" | "chat" | null;
+
 export function Workspace({ onBack }: { onBack: () => void }) {
   const { path: openFilePath, content: fileContent } = useOpenFile();
+  const { tree, loading: treeLoading } = useTree();
   const connected = useConnected();
   const projectId = useProjectId();
   const loadFileContent = useLoadFileContent();
-  const [showChat, setShowChat] = useState(false);
-  const [showRevisions, setShowRevisions] = useState(false);
+  const [activePanel, setActivePanel] = useState<Panel>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const { user } = useAuth();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const { user, signOut } = useAuth();
   const editorViewRef = useRef<EditorView | null>(null);
   const modeStorageKey = useMemo(
     () => `perchpad:view-mode:${projectId}`,
@@ -49,6 +64,9 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   const [sidebarWidth] = useState(240);
   const openFilePathRef = useRef<string | null>(openFilePath);
   const loadFileContentRef = useRef(loadFileContent);
+
+  const togglePanel = (panel: Panel) =>
+    setActivePanel((prev) => (prev === panel ? null : panel));
 
   useEffect(() => {
     openFilePathRef.current = openFilePath;
@@ -86,6 +104,51 @@ export function Workspace({ onBack }: { onBack: () => void }) {
     }
   }, [modeStorageKey, showPreview]);
 
+  // Save last open file to localStorage.
+  useEffect(() => {
+    if (openFilePath) {
+      try {
+        window.localStorage.setItem(`perchpad:last-file:${projectId}`, openFilePath);
+      } catch {}
+    }
+  }, [openFilePath, projectId]);
+
+  // Restore last open file when tree finishes loading (if nothing is open).
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (treeLoading || tree.length === 0 || restoredRef.current) return;
+    restoredRef.current = true;
+    // Don't override URL param
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(FILE_PARAM)) return;
+    // Don't override if a file is already open
+    if (openFilePathRef.current) return;
+
+    try {
+      const lastFile = window.localStorage.getItem(`perchpad:last-file:${projectId}`);
+      if (lastFile && fileExistsInTree(tree, lastFile)) {
+        loadFileContentRef.current(lastFile);
+        return;
+      }
+    } catch {}
+    // Fallback: open welcome.md if it exists
+    if (fileExistsInTree(tree, "welcome.md")) {
+      loadFileContentRef.current("welcome.md");
+    }
+  }, [treeLoading, tree, projectId]);
+
+  // Close user menu on outside click.
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [userMenuOpen]);
+
   // Keep workspace URL shareable with current file + mode.
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -102,6 +165,13 @@ export function Workspace({ onBack }: { onBack: () => void }) {
     window.history.replaceState(null, "", next);
   }, [openFilePath]);
 
+  const panelBtnClass = (panel: Panel) =>
+    `p-2 rounded-lg transition-colors ${
+      activePanel === panel
+        ? "bg-surface-alt text-accent"
+        : "text-text-muted hover:text-text"
+    }`;
+
   return (
     <div className="h-screen flex flex-col bg-bg">
       {/* Top bar */}
@@ -116,13 +186,14 @@ export function Workspace({ onBack }: { onBack: () => void }) {
           <div className="w-px h-5 bg-border" />
           <button
             onClick={() => setShowSidebar(!showSidebar)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
+            title="Pages"
+            className={`p-2 rounded-lg transition-colors ${
               showSidebar
                 ? "bg-surface-alt text-accent"
                 : "text-text-muted hover:text-text hover:bg-surface-alt"
             }`}
           >
-            <Sidebar size={15} /> Pages
+            <Sidebar size={16} />
           </button>
           <div className="w-px h-5 bg-border" />
           <span className="text-sm font-medium text-text">
@@ -150,31 +221,65 @@ export function Workspace({ onBack }: { onBack: () => void }) {
               filePath={openFilePath}
             />
           )}
-          <button
-            onClick={() => setShowRevisions(!showRevisions)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-              showRevisions
-                ? "bg-surface-alt text-accent"
-                : "text-text-muted hover:text-text hover:bg-surface-alt"
-            }`}
-          >
-            <ClockCounterClockwise size={15} /> History
-          </button>
-          <button
-            onClick={() => setShowChat(!showChat)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-              showChat
-                ? "bg-surface-alt text-accent"
-                : "text-text-muted hover:text-text hover:bg-surface-alt"
-            }`}
-          >
-            <ChatCircle size={15} /> Assistant
-          </button>
-          <UserAvatar
-            src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
-            name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-            size={26}
-          />
+          {/* Panel toggle pill */}
+          <div className="flex items-center gap-px bg-surface-alt/50 rounded-xl p-0.5">
+            <button
+              onClick={() => togglePanel("connect")}
+              title="Connect"
+              className={panelBtnClass("connect")}
+            >
+              <Plugs size={16} />
+            </button>
+            <button
+              onClick={() => togglePanel("revisions")}
+              title="History"
+              className={panelBtnClass("revisions")}
+            >
+              <ClockCounterClockwise size={16} />
+            </button>
+            <button
+              onClick={() => togglePanel("chat")}
+              title="Assistant"
+              className={panelBtnClass("chat")}
+            >
+              <ChatCircle size={16} />
+            </button>
+          </div>
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="rounded-full hover:opacity-80 transition-opacity"
+            >
+              <UserAvatar
+                src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
+                name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+                size={26}
+              />
+            </button>
+            {userMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50">
+                <div className="px-4 py-2.5 border-b border-border">
+                  <div className="text-sm font-medium text-text truncate">
+                    {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setUserMenuOpen(false); onBack(); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                >
+                  <ArrowLeft size={16} className="text-text-muted" />
+                  All workspaces
+                </button>
+                <button
+                  onClick={() => { setUserMenuOpen(false); signOut(); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors border-t border-border"
+                >
+                  <SignOut size={16} className="text-text-muted" />
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -229,17 +334,22 @@ export function Workspace({ onBack }: { onBack: () => void }) {
           )}
         </div>
 
-        {/* Chat panel */}
-        {showChat && (
+        {/* Side panels — only one at a time */}
+        {activePanel === "chat" && (
           <div className="w-80 border-l border-border bg-surface flex flex-col shrink-0">
             <ChatPanel />
           </div>
         )}
 
-        {/* Revisions panel */}
-        {showRevisions && (
+        {activePanel === "revisions" && (
           <div className="w-72 border-l border-border bg-surface flex flex-col shrink-0">
             <Revisions projectId={projectId} />
+          </div>
+        )}
+
+        {activePanel === "connect" && (
+          <div className="w-80 border-l border-border bg-surface flex flex-col shrink-0">
+            <ConnectPanel projectId={projectId} />
           </div>
         )}
 

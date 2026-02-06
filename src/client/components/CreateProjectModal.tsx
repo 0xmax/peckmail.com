@@ -1,5 +1,20 @@
 import { useState } from "react";
 import { api } from "../lib/api.js";
+import { TEMPLATES, type TemplateMeta } from "../lib/templates.js";
+import {
+  ArrowLeft,
+  Sparkle,
+  FileText,
+  SpinnerGap,
+} from "@phosphor-icons/react";
+
+type Mode = "template" | "empty" | "ai";
+type Step = "pick" | "configure";
+
+interface Selection {
+  mode: Mode;
+  template?: TemplateMeta;
+}
 
 export function CreateProjectModal({
   onClose,
@@ -8,20 +23,59 @@ export function CreateProjectModal({
   onClose: () => void;
   onCreated: (project: { id: string; name: string }) => void;
 }) {
+  const [step, setStep] = useState<Step>("pick");
+  const [selection, setSelection] = useState<Selection | null>(null);
   const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const pickTemplate = (template: TemplateMeta) => {
+    setSelection({ mode: "template", template });
+    setName(`My ${template.name}`);
+    setStep("configure");
+  };
+
+  const pickEmpty = () => {
+    setSelection({ mode: "empty" });
+    setName("");
+    setStep("configure");
+  };
+
+  const pickAi = () => {
+    setSelection({ mode: "ai" });
+    setName("");
+    setPrompt("");
+    setStep("configure");
+  };
+
+  const goBack = () => {
+    setStep("pick");
+    setSelection(null);
+    setError("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    if (selection?.mode === "ai" && !prompt.trim()) return;
     setLoading(true);
     setError("");
     try {
-      const data = await api.post<{ project: { id: string; name: string } }>(
-        "/api/projects",
-        { name: name.trim() }
-      );
+      const body: any = { name: name.trim() };
+      if (selection?.mode === "template" && selection.template) {
+        body.mode = "template";
+        body.templateId = selection.template.id;
+      } else if (selection?.mode === "empty") {
+        body.mode = "empty";
+      } else if (selection?.mode === "ai") {
+        body.mode = "ai";
+        body.prompt = prompt.trim();
+      }
+      const data = await api.post<{
+        project: { id: string; name: string };
+        warning?: string;
+      }>("/api/projects", body);
       onCreated(data.project);
     } catch (err: any) {
       setError(err.message || "Failed to create workspace");
@@ -31,40 +85,163 @@ export function CreateProjectModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div className="bg-surface rounded-2xl p-6 w-full max-w-md border border-border shadow-xl">
-        <h2 className="text-lg font-semibold text-text mb-4">
-          New workspace
-        </h2>
-        <form onSubmit={handleSubmit}>
-          <input
-            autoFocus
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="My writing project"
-            className="w-full py-3 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-          />
-          {error && (
-            <p className="text-sm text-danger mt-2">{error}</p>
-          )}
-          <div className="flex justify-end gap-3 mt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-text-muted hover:text-text transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim() || loading}
-              className="px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium"
-            >
-              {loading ? "Creating..." : "Create"}
-            </button>
-          </div>
-        </form>
+    <div
+      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-surface rounded-2xl w-full max-w-2xl border border-border shadow-xl overflow-hidden">
+        {step === "pick" ? (
+          <>
+            <div className="px-6 pt-6 pb-4">
+              <h2 className="text-lg font-semibold text-text">
+                New workspace
+              </h2>
+              <p className="text-sm text-text-muted mt-1">
+                Choose a starting point for your workspace
+              </p>
+            </div>
+
+            <div className="px-6 pb-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {TEMPLATES.map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => pickTemplate(t)}
+                      className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent/50 hover:bg-accent/5 transition-all text-left group"
+                    >
+                      <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-alt flex items-center justify-center text-text-muted group-hover:text-accent transition-colors">
+                        <Icon size={20} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-text truncate">
+                          {t.name}
+                        </div>
+                        <div className="text-xs text-text-muted truncate">
+                          {t.description}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="px-6 pb-6 pt-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={pickEmpty}
+                  className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border hover:border-accent/50 hover:bg-accent/5 transition-all text-sm text-text-muted hover:text-text"
+                >
+                  <FileText size={18} />
+                  Empty workspace
+                </button>
+                <button
+                  onClick={pickAi}
+                  className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border hover:border-accent/50 hover:bg-accent/5 transition-all text-sm text-text-muted hover:text-text"
+                >
+                  <Sparkle size={18} />
+                  Generate with AI
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="px-6 pt-5 pb-4 flex items-center gap-3">
+              <button
+                onClick={goBack}
+                className="p-1.5 -ml-1.5 rounded-lg hover:bg-surface-alt transition-colors text-text-muted hover:text-text"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div>
+                <h2 className="text-lg font-semibold text-text">
+                  {selection?.mode === "ai"
+                    ? "Generate with AI"
+                    : selection?.mode === "empty"
+                      ? "Empty workspace"
+                      : selection?.template?.name}
+                </h2>
+                {selection?.template && (
+                  <p className="text-sm text-text-muted">
+                    {selection.template.description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="px-6 pb-6">
+              <label className="block text-sm font-medium text-text mb-1.5">
+                Workspace name
+              </label>
+              <input
+                autoFocus
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={
+                  selection?.mode === "ai"
+                    ? "My AI workspace"
+                    : "My writing project"
+                }
+                className="w-full py-2.5 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              />
+
+              {selection?.mode === "ai" && (
+                <>
+                  <label className="block text-sm font-medium text-text mt-4 mb-1.5">
+                    Describe your workspace
+                  </label>
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="e.g., A workspace for planning my wedding — guest lists, vendor contacts, budget tracking, and timeline..."
+                    rows={3}
+                    className="w-full py-2.5 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
+                  />
+                </>
+              )}
+
+              {error && (
+                <p className="text-sm text-danger mt-3">{error}</p>
+              )}
+
+              <div className="flex justify-end gap-3 mt-5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm text-text-muted hover:text-text transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    !name.trim() ||
+                    (selection?.mode === "ai" && !prompt.trim()) ||
+                    loading
+                  }
+                  className="px-5 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium inline-flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <SpinnerGap size={16} className="animate-spin" />
+                      {selection?.mode === "ai"
+                        ? "Generating..."
+                        : "Creating..."}
+                    </>
+                  ) : (
+                    "Create workspace"
+                  )}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );

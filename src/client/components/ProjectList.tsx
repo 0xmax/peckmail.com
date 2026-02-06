@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
-import { GearSix, Notebook, SignOut } from "@phosphor-icons/react";
+import { GearSix, Notebook, SignOut, SpinnerGap } from "@phosphor-icons/react";
 import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
 
@@ -57,6 +57,7 @@ export function ProjectList({
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [creatingSample, setCreatingSample] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -89,6 +90,19 @@ export function ProjectList({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleCreateSample = async () => {
+    setCreatingSample(true);
+    try {
+      const data = await api.post<{ project: { id: string; name: string } }>(
+        "/api/projects",
+        { name: "My First Project" }
+      );
+      onOpenProject(data.project.id);
+    } catch {
+      setCreatingSample(false);
+    }
+  };
 
   const handleAcceptInvite = async (invId: string) => {
     try {
@@ -216,9 +230,23 @@ export function ProjectList({
             <p className="text-text-muted text-lg mb-2">
               No workspaces yet
             </p>
-            <p className="text-text-muted text-sm">
+            <p className="text-text-muted text-sm mb-5">
               Create your first workspace to start writing!
             </p>
+            <button
+              onClick={handleCreateSample}
+              disabled={creatingSample}
+              className="px-5 py-2.5 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium inline-flex items-center gap-2"
+            >
+              {creatingSample ? (
+                <>
+                  <SpinnerGap size={16} className="animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Try the starter project"
+              )}
+            </button>
           </div>
         ) : (
           <div className="space-y-2">

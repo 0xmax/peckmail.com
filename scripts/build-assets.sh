@@ -19,11 +19,11 @@ if command -v magick >/dev/null 2>&1; then
   magick "$SRC_ORIG/hero-desktop.jpeg" -interlace Plane -quality 85 "$DEST/hero.jpg"
   magick "$SRC_ORIG/hero-mobile.jpeg" -interlace Plane -quality 85 "$DEST/hero-mobile.jpg"
   magick "$SRC_ORIG/hero-desktop.jpeg" -gravity center -crop '1.91:1+0+0' +repage -resize 1200x628! -interlace Plane -quality 85 "$DEST/og.jpg"
-  # Favicon set
-  magick "$SRC_ORIG/favicon.png" -resize 32x32 -define icon:auto-resize=32,16 "$DEST_ROOT/favicon.ico"
-  magick "$SRC_ORIG/favicon.png" -resize 180x180 "$DEST_ROOT/apple-touch-icon.png"
-  magick "$SRC_ORIG/favicon.png" -resize 192x192 "$DEST_ROOT/icon-192.png"
-  magick "$SRC_ORIG/favicon.png" -resize 512x512 "$DEST_ROOT/icon-512.png"
+  # Favicon set (use rounded-corner variant)
+  magick "$SRC_ORIG/favicon-rounded.png" -define icon:auto-resize=32,16 "$DEST_ROOT/favicon.ico"
+  magick "$SRC_ORIG/favicon-rounded.png" -resize 180x180 "$DEST_ROOT/apple-touch-icon.png"
+  magick "$SRC_ORIG/favicon-rounded.png" -resize 192x192 "$DEST_ROOT/icon-192.png"
+  magick "$SRC_ORIG/favicon-rounded.png" -resize 512x512 "$DEST_ROOT/icon-512.png"
   echo "  Regenerated from originals with ImageMagick"
 elif command -v sips >/dev/null 2>&1; then
   # macOS sips fallback

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LinkSimple } from "@phosphor-icons/react";
 import { api } from "../lib/api.js";
 
 export function ShareButton({
@@ -33,9 +34,14 @@ export function ShareButton({
     <button
       onClick={handleShare}
       disabled={loading}
-      className="text-sm px-3 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
+      title={copied ? "Link copied!" : "Share"}
+      className={`p-2 rounded-lg transition-colors ${
+        copied
+          ? "text-accent bg-surface-alt"
+          : "text-text-muted hover:text-text hover:bg-surface-alt"
+      }`}
     >
-      {copied ? "Link copied!" : loading ? "..." : "Share"}
+      <LinkSimple size={16} />
     </button>
   );
 }

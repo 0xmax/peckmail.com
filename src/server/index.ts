@@ -4,6 +4,8 @@ import { createNodeWebSocket } from "@hono/node-ws";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { authMiddleware, getUser } from "./auth.js";
 import { filesRouter, PROJECTS_DIR, seedTemplate } from "./files.js";
+import { seedFromTemplate, seedEmpty, seedFromFiles } from "./templates.js";
+import { generateWorkspaceFiles } from "./generateWorkspace.js";
 import { addClient } from "./ws.js";
 import {
   listSessions,
@@ -276,12 +278,39 @@ api.get("/projects", async (c) => {
 
 api.post("/projects", async (c) => {
   const user = getUser(c);
-  const { name } = await c.req.json<{ name: string }>();
-  if (!name?.trim()) return c.json({ error: "Name required" }, 400);
+  const body = await c.req.json<{
+    name: string;
+    mode?: "template" | "empty" | "ai";
+    templateId?: string;
+    prompt?: string;
+  }>();
+  if (!body.name?.trim()) return c.json({ error: "Name required" }, 400);
 
-  const project = await createProject(name.trim(), user.id);
-  // Seed template files and initialize git repo
-  await seedTemplate(project.id);
+  const project = await createProject(body.name.trim(), user.id);
+
+  try {
+    if (body.mode === "template" && body.templateId) {
+      await seedFromTemplate(project.id, body.templateId);
+    } else if (body.mode === "empty") {
+      await seedEmpty(project.id);
+    } else if (body.mode === "ai" && body.prompt) {
+      const files = await generateWorkspaceFiles(body.prompt, user.id);
+      await seedFromFiles(project.id, files);
+    } else {
+      // Legacy fallback — no mode specified
+      await seedTemplate(project.id);
+    }
+  } catch (err: any) {
+    console.error("[projects] Seed error:", err.message);
+    // If AI generation fails, still return the project but with an error hint
+    if (body.mode === "ai") {
+      // Seed empty as fallback so the project isn't broken
+      await seedEmpty(project.id);
+      await initRepo(project.id);
+      return c.json({ project, warning: err.message }, 201);
+    }
+  }
+
   await initRepo(project.id);
   return c.json({ project });
 });
@@ -818,7 +847,7 @@ function landingPageHtml(): string {
             if (keys[i].indexOf('auth-token') !== -1) { sb = JSON.parse(localStorage.getItem(keys[i]) || '{}'); break; }
           }
         }
-        if (sb.access_token) {
+        if (sb.access_token && sb.expires_at && sb.expires_at > Math.floor(Date.now() / 1000)) {
           document.getElementById('nav-actions').innerHTML =
             '<a href="/projects" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Go to Projects</a>';
         }
@@ -845,24 +874,24 @@ function landingPageHtml(): string {
     <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">A calm place to get things done</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
+        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM152,88V44l44,44Z" opacity="0.2"/><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Z"/></svg>
+        <h3 class="text-[1.1rem] mb-2 text-text">Plain Flat Files</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Your project is just files on disk — markdown, CSV, whatever you need. No database, no proprietary format, no lock-in. Download, move, or back up the whole thing anytime.</p>
+      </div>
+      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
+        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64a24,24,0,1,1-24-24A24,24,0,0,1,224,64Z" opacity="0.2"/><path d="M232,64a32,32,0,1,0-40,31v17a8,8,0,0,1-8,8H96a23.84,23.84,0,0,0-8,1.38V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V144a8,8,0,0,1,8-8h88a24,24,0,0,0,24-24V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64ZM96,192a16,16,0,1,1-16-16A16,16,0,0,1,96,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
+        <h3 class="text-[1.1rem] mb-2 text-text">Git Built In</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Every workspace is a real git repo. Clone it, push to it, pull from it — standard commands just work. Use the web editor or your terminal, it's the same repo.</p>
+      </div>
+      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
+        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A16,16,0,0,0,40,64V192a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V64A16,16,0,0,0,200,48Z" opacity="0.2"/><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A16,16,0,0,0,40,64V192a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V64A16,16,0,0,0,200,48Zm0,144H56V64H200V192ZM80,96a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,96Zm0,32a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,128Zm0,32a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H88A8,8,0,0,1,80,160Z"/></svg>
+        <h3 class="text-[1.1rem] mb-2 text-text">LLM Ready</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">No heavy Word or PowerPoint blobs. Plain text that any AI tool can read and edit directly — Claude, Cursor, your own scripts. Built for the way people work now.</p>
+      </div>
+      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
         <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M232,80,208,96v24a96,96,0,0,1-96,96H24a8,8,0,0,1-6.25-13L104,99.52V76.89c0-28.77,23-52.75,51.74-52.89a52,52,0,0,1,50.59,38.89Z" opacity="0.2"/><path d="M176,68a12,12,0,1,1-12-12A12,12,0,0,1,176,68Zm64,12a8,8,0,0,1-3.56,6.66L216,100.28V120A104.11,104.11,0,0,1,112,224H24a16,16,0,0,1-12.49-26l.1-.12L96,96.63V76.89C96,43.47,122.79,16.16,155.71,16H156a60,60,0,0,1,57.21,41.86l23.23,15.48A8,8,0,0,1,240,80Zm-22.42,0L201.9,69.54a8,8,0,0,1-3.31-4.64A44,44,0,0,0,156,32h-.22C131.64,32.12,112,52.25,112,76.89V99.52a8,8,0,0,1-1.85,5.13L24,208h26.9l70.94-85.12a8,8,0,1,1,12.29,10.24L71.75,208H112a88.1,88.1,0,0,0,88-88V96a8,8,0,0,1,3.56-6.66Z"/></svg>
         <h3 class="text-[1.1rem] mb-2 text-text">A Smart Little Bird</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">A friendly assistant that lives in your workspace. It can read your files, help you draft, organize your thoughts, and answer questions — like a companion that quietly knows the whole project.</p>
-      </div>
-      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M168,144a40,40,0,1,1-40-40A40,40,0,0,1,168,144ZM64,56A32,32,0,1,0,96,88,32,32,0,0,0,64,56Zm128,0a32,32,0,1,0,32,32A32,32,0,0,0,192,56Z" opacity="0.2"/><path d="M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1,0-16,24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.85,8,57,57,0,0,0-98.15,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">Write Together</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Invite your family, your team, or a friend. Everyone sees changes as they happen — no emailing files back and forth, no version confusion. Just open the same project and go.</p>
-      </div>
-      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,56l-96,88L32,56Z" opacity="0.2"/><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">Hear the Chirps</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Send an email to your workspace and the bird takes care of it — reading what you sent, updating your documents, filing things where they belong. You stay focused while it works in the background.</p>
-      </div>
-      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M80,88v80H32a8,8,0,0,1-8-8V96a8,8,0,0,1,8-8Z" opacity="0.2"/><path d="M155.51,24.81a8,8,0,0,0-8.42.88L77.25,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H77.25l69.84,54.31A8,8,0,0,0,160,224V32A8,8,0,0,0,155.51,24.81ZM32,96H72v64H32ZM144,207.64,88,164.09V91.91l56-43.55Zm54-106.08a40,40,0,0,1,0,52.88,8,8,0,0,1-12-10.58,24,24,0,0,0,0-31.72,8,8,0,0,1,12-10.58ZM248,128a79.9,79.9,0,0,1-20.37,53.34,8,8,0,0,1-11.92-10.67,64,64,0,0,0,0-85.33,8,8,0,1,1,11.92-10.67A79.83,79.83,0,0,1,248,128Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">It Reads to You</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Perchpad can read your documents aloud. Select any page and hit play — the built-in reader turns your writing into natural speech with expressive voices, so you can listen back, catch mistakes, or just lean back and hear your words come alive.</p>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">A friendly AI assistant that lives in your workspace. It can read your files, help you draft, organize your thoughts, and answer questions — like a companion that quietly knows the whole project.</p>
       </div>
     </div>
   </section>
@@ -900,10 +929,20 @@ function landingPageHtml(): string {
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Change Tracking</h3>
         <p class="text-[0.85rem] text-text-secondary leading-relaxed">Browse diffs, see who changed what, and review the full history of any file at any time.</p>
       </div>
-      <div class="text-center px-4 py-5 opacity-40 select-none">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,104v8a48,48,0,0,1-48,48H96a48,48,0,0,1-48-48v-8a49.28,49.28,0,0,1,8.51-27.3A51.92,51.92,0,0,1,76,32a52,52,0,0,1,43.83,24h16.34A52,52,0,0,1,180,32a51.92,51.92,0,0,1,19.49,44.7A49.28,49.28,0,0,1,208,104Z" opacity="0.2"/><path d="M208.3,75.68A51.71,51.71,0,0,0,180.36,32a52,52,0,0,0-43.08,24H118.72A52,52,0,0,0,75.64,32a51.71,51.71,0,0,0-27.94,43.68A56.09,56.09,0,0,0,40,104v8a56.06,56.06,0,0,0,48,55.43V192a8,8,0,0,0,16,0V167.43a55.94,55.94,0,0,0,24-10.54,55.94,55.94,0,0,0,24,10.54V192a8,8,0,0,0,16,0V167.43A56.06,56.06,0,0,0,216,112v-8A56.09,56.09,0,0,0,208.3,75.68ZM200,112a40,40,0,0,1-40,40H136a8,8,0,0,0-8,8,8,8,0,0,0-8-8H96a40,40,0,0,1-40-40v-8a40,40,0,0,1,40-40h64a40,40,0,0,1,40,40Zm-16-60a36,36,0,0,1,0,4H72a36,36,0,0,1,0-4Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">GitHub Sync</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Automatically sync your workspaces to private GitHub repos. <span class="italic">Coming soon.</span></p>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M168,144a40,40,0,1,1-40-40A40,40,0,0,1,168,144ZM64,56A32,32,0,1,0,96,88,32,32,0,0,0,64,56Zm128,0a32,32,0,1,0,32,32A32,32,0,0,0,192,56Z" opacity="0.2"/><path d="M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1,0-16,24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.85,8,57,57,0,0,0-98.15,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Write Together</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Invite your team or a friend. Everyone sees changes live — no emailing files back and forth.</p>
+      </div>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,56l-96,88L32,56Z" opacity="0.2"/><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Email to Workspace</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Send an email to your workspace and the bird files it where it belongs.</p>
+      </div>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M80,88v80H32a8,8,0,0,1-8-8V96a8,8,0,0,1,8-8Z" opacity="0.2"/><path d="M155.51,24.81a8,8,0,0,0-8.42.88L77.25,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H77.25l69.84,54.31A8,8,0,0,0,160,224V32A8,8,0,0,0,155.51,24.81ZM32,96H72v64H32ZM144,207.64,88,164.09V91.91l56-43.55Zm54-106.08a40,40,0,0,1,0,52.88,8,8,0,0,1-12-10.58,24,24,0,0,0,0-31.72,8,8,0,0,1,12-10.58ZM248,128a79.9,79.9,0,0,1-20.37,53.34,8,8,0,0,1-11.92-10.67,64,64,0,0,0,0-85.33,8,8,0,1,1,11.92-10.67A79.83,79.83,0,0,1,248,128Z"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Read Aloud</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Hit play and hear your writing in natural speech. Great for catching mistakes or listening on the go.</p>
       </div>
     </div>
   </section>
@@ -941,6 +980,32 @@ function landingPageHtml(): string {
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">Is my data private?</h3>
       <p class="text-[0.95rem] text-text leading-relaxed">Yes. Projects are isolated per user and never shared unless you explicitly invite someone. Your files are stored as git repositories and are fully yours — clone them anytime.</p>
+    </div>
+  </section>
+
+  <section class="max-w-[800px] mx-auto px-6 pb-16 sm:px-8">
+    <h2 class="font-heading text-[1.35rem] text-center mb-6 text-text-body font-semibold">Coming Soon</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="text-center px-3 py-4 opacity-60">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,104v8a48,48,0,0,1-48,48H96a48,48,0,0,1-48-48v-8a49.28,49.28,0,0,1,8.51-27.3A51.92,51.92,0,0,1,76,32a52,52,0,0,1,43.83,24h16.34A52,52,0,0,1,180,32a51.92,51.92,0,0,1,19.49,44.7A49.28,49.28,0,0,1,208,104Z" opacity="0.2"/><path d="M208.3,75.68A51.71,51.71,0,0,0,180.36,32a52,52,0,0,0-43.08,24H118.72A52,52,0,0,0,75.64,32a51.71,51.71,0,0,0-27.94,43.68A56.09,56.09,0,0,0,40,104v8a56.06,56.06,0,0,0,48,55.43V192a8,8,0,0,0,16,0V167.43a55.94,55.94,0,0,0,24-10.54,55.94,55.94,0,0,0,24,10.54V192a8,8,0,0,0,16,0V167.43A56.06,56.06,0,0,0,216,112v-8A56.09,56.09,0,0,0,208.3,75.68Z"/></svg>
+        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">GitHub Sync</h3>
+        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Auto-sync to private GitHub repos.</p>
+      </div>
+      <div class="text-center px-3 py-4 opacity-60">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,104v8a88,88,0,0,1-88,88H40a8,8,0,0,1-8-8V104A88,88,0,0,1,216,104Z" opacity="0.2"/><path d="M200,176a8,8,0,0,1-8,8H152a8,8,0,0,1,0-16h40A8,8,0,0,1,200,176Zm-8-48H152a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm48-24v88a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V104A88.1,88.1,0,0,1,104,16h48A88.1,88.1,0,0,1,240,104Z"/></svg>
+        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">Webhooks</h3>
+        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Trigger actions when files change.</p>
+      </div>
+      <div class="text-center px-3 py-4 opacity-60">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M152,152H104V104h48Z" opacity="0.2"/><path d="M200,24H72A16,16,0,0,0,56,40V64H40A16,16,0,0,0,24,80v96a16,16,0,0,0,16,16H56v24a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V40A16,16,0,0,0,200,24Zm0,192H72V192h64a8,8,0,0,0,0-16H72V80H200ZM160,96H104a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h56a8,8,0,0,0,8-8V104A8,8,0,0,0,160,96Zm-8,48H112V112h40Z"/></svg>
+        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">Excel Support</h3>
+        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Import and edit .xlsx spreadsheets.</p>
+      </div>
+      <div class="text-center px-3 py-4 opacity-60">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,24H48A16,16,0,0,0,32,40V216a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V40A16,16,0,0,0,208,24Z" opacity="0.2"/><path d="M208,24H48A16,16,0,0,0,32,40V216a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V40A16,16,0,0,0,208,24Zm0,192H48V40H208V216ZM80,96a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,96Zm0,32a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,128Zm0,32a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H88A8,8,0,0,1,80,160Z"/></svg>
+        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">PDF Support</h3>
+        <p class="text-[0.8rem] text-text-secondary leading-relaxed">View and annotate PDF documents.</p>
+      </div>
     </div>
   </section>
 

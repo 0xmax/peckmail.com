@@ -236,6 +236,7 @@ async function copyDirRecursive(src: string, dest: string) {
 }
 
 export async function seedTemplate(projectId: string): Promise<void> {
+  console.log("[files] seedTemplate: TEMPLATE_DIR =", TEMPLATE_DIR);
   try {
     await fs.access(TEMPLATE_DIR);
   } catch {
@@ -243,7 +244,10 @@ export async function seedTemplate(projectId: string): Promise<void> {
     return;
   }
   const dest = join(PROJECTS_DIR, projectId);
+  console.log("[files] seedTemplate: copying to", dest);
   await copyDirRecursive(TEMPLATE_DIR, dest);
+  const files = await fs.readdir(dest);
+  console.log("[files] seedTemplate: result files =", files);
 }
 
 // Helper for external use (chat tools, etc.)
