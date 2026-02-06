@@ -101,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    window.location.href = "/";
   }, []);
 
   const updatePreferences = useCallback(async (prefs: UserPreferences) => {

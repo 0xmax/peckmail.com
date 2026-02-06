@@ -748,19 +748,23 @@ function landingPageHtml(): string {
 
     /* Nav */
     .nav { display: flex; align-items: center; justify-content: space-between; max-width: 1100px; margin: 0 auto; padding: 1.25rem 2rem; }
-    .nav-logo { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; font-weight: 700; color: #3d3229; text-decoration: none; }
+    .nav-logo { display: flex; align-items: center; gap: 0.5rem; font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; font-weight: 700; color: #3d3229; text-decoration: none; }
     .nav-logo:hover { text-decoration: none; }
-    .nav-link { font-size: 0.95rem; color: #9a8b7a; font-weight: 500; transition: color 0.15s; }
-    .nav-link:hover { color: #3d3229; text-decoration: none; }
+    .nav-logo img { height: 1.75rem; width: auto; }
+    .nav .cta { padding: 0.5rem 1.35rem; font-size: 0.9rem; }
 
     /* Hero */
-    .hero { text-align: center; padding: 3rem 2rem 0; }
-    .hero-content { max-width: 600px; margin: 0 auto 2.5rem; }
-    .hero h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 3.25rem; font-weight: 700; line-height: 1.15; margin-bottom: 1rem; color: #3d3229; }
-    .hero p { font-size: 1.1rem; color: #9a8b7a; max-width: 500px; margin: 0 auto 2rem; line-height: 1.7; }
-    .cta { display: inline-block; background: #c4956a; color: #fff; padding: 0.8rem 2.25rem; border-radius: 0.5rem; font-size: 1.05rem; font-weight: 600; transition: background 0.15s; }
-    .cta:hover { background: #b07f56; text-decoration: none; }
-    .hero-img { width: 80%; max-width: 1000px; margin: 0 auto; }
+    .hero { max-width: 1100px; margin: 0 auto; padding: 4rem 2rem 0; }
+    .hero-text { display: flex; align-items: center; gap: 3rem; margin-bottom: 3rem; }
+    .hero-heading { flex: 1.2; }
+    .hero h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 3.5rem; font-weight: 800; line-height: 1.1; color: #3d3229; letter-spacing: -0.02em; }
+    .hero-desc { flex: 1; }
+    .hero p { font-size: 1.1rem; color: #6b5d50; line-height: 1.7; }
+    .cta { display: inline-block; background: #2a211a; color: #fff; padding: 0.8rem 2.25rem; border-radius: 0.5rem; font-size: 1.05rem; font-weight: 600; transition: opacity 0.15s; }
+    .cta:hover { opacity: 0.85; text-decoration: none; }
+    .nav-signin { font-size: 0.95rem; color: #9a8b7a; font-weight: 500; transition: color 0.15s; }
+    .nav-signin:hover { color: #3d3229; text-decoration: none; }
+    .hero-img { width: 100%; }
     .hero-img img { width: 100%; border-radius: 1.25rem; display: block; }
 
     /* Features */
@@ -771,6 +775,15 @@ function landingPageHtml(): string {
     .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
     .feature-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: #3d3229; }
     .feature-card p { font-size: 0.95rem; color: #9a8b7a; line-height: 1.65; }
+
+    /* Sub-features */
+    .sub-features { max-width: 1100px; margin: 0 auto; padding: 0 2rem 3rem; }
+    .sub-features h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; text-align: center; margin-bottom: 1.5rem; color: #9a8b7a; font-weight: 600; }
+    .sub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .sub-item { text-align: center; padding: 1.25rem 1rem; }
+    .sub-item svg { width: 1.25rem; height: 1.25rem; stroke: #9a8b7a; margin-bottom: 0.5rem; }
+    .sub-item h3 { font-size: 0.95rem; color: #3d3229; margin-bottom: 0.35rem; font-weight: 600; }
+    .sub-item p { font-size: 0.85rem; color: #9a8b7a; line-height: 1.55; }
 
     /* FAQ */
     .faq { max-width: 800px; margin: 0 auto; padding: 2rem 2rem 3rem; }
@@ -784,10 +797,11 @@ function landingPageHtml(): string {
     .footer { text-align: center; padding: 2rem; color: #9a8b7a; font-size: 0.9rem; border-top: 1px solid #e8ddd0; }
 
     @media (max-width: 640px) {
-      .hero h1 { font-size: 2.25rem; }
       .hero { padding: 2rem 1.5rem 0; }
-      .hero-img { width: 95%; }
+      .hero-text { flex-direction: column; gap: 1.25rem; margin-bottom: 2rem; }
+      .hero h1 { font-size: 2.25rem; }
       .features-grid { grid-template-columns: 1fr; }
+      .sub-grid { grid-template-columns: repeat(2, 1fr); }
       .nav { padding: 1rem 1.5rem; }
       .faq { padding: 2rem 1.5rem; }
     }
@@ -810,15 +824,21 @@ function landingPageHtml(): string {
 </head>
 <body>
   <nav class="nav">
-    <a href="/" class="nav-logo">Perchpad</a>
-    <a href="/login" class="nav-link">Sign In</a>
+    <a href="/" class="nav-logo"><img src="/assets/logo.png" alt="">Perchpad</a>
+    <div style="display:flex;align-items:center;gap:1.25rem">
+      <a href="/login" class="nav-signin">Sign In</a>
+      <a href="/login" class="cta">Get Started</a>
+    </div>
   </nav>
 
   <section class="hero">
-    <div class="hero-content">
-      <h1>A writing workspace that thinks with you</h1>
-      <p>Organize projects, write in markdown, manage data in tables, and collaborate in real time — with a built-in AI assistant that understands your files.</p>
-      <a href="/login" class="cta">Get Started</a>
+    <div class="hero-text">
+      <div class="hero-heading">
+        <h1>A writing workspace that thinks with you</h1>
+      </div>
+      <div class="hero-desc">
+        <p>Organize projects, write in markdown, manage data in tables, and collaborate in real time — with a built-in AI assistant that understands your files.</p>
+      </div>
     </div>
     <div class="hero-img">
       <picture>
@@ -829,60 +849,96 @@ function landingPageHtml(): string {
   </section>
 
   <section class="features">
-    <h2>Everything you need to write</h2>
+    <h2>A calm place to get things done</h2>
     <div class="features-grid">
       <div class="feature-card">
+        <div class="feature-icon">&#128038;</div>
+        <h3>A Smart Little Bird</h3>
+        <p>A friendly assistant that lives in your workspace. It can read your files, help you draft, organize your thoughts, and answer questions — like a companion that quietly knows the whole project.</p>
+      </div>
+      <div class="feature-card">
         <div class="feature-icon">&#9998;</div>
-        <h3>AI Assistant</h3>
-        <p>A built-in AI powered by Claude that can read, edit, create, and search across your project files. It streams responses in real time and knows your current context.</p>
+        <h3>Write Together</h3>
+        <p>Invite your family, your team, or a friend. Everyone sees changes as they happen — no emailing files back and forth, no version confusion. Just open the same project and go.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">&#9736;</div>
-        <h3>Real-Time Collaboration</h3>
-        <p>Work with your team simultaneously. File changes, cursors, and chat sync instantly over WebSockets so everyone stays on the same page.</p>
+        <div class="feature-icon">&#128220;</div>
+        <h3>Hear the Chirps</h3>
+        <p>Send an email to your workspace and the bird takes care of it — reading what you sent, updating your documents, filing things where they belong. You stay focused while it works in the background.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">&#9993;</div>
-        <h3>Email Integration</h3>
-        <p>Every workspace gets a unique email address. Send content to your project and an AI agent processes it into your files automatically.</p>
+        <div class="feature-icon">&#128066;</div>
+        <h3>It Listens to Your Docs</h3>
+        <p>The bird watches your files as you write. It knows what changed, what you're working on, and what you might need next. Ask it anything about your project — it's already paying attention.</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">&#8634;</div>
-        <h3>Version Control</h3>
-        <p>Auto-saves every 60 seconds with full git history. Browse revisions, view diffs, and clone your projects with standard git commands.</p>
+    </div>
+  </section>
+
+  <section class="sub-features">
+    <h2>And a few more things you might like</h2>
+    <div class="sub-grid">
+      <div class="sub-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+        <h3>Markdown-Based</h3>
+        <p>Write in plain markdown with live preview. No proprietary formats — your files are always yours.</p>
+      </div>
+      <div class="sub-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+        <h3>Never Lose a Thing</h3>
+        <p>Auto-saves every minute with full version history. Go back to any point, no manual saving needed.</p>
+      </div>
+      <div class="sub-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+        <h3>Claude Integration</h3>
+        <p>Connect via MCP from Claude Desktop or Cursor. Manage your projects from any compatible AI tool.</p>
+      </div>
+      <div class="sub-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <h3>Teams</h3>
+        <p>Invite collaborators with roles — owners, editors, or viewers. Everyone gets the right level of access.</p>
+      </div>
+      <div class="sub-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <h3>Notifications</h3>
+        <p>Know when something changes. File updates, new collaborators, and incoming emails — all surfaced quietly.</p>
+      </div>
+      <div class="sub-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        <h3>Change Tracking</h3>
+        <p>Browse diffs, see who changed what, and review the full history of any file at any time.</p>
       </div>
     </div>
   </section>
 
   <section class="faq" id="faq">
-    <h2>Frequently Asked Questions</h2>
+    <h2>Under the Hood</h2>
     <div class="faq-item">
-      <h3>What is Perchpad?</h3>
-      <p>A web-based collaborative writing workspace. Organize work into projects, write in markdown, manage structured data in CSV tables, and let the built-in AI assistant help along the way. Everything is version-controlled and synced in real time.</p>
+      <h3>What is Perchpad, technically?</h3>
+      <p>A real-time collaborative writing platform. Each project is a git repository on the server. The editor is CodeMirror 6 with markdown support, and files sync over WebSockets. The AI assistant is powered by Claude (Anthropic) with tool-use access to your project files.</p>
     </div>
     <div class="faq-item">
       <h3>What file formats are supported?</h3>
-      <p>Markdown (.md) for rich text documents, notes, and prose with live preview. CSV (.csv) for structured tabular data rendered as styled, editable tables with sticky headers.</p>
-    </div>
-    <div class="faq-item">
-      <h3>How does the AI assistant work?</h3>
-      <p>The assistant is powered by Claude and has access to tools for reading, editing, creating, and searching files within your project. It streams responses in real time and is aware of your currently open file and cursor position.</p>
+      <p>Markdown (<code>.md</code>) with live preview, and CSV (<code>.csv</code>) rendered as editable tables with sticky headers and sorting. The editor supports syntax highlighting for fenced code blocks via CodeMirror language data.</p>
     </div>
     <div class="faq-item">
       <h3>How does version control work?</h3>
-      <p>Every project is a git repository. Perchpad auto-commits changes every 60 seconds and exposes Git Smart HTTP endpoints so you can clone, push, and pull with standard git commands. API keys authenticate via HTTP Basic Auth.</p>
+      <p>Every project is backed by a real git repository. Perchpad auto-commits every 60 seconds and exposes Git Smart HTTP endpoints — you can <code>git clone</code>, <code>git push</code>, and <code>git pull</code> with standard tools. API keys authenticate via HTTP Basic Auth.</p>
     </div>
     <div class="faq-item">
-      <h3>How does email integration work?</h3>
-      <p>Each workspace gets a unique address (e.g. <code>robin-willow-42@in.perchpad.co</code>). Emails sent there are processed by an AI agent that updates your project files. Configure the agent's behavior with an <code>AGENTS.md</code> file.</p>
+      <h3>How does the email integration work?</h3>
+      <p>Each workspace gets a unique inbound address (e.g. <code>robin-willow-42@in.perchpad.co</code>). Incoming emails are processed by an AI agent that can create, update, or organize files based on the content. Configure behavior with an <code>AGENTS.md</code> file in your project root.</p>
     </div>
     <div class="faq-item">
-      <h3>Can I use Perchpad with other AI tools?</h3>
-      <p>Yes. Perchpad includes a Model Context Protocol (MCP) server for external AI integrations. Connect from Claude Desktop or any MCP-compatible client to manage projects, files, history, and more.</p>
+      <h3>Can I connect external AI tools?</h3>
+      <p>Yes. Perchpad exposes a Model Context Protocol (MCP) server. Connect from Claude Desktop, Cursor, or any MCP-compatible client to read files, manage projects, browse git history, and more — all through a standardized interface.</p>
     </div>
     <div class="faq-item">
-      <h3>How does sharing work?</h3>
-      <p>Share individual files via public links, or invite collaborators by email with role-based access: owners have full control, editors can read and write, and viewers have read-only access.</p>
+      <h3>How does collaboration and sharing work?</h3>
+      <p>Invite collaborators by email with role-based access: owners, editors (read/write), or viewers (read-only). Share individual files via public links. All changes sync in real time over WebSockets — no polling, no refresh needed.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Where is my data stored?</h3>
+      <p>Projects live as git repositories on the server with persistent volume storage. Auth and metadata are managed by Supabase (Postgres with row-level security). Files are never shared across projects or users unless explicitly invited.</p>
     </div>
   </section>
 

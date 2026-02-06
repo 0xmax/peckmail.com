@@ -10,14 +10,11 @@ import { Editor } from "./Editor.js";
 import { Preview } from "./Preview.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
-import { InviteModal } from "./InviteModal.js";
-import { MembersPanel } from "./MembersPanel.js";
 import { ShareButton } from "./ShareButton.js";
 import { AudioBar } from "./ReadAloud.js";
 import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
-import { GitPanel } from "./GitPanel.js";
-import { EmailPanel } from "./EmailPanel.js";
+import { SettingsModal } from "./SettingsModal.js";
 import { useAuth } from "../context/AuthContext.js";
 
 const MODE_PREVIEW = "preview";
@@ -31,10 +28,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   const loadFileContent = useLoadFileContent();
   const [showChat, setShowChat] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
-  const [showInvite, setShowInvite] = useState(false);
-  const [showMembers, setShowMembers] = useState(false);
-  const [showGit, setShowGit] = useState(false);
-  const [showEmail, setShowEmail] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const { user } = useAuth();
   const modeStorageKey = useMemo(
     () => `perchpad:view-mode:${projectId}`,
@@ -186,40 +180,14 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             Assistant
           </button>
           <button
-            onClick={() => setShowMembers(!showMembers)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
-              showMembers
-                ? "bg-surface-alt text-accent"
-                : "text-text-muted hover:text-text hover:bg-surface-alt"
-            }`}
+            onClick={() => setShowSettings(true)}
+            className="text-sm px-2.5 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
+            title="Settings"
           >
-            Members
-          </button>
-          <button
-            onClick={() => setShowGit(!showGit)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
-              showGit
-                ? "bg-surface-alt text-accent"
-                : "text-text-muted hover:text-text hover:bg-surface-alt"
-            }`}
-          >
-            Git
-          </button>
-          <button
-            onClick={() => setShowEmail(!showEmail)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
-              showEmail
-                ? "bg-surface-alt text-accent"
-                : "text-text-muted hover:text-text hover:bg-surface-alt"
-            }`}
-          >
-            Email
-          </button>
-          <button
-            onClick={() => setShowInvite(true)}
-            className="text-sm px-3 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
-          >
-            Invite
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6.86 1.45a1.2 1.2 0 0 1 2.28 0l.27.83a1.2 1.2 0 0 0 1.52.72l.82-.3a1.2 1.2 0 0 1 1.61 1.14l-.04.87a1.2 1.2 0 0 0 1.02 1.22l.86.13a1.2 1.2 0 0 1 .79 1.97l-.58.65a1.2 1.2 0 0 0 0 1.59l.58.65a1.2 1.2 0 0 1-.79 1.97l-.86.13a1.2 1.2 0 0 0-1.02 1.22l.04.87a1.2 1.2 0 0 1-1.61 1.14l-.82-.3a1.2 1.2 0 0 0-1.52.72l-.27.83a1.2 1.2 0 0 1-2.28 0l-.27-.83a1.2 1.2 0 0 0-1.52-.72l-.82.3A1.2 1.2 0 0 1 2.64 14l.04-.87a1.2 1.2 0 0 0-1.02-1.22l-.86-.13a1.2 1.2 0 0 1-.79-1.97l.58-.65a1.2 1.2 0 0 0 0-1.59L.01 6.92a1.2 1.2 0 0 1 .79-1.97l.86-.13a1.2 1.2 0 0 0 1.02-1.22L2.64 2.73a1.2 1.2 0 0 1 1.61-1.14l.82.3a1.2 1.2 0 0 0 1.52-.72l.27-.83Z" />
+              <circle cx="8" cy="8" r="2.5" />
+            </svg>
           </button>
           <div className="w-px h-5 bg-border" />
           <UserAvatar
@@ -279,35 +247,15 @@ export function Workspace({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {/* Members panel */}
-        {showMembers && (
-          <div className="w-64 border-l border-border bg-surface flex flex-col shrink-0">
-            <MembersPanel projectId={projectId} />
-          </div>
-        )}
-
-        {/* Git panel */}
-        {showGit && (
-          <div className="w-72 border-l border-border bg-surface flex flex-col shrink-0">
-            <GitPanel projectId={projectId} />
-          </div>
-        )}
-
-        {/* Email panel */}
-        {showEmail && (
-          <div className="w-72 border-l border-border bg-surface flex flex-col shrink-0">
-            <EmailPanel projectId={projectId} />
-          </div>
-        )}
       </div>
 
       {/* Audio player bar */}
       <AudioBar />
 
-      {showInvite && (
-        <InviteModal
+      {showSettings && (
+        <SettingsModal
           projectId={projectId}
-          onClose={() => setShowInvite(false)}
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>
