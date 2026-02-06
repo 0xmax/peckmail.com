@@ -1,4 +1,5 @@
 import { Webhook } from "svix";
+import { Resend } from "resend";
 import {
   getProjectByEmail,
   getProjectMemberEmails,
@@ -11,6 +12,10 @@ import { sendEmail } from "./email.js";
 import { PROJECTS_DIR } from "./files.js";
 import { promises as fs } from "fs";
 import { join } from "path";
+
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 const WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET;
 
@@ -53,20 +58,32 @@ export async function receiveInboundEmail(
   payload: any
 ): Promise<InboundEmailRecord | null> {
   const data = payload.data ?? payload;
-  const toAddresses: string[] = Array.isArray(data.to) ? data.to : [data.to];
-  const fromAddress: string = Array.isArray(data.from)
-    ? data.from[0]
-    : data.from;
-  const subject: string = data.subject ?? "(no subject)";
-  const bodyText: string = data.text ?? "";
-  const bodyHtml: string = data.html ?? "";
   const resendEmailId: string =
     data.email_id ?? data.id ?? `unknown-${Date.now()}`;
-  const headers = data.headers ?? {};
-  const attachments = data.attachments ?? [];
-  const cc: string[] = Array.isArray(data.cc) ? data.cc : data.cc ? [data.cc] : [];
-  const replyTo: string = data.reply_to ?? data.replyTo ?? "";
-  const date: string = data.date ?? data.created_at ?? new Date().toISOString();
+
+  // The webhook only has metadata — fetch full email content from Resend API
+  let fullEmail: any = data;
+  if (resend && resendEmailId && !resendEmailId.startsWith("test-")) {
+    try {
+      const { data: fetched } = await resend.emails.receiving.get(resendEmailId);
+      if (fetched) fullEmail = fetched;
+    } catch (err) {
+      console.warn("[inbound] Failed to fetch email content from Resend API, using webhook data:", err);
+    }
+  }
+
+  const toAddresses: string[] = Array.isArray(fullEmail.to) ? fullEmail.to : [fullEmail.to];
+  const fromAddress: string = Array.isArray(fullEmail.from)
+    ? fullEmail.from[0]
+    : fullEmail.from;
+  const subject: string = fullEmail.subject ?? "(no subject)";
+  const bodyText: string = fullEmail.text ?? "";
+  const bodyHtml: string = fullEmail.html ?? "";
+  const headers = fullEmail.headers ?? {};
+  const attachments = fullEmail.attachments ?? [];
+  const cc: string[] = Array.isArray(fullEmail.cc) ? fullEmail.cc : fullEmail.cc ? [fullEmail.cc] : [];
+  const replyTo: string = fullEmail.reply_to ?? fullEmail.replyTo ?? "";
+  const date: string = fullEmail.date ?? fullEmail.created_at ?? new Date().toISOString();
 
   // Find matching project for any of the to addresses
   let project: { id: string; name: string } | null = null;
