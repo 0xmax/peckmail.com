@@ -25,7 +25,7 @@ import {
   getUserHandle,
   supabaseAdmin,
 } from "./db.js";
-import { verifyWebhookSignature, receiveInboundEmail, processInboundEmail } from "./inbound.js";
+import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail } from "./inbound.js";
 import { sendInvitationEmail } from "./email.js";
 import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit } from "./git.js";
 import { ttsRouter } from "./tts.js";
@@ -140,11 +140,11 @@ app.post("/api/webhooks/resend", async (c) => {
       "svix-signature": c.req.header("svix-signature") ?? "",
     };
     const payload = verifyWebhookSignature(rawBody, headers);
-    // Phase 1: persist to DB synchronously before returning 200
+    // Phase 1: persist metadata to DB synchronously, return 200 fast
     const record = await receiveInboundEmail(payload);
     if (record) {
-      // Phase 2: run AI agent asynchronously
-      processInboundEmail(record).catch((err) =>
+      // Phase 2: fetch full content from Resend API + run AI agent (async)
+      fetchEmailContentAndProcess(record).catch((err) =>
         console.error("[webhook] Error processing inbound email:", err)
       );
     }
@@ -561,7 +561,8 @@ api.post("/projects/:id/emails/test", async (c) => {
   };
   const record = await receiveInboundEmail(payload);
   if (record) {
-    // Phase 2: run AI agent asynchronously
+    // Test emails have body inline — set it directly, then process
+    record.body_text = payload.data.text;
     processInboundEmail(record).catch((err) =>
       console.error("[test-email] Error:", err)
     );

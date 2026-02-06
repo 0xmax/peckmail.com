@@ -61,59 +61,13 @@ export async function receiveInboundEmail(
   const resendEmailId: string =
     data.email_id ?? data.id ?? `unknown-${Date.now()}`;
 
-  // The webhook only has metadata — fetch full email content from Resend API
-  let fullEmail: any = data;
-  if (resend && resendEmailId && !resendEmailId.startsWith("test-")) {
-    try {
-      const { data: fetched } = await resend.emails.receiving.get(resendEmailId);
-      console.log("[inbound] Resend API response:", JSON.stringify({
-        id: fetched?.id,
-        from: fetched?.from,
-        subject: fetched?.subject,
-        hasText: !!fetched?.text,
-        textLength: fetched?.text?.length ?? 0,
-        hasHtml: !!fetched?.html,
-        htmlLength: fetched?.html?.length ?? 0,
-      }));
-      if (fetched) fullEmail = fetched;
-    } catch (err) {
-      console.warn("[inbound] Failed to fetch email content from Resend API, using webhook data:", err);
-    }
-  }
-
-  const toAddresses: string[] = Array.isArray(fullEmail.to) ? fullEmail.to : [fullEmail.to];
-  const fromAddress: string = Array.isArray(fullEmail.from)
-    ? fullEmail.from[0]
-    : fullEmail.from;
-  const subject: string = fullEmail.subject ?? "(no subject)";
-  const bodyHtml: string = fullEmail.html ?? "";
-  // Many forwarded emails only have HTML — extract plain text from it as fallback
-  let bodyText: string = fullEmail.text ?? "";
-  if (!bodyText && bodyHtml) {
-    bodyText = bodyHtml
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p>/gi, "\n\n")
-      .replace(/<\/div>/gi, "\n")
-      .replace(/<\/tr>/gi, "\n")
-      .replace(/<\/li>/gi, "\n")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-  }
-  console.log(`[inbound] Email ${resendEmailId}: text=${bodyText.length} chars, html=${bodyHtml.length} chars`);
-  const headers = fullEmail.headers ?? {};
-  const attachments = fullEmail.attachments ?? [];
-  const cc: string[] = Array.isArray(fullEmail.cc) ? fullEmail.cc : fullEmail.cc ? [fullEmail.cc] : [];
-  const replyTo: string = fullEmail.reply_to ?? fullEmail.replyTo ?? "";
-  const date: string = fullEmail.date ?? fullEmail.created_at ?? new Date().toISOString();
+  // The webhook payload only has metadata (no body). Extract what we can.
+  const toAddresses: string[] = Array.isArray(data.to) ? data.to : [data.to];
+  const fromAddress: string = Array.isArray(data.from) ? data.from[0] : data.from;
+  const subject: string = data.subject ?? "(no subject)";
+  const cc: string[] = Array.isArray(data.cc) ? data.cc : data.cc ? [data.cc] : [];
+  const replyTo: string = data.reply_to ?? data.replyTo ?? "";
+  const date: string = data.date ?? data.created_at ?? new Date().toISOString();
 
   // Find matching project for any of the to addresses
   let project: { id: string; name: string } | null = null;
@@ -132,17 +86,17 @@ export async function receiveInboundEmail(
     return null;
   }
 
-  // Store in database (idempotent — returns null on duplicate)
+  // Store in database with no body yet (idempotent — returns null on duplicate)
   const record = await insertIncomingEmail({
     project_id: project.id,
     resend_email_id: resendEmailId,
     from_address: fromAddress,
     to_address: matchedTo,
     subject,
-    body_text: bodyText,
-    body_html: bodyHtml,
-    headers,
-    attachments,
+    body_text: "",
+    body_html: "",
+    headers: data.headers ?? {},
+    attachments: data.attachments ?? [],
   });
 
   if (!record) {
@@ -170,13 +124,78 @@ export async function receiveInboundEmail(
     from_address: fromAddress,
     to_address: matchedTo,
     subject,
-    body_text: bodyText,
+    body_text: "",
     resend_email_id: resendEmailId,
     date,
     cc,
     reply_to: replyTo,
-    headers,
+    headers: data.headers ?? {},
   };
+}
+
+/**
+ * Fetch email body from Resend API (with retries), then run the AI agent.
+ * Called asynchronously after the webhook returns 200.
+ */
+export async function fetchEmailContentAndProcess(
+  record: InboundEmailRecord
+): Promise<void> {
+  // Fetch full email content from Resend API with retry+backoff
+  if (resend && record.resend_email_id && !record.resend_email_id.startsWith("test-")) {
+    const delays = [0, 500, 2000];
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt]) await new Promise((r) => setTimeout(r, delays[attempt]));
+      try {
+        const { data: fetched, error: apiError } = await resend.emails.receiving.get(record.resend_email_id);
+        if (apiError) {
+          console.error("[inbound] Resend API error (attempt %d):", attempt + 1, apiError);
+          // Don't retry on auth/permission errors
+          if (apiError.statusCode === 401 || apiError.statusCode === 403) break;
+          continue;
+        }
+        if (fetched) {
+          console.log("[inbound] Resend API response (attempt %d):", attempt + 1, JSON.stringify({
+            id: fetched.id,
+            from: fetched.from,
+            subject: fetched.subject,
+            hasText: !!fetched.text,
+            textLength: fetched.text?.length ?? 0,
+            hasHtml: !!fetched.html,
+            htmlLength: fetched.html?.length ?? 0,
+            hasRaw: !!fetched.raw?.download_url,
+          }));
+          if (fetched.text || fetched.html) {
+            record.body_text = extractBodyText(fetched.text ?? "", fetched.html ?? "");
+            break;
+          }
+          // If no body yet, try downloading from raw URL
+          if (fetched.raw?.download_url) {
+            try {
+              const rawResp = await fetch(fetched.raw.download_url);
+              if (rawResp.ok) {
+                const rawText = await rawResp.text();
+                console.log("[inbound] Downloaded raw email: %d chars", rawText.length);
+                const parsed = parseRawEmail(rawText);
+                if (parsed.text || parsed.html) {
+                  record.body_text = extractBodyText(parsed.text, parsed.html);
+                  break;
+                }
+              }
+            } catch (rawErr) {
+              console.warn("[inbound] Failed to download raw email:", rawErr);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[inbound] Failed to fetch email content (attempt %d):", attempt + 1, err);
+      }
+    }
+  }
+
+  console.log(`[inbound] Email ${record.resend_email_id}: body_text=${record.body_text.length} chars`);
+
+  // Now run the AI agent
+  await processInboundEmail(record);
 }
 
 /**
@@ -343,4 +362,83 @@ ${meta}
 ---
 
 ${record.body_text}`;
+}
+
+function extractBodyText(text: string, html: string): string {
+  if (text) return text;
+  if (!html) return "";
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Minimal MIME parser to extract text and html parts from a raw email.
+ * We avoid pulling in a full library; this handles the common cases.
+ */
+function parseRawEmail(raw: string): { text: string; html: string } {
+  let text = "";
+  let html = "";
+
+  // Find the content-type header to get the boundary
+  const ctMatch = raw.match(/^content-type:\s*multipart\/\w+;\s*boundary="?([^\s"]+)"?/im);
+  if (!ctMatch) {
+    // Not multipart — check if it's plain text
+    const singleCt = raw.match(/^content-type:\s*text\/(plain|html)/im);
+    const headerEnd = raw.indexOf("\r\n\r\n");
+    const body = headerEnd >= 0 ? raw.slice(headerEnd + 4) : raw;
+    if (singleCt?.[1] === "html") {
+      html = decodeBody(body, raw);
+    } else {
+      text = decodeBody(body, raw);
+    }
+    return { text, html };
+  }
+
+  const boundary = ctMatch[1];
+  const parts = raw.split(new RegExp(`--${escapeRegExp(boundary)}`));
+
+  for (const part of parts) {
+    const partCtMatch = part.match(/^content-type:\s*text\/(plain|html)(?:;[^\r\n]*)?\r?\n/im);
+    if (!partCtMatch) continue;
+    const partHeaderEnd = part.indexOf("\r\n\r\n") ?? part.indexOf("\n\n");
+    if (partHeaderEnd < 0) continue;
+    const partBody = part.slice(partHeaderEnd + 4).replace(/--\s*$/, "").trim();
+    const decoded = decodeBody(partBody, part);
+    if (partCtMatch[1] === "plain" && !text) text = decoded;
+    if (partCtMatch[1] === "html" && !html) html = decoded;
+  }
+
+  return { text, html };
+}
+
+function decodeBody(body: string, headers: string): string {
+  const cte = headers.match(/^content-transfer-encoding:\s*(\S+)/im);
+  if (cte?.[1]?.toLowerCase() === "base64") {
+    return Buffer.from(body.replace(/\s/g, ""), "base64").toString("utf-8");
+  }
+  if (cte?.[1]?.toLowerCase() === "quoted-printable") {
+    return body
+      .replace(/=\r?\n/g, "")
+      .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+  return body;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
