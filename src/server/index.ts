@@ -747,22 +747,21 @@ function landingPageHtml(): string {
     a:hover { text-decoration: underline; }
 
     /* Nav */
-    .nav { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; max-width: 1100px; margin: 0 auto; padding: 1.25rem 2rem; }
-    .nav-logo { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; font-weight: 700; color: #fff; text-decoration: none; text-shadow: 0 1px 4px rgb(0 0 0 / 0.3); }
+    .nav { display: flex; align-items: center; justify-content: space-between; max-width: 1100px; margin: 0 auto; padding: 1.25rem 2rem; }
+    .nav-logo { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; font-weight: 700; color: #3d3229; text-decoration: none; }
     .nav-logo:hover { text-decoration: none; }
-    .nav-link { font-size: 0.95rem; color: rgba(255,255,255,0.85); font-weight: 500; transition: color 0.15s; text-shadow: 0 1px 4px rgb(0 0 0 / 0.3); }
-    .nav-link:hover { color: #fff; text-decoration: none; }
+    .nav-link { font-size: 0.95rem; color: #9a8b7a; font-weight: 500; transition: color 0.15s; }
+    .nav-link:hover { color: #3d3229; text-decoration: none; }
 
     /* Hero */
-    .hero { position: relative; min-height: 90vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
-    .hero-bg { position: absolute; inset: 0; z-index: 0; }
-    .hero-bg img { width: 100%; height: 100%; object-fit: cover; }
-    .hero-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.4) 100%); z-index: 1; }
-    .hero-content { position: relative; z-index: 2; padding: 2rem; max-width: 700px; }
-    .hero h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 3.75rem; font-weight: 700; line-height: 1.1; margin-bottom: 1.25rem; color: #fff; text-shadow: 0 2px 12px rgb(0 0 0 / 0.35); }
-    .hero p { font-size: 1.2rem; color: rgba(255,255,255,0.9); max-width: 540px; margin: 0 auto 2.25rem; line-height: 1.7; text-shadow: 0 1px 6px rgb(0 0 0 / 0.3); }
-    .cta { display: inline-block; background: #c4956a; color: #fff; padding: 0.9rem 2.5rem; border-radius: 0.5rem; font-size: 1.1rem; font-weight: 600; transition: background 0.15s; box-shadow: 0 4px 15px rgb(0 0 0 / 0.2); }
+    .hero { text-align: center; padding: 3rem 2rem 0; }
+    .hero-content { max-width: 600px; margin: 0 auto 2.5rem; }
+    .hero h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 3.25rem; font-weight: 700; line-height: 1.15; margin-bottom: 1rem; color: #3d3229; }
+    .hero p { font-size: 1.1rem; color: #9a8b7a; max-width: 500px; margin: 0 auto 2rem; line-height: 1.7; }
+    .cta { display: inline-block; background: #c4956a; color: #fff; padding: 0.8rem 2.25rem; border-radius: 0.5rem; font-size: 1.05rem; font-weight: 600; transition: background 0.15s; }
     .cta:hover { background: #b07f56; text-decoration: none; }
+    .hero-img { width: 80%; max-width: 1000px; margin: 0 auto; }
+    .hero-img img { width: 100%; border-radius: 1.25rem; display: block; }
 
     /* Features */
     .features { max-width: 1100px; margin: 0 auto; padding: 2rem 2rem 3rem; }
@@ -785,8 +784,9 @@ function landingPageHtml(): string {
     .footer { text-align: center; padding: 2rem; color: #9a8b7a; font-size: 0.9rem; border-top: 1px solid #e8ddd0; }
 
     @media (max-width: 640px) {
-      .hero { min-height: 85vh; }
       .hero h1 { font-size: 2.25rem; }
+      .hero { padding: 2rem 1.5rem 0; }
+      .hero-img { width: 95%; }
       .features-grid { grid-template-columns: 1fr; }
       .nav { padding: 1rem 1.5rem; }
       .faq { padding: 2rem 1.5rem; }
@@ -815,17 +815,16 @@ function landingPageHtml(): string {
   </nav>
 
   <section class="hero">
-    <div class="hero-bg">
-      <picture>
-        <source media="(max-width: 640px)" srcset="/assets/hero-mobile.jpg">
-        <img src="/assets/hero.jpg" alt="" loading="eager">
-      </picture>
-    </div>
-    <div class="hero-overlay"></div>
     <div class="hero-content">
       <h1>A writing workspace that thinks with you</h1>
       <p>Organize projects, write in markdown, manage data in tables, and collaborate in real time — with a built-in AI assistant that understands your files.</p>
       <a href="/login" class="cta">Get Started</a>
+    </div>
+    <div class="hero-img">
+      <picture>
+        <source media="(max-width: 640px)" srcset="/assets/hero-mobile.jpg">
+        <img src="/assets/hero.jpg" alt="A person writing under a tree with a bird perched on a branch" loading="eager">
+      </picture>
     </div>
   </section>
 
