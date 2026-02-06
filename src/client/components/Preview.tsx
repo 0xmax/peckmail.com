@@ -1,179 +1,169 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
-import { marked } from "marked";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   useHighlight,
   useProjectSettings,
-  useTtsPlayback,
 } from "../store/StoreContext.js";
 
-marked.setOptions({
-  gfm: true,
-  breaks: true,
-});
+interface SourceLine {
+  lineNumber: number;
+  text: string;
+  startChar: number;
+  endChar: number;
+  isBlank: boolean;
+}
 
-interface Block {
-  html: string;
+interface ParagraphRange {
   startLine: number;
   endLine: number;
 }
 
-interface ReadLineMetrics {
-  top: number;
-  height: number;
+type MarkdownKind =
+  | "plain"
+  | "heading"
+  | "blockquote"
+  | "unordered-list"
+  | "ordered-list"
+  | "rule";
+
+interface MarkdownLinePresentation {
+  kind: MarkdownKind;
+  marker: string;
+  body: string;
+  headingLevel?: number;
 }
 
-function lineMetricsFromRect(
-  blockEl: HTMLElement,
-  rect: DOMRect | null | undefined
-): ReadLineMetrics | null {
-  if (!rect) return null;
-  const hostRect = blockEl.getBoundingClientRect();
-  if (hostRect.height <= 0 || rect.height <= 0) return null;
+function buildSourceLines(content: string): SourceLine[] {
+  const rawLines = content.split("\n");
+  let charCursor = 0;
+  return rawLines.map((text, index) => {
+    const startChar = charCursor;
+    const endChar = startChar + text.length;
+    charCursor = endChar + 1;
+    return {
+      lineNumber: index + 1,
+      text,
+      startChar,
+      endChar,
+      isBlank: text.trim().length === 0,
+    };
+  });
+}
 
-  const computed = window.getComputedStyle(blockEl);
-  const lineHeight = Number.parseFloat(computed.lineHeight);
-  const effectiveHeight = Number.isFinite(lineHeight)
-    ? Math.max(rect.height, lineHeight)
-    : Math.max(rect.height, 18);
-  const top = Math.max(
-    0,
-    Math.min(hostRect.height - effectiveHeight, rect.top - hostRect.top)
-  );
+function getParagraphRange(
+  sourceLines: SourceLine[],
+  lineNumber: number
+): ParagraphRange | null {
+  if (lineNumber < 1 || lineNumber > sourceLines.length) return null;
+  const target = sourceLines[lineNumber - 1];
+  if (!target) return null;
+  if (target.isBlank) {
+    return { startLine: lineNumber, endLine: lineNumber };
+  }
+
+  let startLine = lineNumber;
+  let endLine = lineNumber;
+
+  while (startLine > 1 && !sourceLines[startLine - 2].isBlank) {
+    startLine -= 1;
+  }
+  while (endLine < sourceLines.length && !sourceLines[endLine].isBlank) {
+    endLine += 1;
+  }
+
+  return { startLine, endLine };
+}
+
+function parseMarkdownLine(text: string): MarkdownLinePresentation {
+  const headingMatch = text.match(/^(\s{0,3}#{1,6}\s+)(.*)$/);
+  if (headingMatch) {
+    const marker = headingMatch[1];
+    const levelMatch = marker.match(/#{1,6}/);
+    return {
+      kind: "heading",
+      marker,
+      body: headingMatch[2] ?? "",
+      headingLevel: levelMatch ? levelMatch[0].length : 1,
+    };
+  }
+
+  const quoteMatch = text.match(/^(\s{0,3}>\s?)(.*)$/);
+  if (quoteMatch) {
+    return {
+      kind: "blockquote",
+      marker: quoteMatch[1],
+      body: quoteMatch[2] ?? "",
+    };
+  }
+
+  const trimmed = text.trim();
+  if (trimmed.length > 0 && /^([-*_])(?:\s*\1){2,}\s*$/.test(trimmed)) {
+    return {
+      kind: "rule",
+      marker: text,
+      body: "",
+    };
+  }
+
+  const unorderedListMatch = text.match(/^(\s*[-+*]\s+)(.*)$/);
+  if (unorderedListMatch) {
+    return {
+      kind: "unordered-list",
+      marker: unorderedListMatch[1],
+      body: unorderedListMatch[2] ?? "",
+    };
+  }
+
+  const orderedListMatch = text.match(/^(\s*\d+\.\s+)(.*)$/);
+  if (orderedListMatch) {
+    return {
+      kind: "ordered-list",
+      marker: orderedListMatch[1],
+      body: orderedListMatch[2] ?? "",
+    };
+  }
 
   return {
-    top,
-    height: effectiveHeight,
+    kind: "plain",
+    marker: "",
+    body: text,
   };
 }
 
-function lineMetricsFromTextOffset(
-  blockEl: HTMLElement,
-  targetOffset: number
-): ReadLineMetrics | null {
-  const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT);
-  const textNodes: Text[] = [];
-  let totalChars = 0;
-  let node = walker.nextNode();
-  while (node) {
-    const textNode = node as Text;
-    if (textNode.data.length > 0) {
-      textNodes.push(textNode);
-      totalChars += textNode.data.length;
-    }
-    node = walker.nextNode();
+function markdownClass(markdown: MarkdownLinePresentation): string {
+  switch (markdown.kind) {
+    case "heading":
+      return `preview-line-heading preview-line-heading-${markdown.headingLevel ?? 1}`;
+    case "blockquote":
+      return "preview-line-blockquote";
+    case "unordered-list":
+      return "preview-line-list";
+    case "ordered-list":
+      return "preview-line-list preview-line-list-ordered";
+    case "rule":
+      return "preview-line-rule";
+    default:
+      return "";
   }
-
-  if (textNodes.length === 0 || totalChars === 0) return null;
-
-  let remaining = Math.max(0, Math.min(totalChars - 1, targetOffset));
-  let targetNode = textNodes[textNodes.length - 1];
-  let offset = Math.max(0, targetNode.data.length - 1);
-
-  for (const textNode of textNodes) {
-    if (remaining < textNode.data.length) {
-      targetNode = textNode;
-      offset = remaining;
-      break;
-    }
-    remaining -= textNode.data.length;
-  }
-
-  const range = document.createRange();
-  range.setStart(targetNode, offset);
-  range.setEnd(targetNode, Math.min(targetNode.data.length, offset + 1));
-  let rect = range.getClientRects()[0] || range.getBoundingClientRect();
-
-  if ((rect.width <= 0 && rect.height <= 0) || !Number.isFinite(rect.top)) {
-    const start = Math.max(0, offset - 1);
-    range.setStart(targetNode, start);
-    range.setEnd(targetNode, Math.max(start + 1, offset));
-    rect = range.getClientRects()[0] || range.getBoundingClientRect();
-  }
-
-  return lineMetricsFromRect(blockEl, rect);
 }
 
-function lineSearchCandidates(line: string): string[] {
-  const raw = line.replace(/\s+/g, " ").trim();
-  const light = raw
-    .replace(/^#{1,6}\s+/, "")
-    .replace(/^>\s+/, "")
-    .replace(/^[-*+]\s+/, "")
-    .replace(/^\d+\.\s+/, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/[*_`~]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const plain = light
-    .replace(/[#>*_\-\[\]\(\)`~]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+function highlightRangeInElement(
+  root: Element,
+  fromOffset: number,
+  toOffset: number
+): HTMLElement | null {
+  const fullText = root.textContent || "";
+  const safeFrom = Math.max(0, Math.min(fullText.length, fromOffset));
+  const safeTo = Math.max(safeFrom, Math.min(fullText.length, toOffset));
+  if (safeTo <= safeFrom) return null;
 
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const candidate of [raw, light, plain]) {
-    if (!candidate || candidate.length < 3) continue;
-    const key = candidate.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(candidate);
-  }
-  return out;
-}
-
-function findCandidateOffset(blockText: string, candidates: string[]): number | null {
-  const lowerBlock = blockText.toLowerCase();
-  for (const candidate of candidates) {
-    const idx = lowerBlock.indexOf(candidate.toLowerCase());
-    if (idx >= 0) return idx;
-  }
-  return null;
-}
-
-function sentenceSearchCandidates(sentence: string): string[] {
-  const raw = sentence.replace(/\s+/g, " ").trim();
-  const clean = raw
-    .replace(/^#{1,6}\s+/, "")
-    .replace(/^>\s+/, "")
-    .replace(/^[-*+]\s+/, "")
-    .replace(/^\d+\.\s+/, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/[*_`~]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const candidate of [raw, clean]) {
-    if (!candidate || candidate.length < 2) continue;
-    const key = candidate.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(candidate);
-  }
-  return out;
-}
-
-function highlightTextInElement(root: Element, text: string): HTMLElement | null {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const textNodes: Text[] = [];
-  let accumulated = "";
-
-  while (walker.nextNode()) {
-    const node = walker.currentNode as Text;
-    textNodes.push(node);
-    accumulated += node.textContent || "";
+  let node = walker.nextNode();
+  while (node) {
+    textNodes.push(node as Text);
+    node = walker.nextNode();
   }
-
-  const idx = accumulated.toLowerCase().indexOf(text.toLowerCase());
-  if (idx === -1) return null;
+  if (textNodes.length === 0) return null;
 
   let pos = 0;
   let startNode: Text | null = null;
@@ -183,13 +173,13 @@ function highlightTextInElement(root: Element, text: string): HTMLElement | null
 
   for (const node of textNodes) {
     const len = node.textContent?.length || 0;
-    if (!startNode && pos + len > idx) {
+    if (!startNode && pos + len > safeFrom) {
       startNode = node;
-      startOffset = idx - pos;
+      startOffset = safeFrom - pos;
     }
-    if (!endNode && pos + len >= idx + text.length) {
+    if (!endNode && pos + len >= safeTo) {
       endNode = node;
-      endOffset = idx + text.length - pos;
+      endOffset = safeTo - pos;
       break;
     }
     pos += len;
@@ -222,151 +212,117 @@ function clearSentenceHighlights(root: ParentNode) {
   });
 }
 
-function clearReadStyles(el: HTMLDivElement) {
-  el.style.removeProperty("--read-line-top");
-  el.style.removeProperty("--read-line-height");
-  delete el.dataset.readLineReady;
-}
-
-function parseBlocks(content: string): Block[] {
-  if (!content) return [];
-  const tokens = marked.lexer(content);
-  const blocks: Block[] = [];
-  let line = 1;
-
-  for (const token of tokens) {
-    const raw = token.raw || "";
-    if (token.type === "space") {
-      line += (raw.match(/\n/g) || []).length;
-      continue;
-    }
-
-    const startLine = line;
-    const newlines = (raw.match(/\n/g) || []).length;
-    const endLine = line + newlines;
-    const html = marked.parser([token] as any) as string;
-
-    if (html.trim()) {
-      blocks.push({ html, startLine, endLine });
-    }
-
-    line = endLine;
-  }
-
-  return blocks;
-}
-
 export function Preview({ content }: { content: string }) {
   const highlight = useHighlight();
   const projectSettings = useProjectSettings();
   const simpleMode = Boolean(projectSettings.tts?.simpleMode);
-  const ttsPlayback = useTtsPlayback();
   const containerRef = useRef<HTMLDivElement>(null);
-  const blockRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const lastActiveIndex = useRef<number | null>(null);
-  const blocks = useMemo(() => parseBlocks(content), [content]);
-  const contentLines = useMemo(() => content.split("\n"), [content]);
-  const sentenceText = useMemo(() => {
+  const lineRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const lastActiveLine = useRef<number | null>(null);
+  const sourceLines = useMemo(() => buildSourceLines(content), [content]);
+  const markdownLines = useMemo(
+    () => sourceLines.map((line) => parseMarkdownLine(line.text)),
+    [sourceLines]
+  );
+  const activeLineNumber = highlight?.fromLine ?? -1;
+  const activeLineIndex =
+    activeLineNumber >= 1 && activeLineNumber <= markdownLines.length
+      ? activeLineNumber - 1
+      : -1;
+  const paragraphRange = useMemo(() => {
     if (!highlight) return null;
-    if (
-      typeof highlight.fromChar !== "number" ||
-      typeof highlight.toChar !== "number" ||
-      highlight.toChar <= highlight.fromChar
-    ) {
-      return null;
-    }
-    const raw = content.slice(highlight.fromChar, highlight.toChar);
-    if (!raw.trim()) return null;
-    const candidates = sentenceSearchCandidates(raw);
-    return candidates[0] ?? null;
-  }, [content, highlight]);
+    return getParagraphRange(sourceLines, highlight.fromLine);
+  }, [highlight, sourceLines]);
+  const fromChar =
+    highlight && typeof highlight.fromChar === "number"
+      ? highlight.fromChar
+      : null;
+  const toChar =
+    highlight && typeof highlight.toChar === "number" ? highlight.toChar : null;
+  const hasCharRange =
+    fromChar !== null && toChar !== null && Number.isFinite(fromChar) && Number.isFinite(toChar) && toChar > fromChar;
 
-  const activeIndex = highlight
-    ? blocks.findIndex((b) => highlight.fromLine >= b.startLine && highlight.fromLine <= b.endLine)
-    : -1;
+  useEffect(() => {
+    lineRefs.current.length = markdownLines.length;
+  }, [markdownLines.length]);
 
   useLayoutEffect(() => {
     if (containerRef.current) {
       clearSentenceHighlights(containerRef.current);
     }
 
-    for (let i = 0; i < blockRefs.current.length; i++) {
-      const el = blockRefs.current[i];
-      if (!el || i === activeIndex) continue;
-      clearReadStyles(el);
-    }
-
-    if (activeIndex < 0 || !highlight) return;
-    const block = blocks[activeIndex];
-    const blockEl = blockRefs.current[activeIndex];
-    if (!block || !blockEl) return;
-
-    let metrics: ReadLineMetrics | null = null;
-    if (sentenceText) {
-      const marker = highlightTextInElement(blockEl, sentenceText);
-      if (marker) {
-        metrics = lineMetricsFromRect(blockEl, marker.getBoundingClientRect());
+    if (hasCharRange && fromChar !== null && toChar !== null) {
+      for (let i = 0; i < sourceLines.length; i++) {
+        const line = sourceLines[i];
+        const lineEl = lineRefs.current[i];
+        if (!lineEl || line.endChar <= line.startChar) continue;
+        const segmentStart = Math.max(fromChar, line.startChar);
+        const segmentEnd = Math.min(toChar, line.endChar);
+        if (segmentEnd <= segmentStart) continue;
+        const localFrom = segmentStart - line.startChar;
+        const localTo = segmentEnd - line.startChar;
+        highlightRangeInElement(lineEl, localFrom, localTo);
       }
     }
-    if (simpleMode) {
-      clearReadStyles(blockEl);
-      return;
-    }
-    if (!metrics) {
-      const sourceLine = contentLines[Math.max(0, highlight.fromLine - 1)] ?? "";
-      const candidates = lineSearchCandidates(sourceLine);
-      const blockText = blockEl.textContent || "";
-      const offset = candidates.length > 0
-        ? findCandidateOffset(blockText, candidates)
-        : null;
-      metrics = lineMetricsFromTextOffset(blockEl, offset ?? 0);
-    }
+  }, [
+    fromChar,
+    hasCharRange,
+    sourceLines,
+    toChar,
+  ]);
 
-    if (!metrics) {
-      blockEl.dataset.readLineReady = "false";
-      return;
-    }
-
-    blockEl.style.setProperty("--read-line-top", `${metrics.top.toFixed(2)}px`);
-    blockEl.style.setProperty(
-      "--read-line-height",
-      `${metrics.height.toFixed(2)}px`
-    );
-    blockEl.dataset.readLineReady = "true";
-  }, [activeIndex, blocks, contentLines, highlight, sentenceText, simpleMode]);
-
-  // Scroll highlighted block into view only when the active block changes
+  // Scroll highlighted line into view only when the active line changes
   useEffect(() => {
-    if (activeIndex < 0 || !containerRef.current) return;
-    if (lastActiveIndex.current === activeIndex) return;
-    lastActiveIndex.current = activeIndex;
-    const el = containerRef.current.querySelector("[data-active='true']");
-    if (el) {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (activeLineIndex < 0) {
+      lastActiveLine.current = null;
+      return;
     }
-  }, [activeIndex]);
+    const nextActiveLine = sourceLines[activeLineIndex]?.lineNumber ?? null;
+    if (nextActiveLine === null) return;
+    if (lastActiveLine.current === nextActiveLine) return;
+    lastActiveLine.current = nextActiveLine;
+    const lineEl = lineRefs.current[activeLineIndex];
+    if (lineEl) {
+      lineEl.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [activeLineIndex, sourceLines]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-white" ref={containerRef}>
-      <article className="preview-content max-w-[760px] mx-auto px-8 py-10">
-        {blocks.map((block, i) => {
-          const isActive = i === activeIndex;
-          const isPlaybackActive =
-            !simpleMode && isActive && Boolean(ttsPlayback?.playing);
-          const showBlockHighlight = isActive && !simpleMode;
+      <article className="preview-content max-w-[760px] mx-auto px-6 py-8">
+        {sourceLines.map((line, i) => {
+          const isActive = i === activeLineIndex;
+          const isParagraphActive =
+            !simpleMode &&
+            !!paragraphRange &&
+            line.lineNumber >= paragraphRange.startLine &&
+            line.lineNumber <= paragraphRange.endLine;
+          const markdown = markdownLines[i];
 
           return (
             <div
-              key={i}
+              key={line.lineNumber}
               ref={(el) => {
-                blockRefs.current[i] = el;
+                lineRefs.current[i] = el;
               }}
               data-active={isActive || undefined}
-              className={`preview-block transition-colors duration-200 ${
-                showBlockHighlight ? "preview-block-active" : ""
-              } ${isPlaybackActive ? "preview-block-reading" : ""}`}
-              dangerouslySetInnerHTML={{ __html: block.html }}
-            />
+              className={`preview-line transition-colors duration-200 ${
+                isParagraphActive ? "preview-line-paragraph-active" : ""
+              } ${isActive && !simpleMode ? "preview-line-active" : ""} ${
+                line.isBlank ? "preview-line-blank" : ""
+              } ${markdownClass(markdown)}`}
+            >
+              <span className="preview-line-text">
+                {markdown.kind === "plain" ? (
+                  line.text
+                ) : (
+                  <>
+                    <span className="preview-md-marker">{markdown.marker}</span>
+                    <span className="preview-md-body">{markdown.body}</span>
+                  </>
+                )}
+              </span>
+            </div>
           );
         })}
       </article>
