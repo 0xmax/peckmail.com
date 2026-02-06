@@ -22,8 +22,11 @@ import {
   getShareLink,
   supabaseAdmin,
 } from "./db.js";
+import { sendInvitationEmail } from "./email.js";
 import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit } from "./git.js";
 import { ttsRouter } from "./tts.js";
+import { mcpRouter } from "./mcp.js";
+import { createHash, randomBytes } from "crypto";
 import { promises as fs } from "fs";
 import { join } from "path";
 
@@ -64,6 +67,16 @@ app.get(
   })
 );
 
+// --- OAuth protected resource metadata (for MCP discovery) ---
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+app.get("/.well-known/oauth-protected-resource", (c) => {
+  return c.json({
+    resource: "https://perchpad.co",
+    authorization_servers: [`${SUPABASE_URL}/auth/v1`],
+    bearer_methods_supported: ["header"],
+  });
+});
+
 // --- Share link (public, no auth) ---
 app.get("/s/:token", async (c) => {
   const token = c.req.param("token");
@@ -78,6 +91,28 @@ app.get("/s/:token", async (c) => {
   } catch {
     return c.text("File not found", 404);
   }
+});
+
+// --- Public invitation info (no auth) ---
+app.get("/api/invitations/:id/info", async (c) => {
+  const invId = c.req.param("id");
+  const { data: inv, error } = await supabaseAdmin
+    .from("invitations")
+    .select("id, status, email, project_id, projects(name)")
+    .eq("id", invId)
+    .single();
+  if (error || !inv) return c.json({ error: "Invitation not found" }, 404);
+  const email = inv.email;
+  const masked =
+    email.length > 3
+      ? email.slice(0, 2) + "***@" + email.split("@")[1]
+      : "***@" + email.split("@")[1];
+  return c.json({
+    id: inv.id,
+    projectName: (inv as any).projects?.name ?? "Unknown project",
+    email: masked,
+    status: inv.status,
+  });
 });
 
 // --- API: Auth required ---
@@ -100,6 +135,44 @@ api.put("/user/preferences", async (c) => {
   await supabaseAdmin.auth.admin.updateUserById(user.id, {
     user_metadata: { ...authUser.user_metadata, preferences },
   });
+  return c.json({ ok: true });
+});
+
+// API Keys
+api.post("/keys", async (c) => {
+  const user = getUser(c);
+  const { name } = await c.req.json<{ name?: string }>().catch(() => ({ name: undefined }));
+  const rawKey = "pp_" + randomBytes(32).toString("hex");
+  const keyHash = createHash("sha256").update(rawKey).digest("hex");
+  const { data, error } = await supabaseAdmin
+    .from("api_keys")
+    .insert({ user_id: user.id, key_hash: keyHash, name: name || "Untitled" })
+    .select("id, name, created_at")
+    .single();
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ key: rawKey, id: data.id, name: data.name, created_at: data.created_at });
+});
+
+api.get("/keys", async (c) => {
+  const user = getUser(c);
+  const { data, error } = await supabaseAdmin
+    .from("api_keys")
+    .select("id, name, created_at, last_used_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ keys: data });
+});
+
+api.delete("/keys/:id", async (c) => {
+  const user = getUser(c);
+  const keyId = c.req.param("id");
+  const { error } = await supabaseAdmin
+    .from("api_keys")
+    .delete()
+    .eq("id", keyId)
+    .eq("user_id", user.id);
+  if (error) return c.json({ error: error.message }, 500);
   return c.json({ ok: true });
 });
 
@@ -138,9 +211,47 @@ api.post("/projects/:id/invite", async (c) => {
   if (!membership || membership.role !== "owner") {
     return c.json({ error: "Only owners can invite" }, 403);
   }
-  const { email } = await c.req.json<{ email: string }>();
-  if (!email?.trim()) return c.json({ error: "Email required" }, 400);
-  const invitation = await createInvitation(projectId, email.trim(), user.id);
+  const { email: rawEmail, role: rawRole } = await c.req.json<{ email: string; role?: string }>();
+  if (!rawEmail?.trim()) return c.json({ error: "Email required" }, 400);
+  const email = rawEmail.trim().toLowerCase();
+  const validRoles = ["owner", "editor", "viewer"] as const;
+  const role = validRoles.includes(rawRole as any) ? (rawRole as "owner" | "editor" | "viewer") : "editor";
+
+  // Check for duplicate pending invitation
+  const { data: existing } = await supabaseAdmin
+    .from("invitations")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("email", email)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (existing) return c.json({ error: "Invitation already pending" }, 409);
+
+  const invitation = await createInvitation(projectId, email, user.id, role);
+
+  // Look up project name + inviter display name for the email
+  const { data: project } = await supabaseAdmin
+    .from("projects")
+    .select("name")
+    .eq("id", projectId)
+    .single();
+  const {
+    data: { user: authUser },
+  } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  const inviterName =
+    authUser?.user_metadata?.display_name ||
+    authUser?.user_metadata?.full_name ||
+    authUser?.email ||
+    "Someone";
+
+  // Fire-and-forget email
+  sendInvitationEmail({
+    to: email,
+    invitationId: invitation.id,
+    projectName: project?.name ?? "Untitled",
+    inviterName,
+  });
+
   return c.json({ invitation });
 });
 
@@ -164,8 +275,30 @@ api.get("/invitations", async (c) => {
 api.post("/invitations/:id/accept", async (c) => {
   const user = getUser(c);
   const invId = c.req.param("id");
+
+  // Fetch invitation and verify status
+  const { data: inv, error: invErr } = await supabaseAdmin
+    .from("invitations")
+    .select("*")
+    .eq("id", invId)
+    .single();
+  if (invErr || !inv) return c.json({ error: "Invitation not found" }, 404);
+  if (inv.status !== "pending")
+    return c.json({ error: "Invitation is no longer pending" }, 400);
+
+  // Verify accepting user's email matches invitation email
+  const {
+    data: { user: authUser },
+  } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  if (
+    !authUser?.email ||
+    authUser.email.toLowerCase() !== inv.email.toLowerCase()
+  ) {
+    return c.json({ error: "This invitation was sent to a different email" }, 403);
+  }
+
   await acceptInvitation(invId, user.id);
-  return c.json({ ok: true });
+  return c.json({ ok: true, project_id: inv.project_id });
 });
 
 // Share links
@@ -299,6 +432,7 @@ api.get("/projects/:id/revisions/:hash", async (c) => {
 // Mount API
 app.route("/api", api);
 app.route("/api", ttsRouter);
+app.route("/mcp", mcpRouter);
 
 // --- WebSocket ---
 app.get(

@@ -11,9 +11,12 @@ import { Preview } from "./Preview.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
 import { InviteModal } from "./InviteModal.js";
+import { MembersPanel } from "./MembersPanel.js";
 import { ShareButton } from "./ShareButton.js";
 import { AudioBar } from "./ReadAloud.js";
 import { SaveIndicator } from "./SaveIndicator.js";
+import { UserAvatar } from "./UserAvatar.js";
+import { useAuth } from "../context/AuthContext.js";
 
 const MODE_PREVIEW = "preview";
 const MODE_EDIT = "edit";
@@ -27,6 +30,8 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   const [showChat, setShowChat] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const { user } = useAuth();
   const modeStorageKey = useMemo(
     () => `perchpad:view-mode:${projectId}`,
     [projectId]
@@ -177,11 +182,27 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             Assistant
           </button>
           <button
+            onClick={() => setShowMembers(!showMembers)}
+            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+              showMembers
+                ? "bg-surface-alt text-accent"
+                : "text-text-muted hover:text-text hover:bg-surface-alt"
+            }`}
+          >
+            Members
+          </button>
+          <button
             onClick={() => setShowInvite(true)}
             className="text-sm px-3 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
           >
             Invite
           </button>
+          <div className="w-px h-5 bg-border" />
+          <UserAvatar
+            src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
+            name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+            size={26}
+          />
         </div>
       </header>
 
@@ -231,6 +252,13 @@ export function Workspace({ onBack }: { onBack: () => void }) {
         {showRevisions && (
           <div className="w-72 border-l border-border bg-surface flex flex-col shrink-0">
             <Revisions projectId={projectId} />
+          </div>
+        )}
+
+        {/* Members panel */}
+        {showMembers && (
+          <div className="w-64 border-l border-border bg-surface flex flex-col shrink-0">
+            <MembersPanel projectId={projectId} />
           </div>
         )}
       </div>

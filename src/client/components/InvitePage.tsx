@@ -1,0 +1,130 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext.js";
+import { LoginPage } from "./LoginPage.js";
+import { api } from "../lib/api.js";
+
+interface InviteInfo {
+  id: string;
+  projectName: string;
+  email: string;
+  status: string;
+}
+
+type State =
+  | { step: "loading" }
+  | { step: "error"; message: string }
+  | { step: "login"; info: InviteInfo }
+  | { step: "accepting" }
+  | { step: "mismatch"; info: InviteInfo };
+
+export function InvitePage({
+  invitationId,
+  onNavigate,
+}: {
+  invitationId: string;
+  onNavigate: (projectId: string) => void;
+}) {
+  const { user } = useAuth();
+  const [state, setState] = useState<State>({ step: "loading" });
+
+  // Fetch invitation info (public, no auth needed)
+  useEffect(() => {
+    fetch(`/api/invitations/${invitationId}/info`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((info: InviteInfo) => {
+        if (info.status !== "pending") {
+          setState({ step: "error", message: "This invitation has already been used." });
+        } else if (!user) {
+          setState({ step: "login", info });
+        } else {
+          // Will be handled by the accept effect below
+          setState({ step: "accepting" });
+        }
+      })
+      .catch(() => setState({ step: "error", message: "Invitation not found." }));
+  }, [invitationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-accept when user is logged in
+  useEffect(() => {
+    if (!user) return;
+    if (state.step === "loading") return; // wait for info fetch
+    if (state.step === "error" || state.step === "mismatch") return;
+
+    setState({ step: "accepting" });
+    api
+      .post<{ ok: boolean; project_id: string }>(
+        `/api/invitations/${invitationId}/accept`
+      )
+      .then((res) => {
+        onNavigate(res.project_id);
+      })
+      .catch((err) => {
+        if (err.message?.includes("different email")) {
+          setState({
+            step: "mismatch",
+            info: (state as any).info ?? { id: invitationId, projectName: "", email: "", status: "pending" },
+          });
+        } else {
+          setState({ step: "error", message: err.message || "Failed to accept invitation" });
+        }
+      });
+  }, [user, state.step === "login" ? "login" : ""]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (state.step === "loading" || state.step === "accepting") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="text-text-muted text-lg">
+          {state.step === "accepting" ? "Joining project..." : "Loading..."}
+        </div>
+      </div>
+    );
+  }
+
+  if (state.step === "error") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
+          <h1 className="text-xl font-semibold text-text mb-3">Invitation Error</h1>
+          <p className="text-text-muted mb-6">{state.message}</p>
+          <a href="/" className="text-accent hover:underline font-medium">
+            Go to Perchpad
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.step === "mismatch") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
+          <h1 className="text-xl font-semibold text-text mb-3">Email Mismatch</h1>
+          <p className="text-text-muted mb-2">
+            This invitation was sent to <strong>{state.info.email}</strong>.
+          </p>
+          <p className="text-text-muted mb-6">
+            Please sign in with that email address to accept.
+          </p>
+          <a href="/" className="text-accent hover:underline font-medium">
+            Go to Perchpad
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // state.step === "login"
+  const banner = (
+    <div className="mb-6 p-4 bg-bg rounded-xl border border-border text-center">
+      <p className="text-text text-sm">
+        You've been invited to join{" "}
+        <strong>{state.info.projectName}</strong>
+      </p>
+      <p className="text-text-muted text-xs mt-1">
+        Sign in or create an account to accept
+      </p>
+    </div>
+  );
+
+  return <LoginPage banner={banner} />;
+}

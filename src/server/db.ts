@@ -27,13 +27,15 @@ export async function getProfile(userId: string) {
 export async function getUserProjects(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("project_members")
-    .select("project_id, role, projects(id, name, created_at)")
+    .select("project_id, role, projects(id, name, created_at, deleted_at)")
     .eq("user_id", userId);
   if (error) throw error;
-  return (data ?? []).map((pm: any) => ({
-    ...pm.projects,
-    role: pm.role,
-  }));
+  return (data ?? [])
+    .filter((pm: any) => !pm.projects?.deleted_at)
+    .map((pm: any) => ({
+      ...pm.projects,
+      role: pm.role,
+    }));
 }
 
 export async function getProjectMembership(
@@ -42,12 +44,13 @@ export async function getProjectMembership(
 ): Promise<{ role: string } | null> {
   const { data, error } = await supabaseAdmin
     .from("project_members")
-    .select("role")
+    .select("role, projects(deleted_at)")
     .eq("project_id", projectId)
     .eq("user_id", userId)
     .single();
   if (error) return null;
-  return data;
+  if ((data as any).projects?.deleted_at) return null;
+  return { role: data.role };
 }
 
 export async function createProject(name: string, ownerId: string) {
@@ -69,11 +72,12 @@ export async function createProject(name: string, ownerId: string) {
 export async function createInvitation(
   projectId: string,
   email: string,
-  invitedBy: string
+  invitedBy: string,
+  role: "owner" | "editor" | "viewer" = "editor"
 ) {
   const { data, error } = await supabaseAdmin
     .from("invitations")
-    .insert({ project_id: projectId, email, invited_by: invitedBy })
+    .insert({ project_id: projectId, email, invited_by: invitedBy, role })
     .select()
     .single();
   if (error) throw error;
@@ -93,7 +97,7 @@ export async function acceptInvitation(invitationId: string, userId: string) {
     .insert({
       project_id: inv.project_id,
       user_id: userId,
-      role: "editor",
+      role: inv.role || "editor",
     });
   if (memErr) throw memErr;
 
@@ -103,6 +107,22 @@ export async function acceptInvitation(invitationId: string, userId: string) {
     .eq("id", invitationId);
 
   return inv;
+}
+
+export async function renameProject(projectId: string, name: string) {
+  const { error } = await supabaseAdmin
+    .from("projects")
+    .update({ name })
+    .eq("id", projectId);
+  if (error) throw error;
+}
+
+export async function deleteProject(projectId: string) {
+  const { error } = await supabaseAdmin
+    .from("projects")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", projectId);
+  if (error) throw error;
 }
 
 export async function getProjectMembers(projectId: string) {

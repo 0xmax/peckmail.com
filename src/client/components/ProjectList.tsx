@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
+import { UserAvatar } from "./UserAvatar.js";
 
 interface Project {
   id: string;
@@ -67,9 +68,16 @@ export function ProjectList({
           <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</h1>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-text-muted">
-            {user?.email}
-          </span>
+          <div className="flex items-center gap-2">
+            <UserAvatar
+              src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
+              name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+              size={26}
+            />
+            <span className="text-sm text-text-muted">
+              {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+            </span>
+          </div>
           {onOpenSettings && (
             <button
               onClick={onOpenSettings}

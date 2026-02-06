@@ -9,6 +9,7 @@ export function InviteModal({
   onClose: () => void;
 }) {
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"viewer" | "editor" | "owner">("editor");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -21,6 +22,7 @@ export function InviteModal({
     try {
       await api.post(`/api/projects/${projectId}/invite`, {
         email: email.trim(),
+        role,
       });
       setSuccess(true);
       setEmail("");
@@ -49,6 +51,26 @@ export function InviteModal({
             placeholder="friend@example.com"
             className="w-full py-3 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
           />
+          <div className="flex gap-2 mt-3">
+            {([
+              ["viewer", "Read"],
+              ["editor", "Read & Write"],
+              ["owner", "Admin"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setRole(value)}
+                className={`flex-1 py-2 px-3 text-xs font-medium rounded-lg border transition-colors ${
+                  role === value
+                    ? "bg-accent text-white border-accent"
+                    : "bg-bg text-text-muted border-border hover:border-accent/50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {error && (
             <p className="text-sm text-danger mt-2">{error}</p>
           )}

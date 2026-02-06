@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
 
-export function LoginPage() {
+export function LoginPage({ banner }: { banner?: React.ReactNode }) {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -39,6 +39,8 @@ export function LoginPage() {
             Your friendly writing workspace
           </p>
         </div>
+
+        {banner}
 
         <button
           onClick={signInWithGoogle}
