@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"node --env-file=.env --import tsx src/server/index.ts\" \"node --import tsx esbuild.config.ts\" \"npx @tailwindcss/cli -i src/client/index.css -o dist/public/style.css --watch\"",
-    "build:assets": "bash scripts/build-assets.sh",
+    "build:assets": "sh scripts/build-assets.sh",
     "build": "npm run build:assets && node --import tsx esbuild.config.ts --once && npx @tailwindcss/cli -i src/client/index.css -o dist/public/style.css --minify",
     "start": "node --env-file=.env dist/server/index.js"
   },
