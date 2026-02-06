@@ -62,7 +62,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   const { user, preferences, updatePreferences, credits, refreshCredits, signOut, handle } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [voiceId, setVoiceId] = useState(preferences.tts?.voiceId || VOICES[0].id);
+  const [voiceId, setVoiceId] = useState(preferences.tts?.voiceId || "pqHfZKP75CvOlQylNhV4");
   const [model, setModel] = useState<TtsModel>(preferences.tts?.model || "v3");
   const [v2Settings, setV2Settings] = useState<V2Settings>(preferences.tts?.v2 || DEFAULT_V2);
   const [saving, setSaving] = useState(false);
@@ -225,10 +225,18 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
 
   return (
     <div className="min-h-screen bg-bg">
-      <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <img src="/assets/logo.png" alt="Perchpad" className="h-7 w-auto" />
-          <h1 className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</h1>
+      <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between relative">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors"
+        >
+          <ArrowLeft size={14} weight="bold" className="inline" /> Back
+        </button>
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
+          <img src="/assets/logo.png" alt="Perchpad" className="h-6 w-auto" />
+          <span style={{ fontFamily: "'Playfair Display', serif" }} className="text-lg font-medium text-text -tracking-[0.01em]">
+            Perchpad
+          </span>
         </div>
         <div className="relative" ref={menuRef}>
           <button

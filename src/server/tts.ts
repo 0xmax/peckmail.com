@@ -41,7 +41,7 @@ export const VOICES = [
   { id: "z9fAnlkpzviPz146aGWa", name: "Glinda", desc: "Witchy, animated" },
 ];
 
-const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel
+const DEFAULT_VOICE_ID = "pqHfZKP75CvOlQylNhV4"; // Bill
 
 const anthropic = new Anthropic();
 

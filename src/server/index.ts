@@ -494,6 +494,37 @@ api.post("/invitations/:id/accept", async (c) => {
   return c.json({ ok: true, project_id: inv.project_id });
 });
 
+api.post("/invitations/:id/decline", async (c) => {
+  const user = getUser(c);
+  const invId = c.req.param("id");
+
+  const { data: inv, error: invErr } = await supabaseAdmin
+    .from("invitations")
+    .select("*")
+    .eq("id", invId)
+    .single();
+  if (invErr || !inv) return c.json({ error: "Invitation not found" }, 404);
+  if (inv.status !== "pending")
+    return c.json({ error: "Invitation is no longer pending" }, 400);
+
+  // Verify declining user's email matches invitation email
+  const {
+    data: { user: authUser },
+  } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  if (
+    !authUser?.email ||
+    authUser.email.toLowerCase() !== inv.email.toLowerCase()
+  ) {
+    return c.json({ error: "This invitation was sent to a different email" }, 403);
+  }
+
+  await supabaseAdmin
+    .from("invitations")
+    .update({ status: "declined" })
+    .eq("id", invId);
+  return c.json({ ok: true });
+});
+
 // Share links
 api.post("/projects/:id/share", async (c) => {
   const user = getUser(c);

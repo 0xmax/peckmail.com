@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "../lib/supabase.js";
-import { api } from "../lib/api.js";
+import { api, setApiToken } from "../lib/api.js";
 import type { User, Session } from "@supabase/supabase-js";
 import type { UserPreferences } from "../store/types.js";
 
@@ -50,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleSession = (session: Session | null) => {
+      setApiToken(session?.access_token ?? "");
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -123,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    setApiToken("");
     await supabase.auth.signOut();
     window.location.href = "/";
   }, []);

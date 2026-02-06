@@ -15,7 +15,10 @@ type State =
   | { step: "loading" }
   | { step: "error"; message: string }
   | { step: "login"; info: InviteInfo }
+  | { step: "confirm"; info: InviteInfo }
   | { step: "accepting" }
+  | { step: "declining" }
+  | { step: "declined" }
   | { step: "mismatch"; info: InviteInfo };
 
 export function InvitePage({
@@ -38,19 +41,21 @@ export function InvitePage({
         } else if (!user) {
           setState({ step: "login", info });
         } else {
-          // Will be handled by the accept effect below
-          setState({ step: "accepting" });
+          setState({ step: "confirm", info });
         }
       })
       .catch(() => setState({ step: "error", message: "Invitation not found." }));
   }, [invitationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-accept when user is logged in
+  // When user logs in from the login step, transition to confirm
   useEffect(() => {
     if (!user) return;
-    if (state.step === "loading") return; // wait for info fetch
-    if (state.step === "error" || state.step === "mismatch") return;
+    if (state.step === "login") {
+      setState({ step: "confirm", info: state.info });
+    }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleAccept = () => {
     setState({ step: "accepting" });
     api
       .post<{ ok: boolean; project_id: string }>(
@@ -69,15 +74,28 @@ export function InvitePage({
           setState({ step: "error", message: err.message || "Failed to accept invitation" });
         }
       });
-  }, [user, state.step === "login" ? "login" : ""]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
-  if (state.step === "loading" || state.step === "accepting") {
+  const handleDecline = () => {
+    setState({ step: "declining" });
+    api
+      .post(`/api/invitations/${invitationId}/decline`)
+      .then(() => setState({ step: "declined" }))
+      .catch((err) => {
+        setState({ step: "error", message: err.message || "Failed to decline invitation" });
+      });
+  };
+
+  if (state.step === "loading" || state.step === "accepting" || state.step === "declining") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
         <div className="flex flex-col items-center gap-3">
           <SpinnerGap size={28} className="text-text-muted animate-spin" />
           {state.step === "accepting" && (
             <div className="text-text-muted text-sm">Joining project...</div>
+          )}
+          {state.step === "declining" && (
+            <div className="text-text-muted text-sm">Declining invitation...</div>
           )}
         </div>
       </div>
@@ -90,6 +108,20 @@ export function InvitePage({
         <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
           <h1 className="text-xl font-semibold text-text mb-3">Invitation Error</h1>
           <p className="text-text-muted mb-6">{state.message}</p>
+          <a href="/" className="text-accent hover:underline font-medium">
+            Go to Perchpad
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.step === "declined") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
+          <h1 className="text-xl font-semibold text-text mb-3">Invitation Declined</h1>
+          <p className="text-text-muted mb-6">You've declined this invitation.</p>
           <a href="/" className="text-accent hover:underline font-medium">
             Go to Perchpad
           </a>
@@ -112,6 +144,33 @@ export function InvitePage({
           <a href="/" className="text-accent hover:underline font-medium">
             Go to Perchpad
           </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.step === "confirm") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
+          <h1 className="text-xl font-semibold text-text mb-3">You're Invited</h1>
+          <p className="text-text-muted mb-6">
+            Join <strong>{state.info.projectName}</strong>?
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleDecline}
+              className="px-5 py-2 rounded-lg border border-border text-text-muted hover:bg-bg transition-colors text-sm font-medium"
+            >
+              Decline
+            </button>
+            <button
+              onClick={handleAccept}
+              className="px-5 py-2 rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors text-sm font-medium"
+            >
+              Accept & Join
+            </button>
+          </div>
         </div>
       </div>
     );

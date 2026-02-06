@@ -1,6 +1,15 @@
 import { supabase } from "./supabase.js";
 
+// Cache the token so API calls made immediately after onAuthStateChange
+// don't race against getSession() localStorage persistence.
+let _cachedToken = "";
+
+export function setApiToken(token: string) {
+  _cachedToken = token;
+}
+
 async function getToken(): Promise<string> {
+  if (_cachedToken) return _cachedToken;
   const {
     data: { session },
   } = await supabase.auth.getSession();
