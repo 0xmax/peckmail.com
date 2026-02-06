@@ -97,9 +97,14 @@ app.get("/s/:token", async (c) => {
   }
 });
 
-// --- FAQ page (public, no auth) ---
-app.get("/faq", async (c) => {
-  return c.html(faqPageHtml());
+// --- Landing page (public, no auth) ---
+app.get("/", async (c) => {
+  return c.html(landingPageHtml());
+});
+
+// --- FAQ redirect (content now on landing page) ---
+app.get("/faq", (c) => {
+  return c.redirect("/#faq");
 });
 
 // --- Public invitation info (no auth) ---
@@ -727,102 +732,159 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function faqPageHtml(): string {
+function landingPageHtml(): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Perchpad — Features &amp; FAQ</title>
-  <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
+  <title>Perchpad — A collaborative writing workspace</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body { background: #faf6f1; margin: 0; padding: 2rem; font-family: system-ui, -apple-system, sans-serif; color: #3d3229; }
-    .faq-container { max-width: 800px; margin: 0 auto; }
-    .faq-header { text-align: center; margin-bottom: 2.5rem; }
-    .faq-header h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 2rem; margin: 0 0 0.5rem; color: #3d3229; }
-    .faq-header p { color: #9a8b7a; font-size: 1.1rem; margin: 0; }
-    .faq-section { background: #fff; border-radius: 1rem; padding: 1.5rem 2rem; border: 1px solid #e8ddd0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); margin-bottom: 1.25rem; }
-    .faq-section h2 { font-size: 1.15rem; margin: 0 0 0.75rem; color: #c4956a; }
-    .faq-section p, .faq-section ul { margin: 0; line-height: 1.7; color: #3d3229; }
-    .faq-section ul { padding-left: 1.25rem; }
-    .faq-section li { margin-bottom: 0.35rem; }
-    .faq-section code { background: #f5ebe0; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
-    .faq-footer { text-align: center; margin-top: 2rem; color: #9a8b7a; font-size: 0.9rem; }
-    .faq-footer a { color: #c4956a; text-decoration: none; }
-    .faq-footer a:hover { text-decoration: underline; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #faf6f1; font-family: system-ui, -apple-system, sans-serif; color: #3d3229; line-height: 1.6; }
+    a { color: #c4956a; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    .nav { display: flex; align-items: center; justify-content: space-between; max-width: 1100px; margin: 0 auto; padding: 1.25rem 2rem; }
+    .nav-logo { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; font-weight: 700; color: #3d3229; text-decoration: none; }
+    .nav-logo:hover { text-decoration: none; }
+    .nav-link { font-size: 0.95rem; color: #9a8b7a; font-weight: 500; transition: color 0.15s; }
+    .nav-link:hover { color: #3d3229; text-decoration: none; }
+
+    /* Hero */
+    .hero { text-align: center; padding: 4rem 2rem 1.5rem; max-width: 750px; margin: 0 auto; }
+    .hero h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 3rem; font-weight: 700; line-height: 1.15; margin-bottom: 1.25rem; color: #3d3229; }
+    .hero p { font-size: 1.15rem; color: #9a8b7a; max-width: 540px; margin: 0 auto 2rem; line-height: 1.7; }
+    .cta { display: inline-block; background: #c4956a; color: #fff; padding: 0.8rem 2.25rem; border-radius: 0.5rem; font-size: 1.05rem; font-weight: 600; transition: background 0.15s; }
+    .cta:hover { background: #b07f56; text-decoration: none; }
+    .hero-img { max-width: 900px; margin: 2.5rem auto 0; padding: 0 2rem; }
+    .hero-img img { width: 100%; border-radius: 1rem; box-shadow: 0 8px 30px rgb(0 0 0 / 0.1); }
+
+    /* Features */
+    .features { max-width: 1100px; margin: 0 auto; padding: 2rem 2rem 3rem; }
+    .features h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.75rem; text-align: center; margin-bottom: 2rem; color: #3d3229; }
+    .features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+    .feature-card { background: #fff; border: 1px solid #e8ddd0; border-radius: 1rem; padding: 1.75rem; box-shadow: 0 2px 8px rgb(0 0 0 / 0.04); }
+    .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .feature-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: #3d3229; }
+    .feature-card p { font-size: 0.95rem; color: #9a8b7a; line-height: 1.65; }
+
+    /* FAQ */
+    .faq { max-width: 800px; margin: 0 auto; padding: 2rem 2rem 3rem; }
+    .faq h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.75rem; text-align: center; margin-bottom: 2rem; color: #3d3229; }
+    .faq-item { background: #fff; border: 1px solid #e8ddd0; border-radius: 1rem; padding: 1.5rem 2rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgb(0 0 0 / 0.04); }
+    .faq-item h3 { font-size: 1.05rem; margin-bottom: 0.5rem; color: #c4956a; }
+    .faq-item p { font-size: 0.95rem; color: #3d3229; line-height: 1.7; }
+    .faq-item code { background: #f5ebe0; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
+
+    /* Footer */
+    .footer { text-align: center; padding: 2rem; color: #9a8b7a; font-size: 0.9rem; border-top: 1px solid #e8ddd0; }
+
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2rem; }
+      .hero { padding: 3rem 1.5rem 2.5rem; }
+      .features-grid { grid-template-columns: 1fr; }
+      .nav { padding: 1rem 1.5rem; }
+      .faq { padding: 2rem 1.5rem; }
+    }
   </style>
+  <script>
+    try {
+      var sb = JSON.parse(localStorage.getItem('sb-' + location.hostname + '-auth-token') || '{}');
+      if (!sb.access_token) {
+        var keys = Object.keys(localStorage);
+        for (var i = 0; i < keys.length; i++) {
+          if (keys[i].indexOf('auth-token') !== -1) {
+            sb = JSON.parse(localStorage.getItem(keys[i]) || '{}');
+            break;
+          }
+        }
+      }
+      if (sb.access_token) { location.replace('/projects'); }
+    } catch(e) {}
+  </script>
 </head>
 <body>
-  <div class="faq-container">
-    <div class="faq-header">
-      <h1>Perchpad</h1>
-      <p>A collaborative writing workspace for markdown and data</p>
-    </div>
+  <nav class="nav">
+    <a href="/" class="nav-logo">Perchpad</a>
+    <a href="/login" class="nav-link">Sign In</a>
+  </nav>
 
-    <div class="faq-section">
-      <h2>What is Perchpad?</h2>
-      <p>Perchpad is a web-based collaborative writing workspace. Organize your work into projects, write in markdown, manage structured data in CSV files, and let the built-in AI assistant help you along the way. Everything is version-controlled and synced in real time.</p>
+  <section class="hero">
+    <h1>A writing workspace that thinks with you</h1>
+    <p>Organize projects, write in markdown, manage data in tables, and collaborate in real time — with a built-in AI assistant that understands your files.</p>
+    <a href="/login" class="cta">Get Started</a>
+    <div class="hero-img">
+      <picture>
+        <source media="(max-width: 640px)" srcset="/assets/hero-mobile.jpg">
+        <img src="/assets/hero.jpg" alt="A person writing under a tree with a bird perched on a branch" loading="eager">
+      </picture>
     </div>
+  </section>
 
-    <div class="faq-section">
-      <h2>File Formats</h2>
-      <p>Perchpad supports two primary formats:</p>
-      <ul>
-        <li><strong>Markdown (.md)</strong> — rich text documents, notes, outlines, and prose. Rendered with live preview and line-level highlighting.</li>
-        <li><strong>CSV (.csv)</strong> — structured tabular data like task trackers, reading lists, and datasets. Rendered as styled, editable tables with sticky headers.</li>
-      </ul>
+  <section class="features">
+    <h2>Everything you need to write</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#9998;</div>
+        <h3>AI Assistant</h3>
+        <p>A built-in AI powered by Claude that can read, edit, create, and search across your project files. It streams responses in real time and knows your current context.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#9736;</div>
+        <h3>Real-Time Collaboration</h3>
+        <p>Work with your team simultaneously. File changes, cursors, and chat sync instantly over WebSockets so everyone stays on the same page.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#9993;</div>
+        <h3>Email Integration</h3>
+        <p>Every workspace gets a unique email address. Send content to your project and an AI agent processes it into your files automatically.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#8634;</div>
+        <h3>Version Control</h3>
+        <p>Auto-saves every 60 seconds with full git history. Browse revisions, view diffs, and clone your projects with standard git commands.</p>
+      </div>
     </div>
+  </section>
 
-    <div class="faq-section">
-      <h2>AI Assistant</h2>
-      <p>Perchpad includes a built-in AI assistant powered by Claude. It has access to 21 tools for reading, editing, creating, and searching files within your project. The assistant streams responses in real time and is aware of your currently open file and cursor position.</p>
-      <p>Tools include file operations (read, edit, create, move, copy, delete), text utilities (grep, find, sort, diff, sed), editor highlighting, and the ability to send emails to workspace members.</p>
+  <section class="faq" id="faq">
+    <h2>Frequently Asked Questions</h2>
+    <div class="faq-item">
+      <h3>What is Perchpad?</h3>
+      <p>A web-based collaborative writing workspace. Organize work into projects, write in markdown, manage structured data in CSV tables, and let the built-in AI assistant help along the way. Everything is version-controlled and synced in real time.</p>
     </div>
+    <div class="faq-item">
+      <h3>What file formats are supported?</h3>
+      <p>Markdown (.md) for rich text documents, notes, and prose with live preview. CSV (.csv) for structured tabular data rendered as styled, editable tables with sticky headers.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How does the AI assistant work?</h3>
+      <p>The assistant is powered by Claude and has access to tools for reading, editing, creating, and searching files within your project. It streams responses in real time and is aware of your currently open file and cursor position.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How does version control work?</h3>
+      <p>Every project is a git repository. Perchpad auto-commits changes every 60 seconds and exposes Git Smart HTTP endpoints so you can clone, push, and pull with standard git commands. API keys authenticate via HTTP Basic Auth.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How does email integration work?</h3>
+      <p>Each workspace gets a unique address (e.g. <code>robin-willow-42@in.perchpad.co</code>). Emails sent there are processed by an AI agent that updates your project files. Configure the agent's behavior with an <code>AGENTS.md</code> file.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Can I use Perchpad with other AI tools?</h3>
+      <p>Yes. Perchpad includes a Model Context Protocol (MCP) server for external AI integrations. Connect from Claude Desktop or any MCP-compatible client to manage projects, files, history, and more.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How does sharing work?</h3>
+      <p>Share individual files via public links, or invite collaborators by email with role-based access: owners have full control, editors can read and write, and viewers have read-only access.</p>
+    </div>
+  </section>
 
-    <div class="faq-section">
-      <h2>Auto-Save &amp; Version History</h2>
-      <p>Perchpad automatically saves and commits your changes every 60 seconds using git. You can browse the full revision history, view diffs for any commit, and see exactly what changed over time. Manual commits are also supported.</p>
-    </div>
-
-    <div class="faq-section">
-      <h2>Git Integration</h2>
-      <p>Every project is a git repository. Perchpad exposes Git Smart HTTP endpoints so you can clone, push, and pull using standard git commands. Authentication uses API keys via HTTP Basic Auth (password is your <code>pp_</code> API key, username is ignored).</p>
-    </div>
-
-    <div class="faq-section">
-      <h2>Real-Time Collaboration</h2>
-      <p>Multiple users can work on the same project simultaneously. File changes, cursor positions, and chat messages are synchronized in real time over WebSockets. File system changes are detected via <code>fs.watch</code> and broadcast to all connected clients.</p>
-    </div>
-
-    <div class="faq-section">
-      <h2>Email Integration</h2>
-      <p>Each workspace gets a unique email address (e.g. <code>robin-willow-42@in.perchpad.co</code>). Emails sent to this address are processed by an AI agent that reads the email content and updates project files accordingly. You can configure how the agent behaves by creating an <code>AGENTS.md</code> file in your project root.</p>
-    </div>
-
-    <div class="faq-section">
-      <h2>Text-to-Speech</h2>
-      <p>Perchpad can read your documents aloud using ElevenLabs or OpenAI TTS. As audio plays, the current sentence is highlighted in the editor for easy follow-along. You can choose your preferred TTS provider and voice in account settings.</p>
-    </div>
-
-    <div class="faq-section">
-      <h2>MCP Server</h2>
-      <p>Perchpad includes a Model Context Protocol (MCP) server that exposes 14 tools for external AI integrations. Connect from Claude Desktop or any MCP-compatible client to manage projects, read and write files, browse revision history, invite collaborators, and send emails — all programmatically.</p>
-    </div>
-
-    <div class="faq-section">
-      <h2>Sharing</h2>
-      <p>Share individual files via public links that anyone can view without logging in. Invite collaborators by email with role-based access control: owners have full control, editors can read and write, and viewers have read-only access.</p>
-    </div>
-
-    <div class="faq-section">
-      <h2>API Keys</h2>
-      <p>Generate API keys (prefixed with <code>pp_</code>) for programmatic access to Perchpad. API keys authenticate Git operations, the MCP server, and the REST API. Manage your keys from account settings.</p>
-    </div>
-
-    <div class="faq-footer">
-      <p><a href="/">Go to Perchpad</a></p>
-    </div>
-  </div>
+  <footer class="footer">
+    <a href="/login">Sign in to Perchpad</a>
+  </footer>
 </body>
 </html>`;
 }
