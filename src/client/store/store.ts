@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession, ProjectSettings } from "./types.js";
+import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession, ProjectSettings, IncomingEmail } from "./types.js";
 import { treeAddNode, treeRemoveNode, treeRenameNode } from "./tree-ops.js";
 import { api } from "../lib/api.js";
 
@@ -36,6 +36,7 @@ export class WorkspaceStore {
       chatError: null,
       ttsFromLine: null,
       projectSettings: {},
+      incomingEmails: [],
     };
   }
 
@@ -198,6 +199,22 @@ export class WorkspaceStore {
 
       case "chat:sessions":
         this.setState({ chatSessions: msg.sessions });
+        break;
+
+      case "email:received":
+        this.setState({
+          incomingEmails: [msg.email, ...this.state.incomingEmails],
+        });
+        break;
+
+      case "email:processed":
+        this.setState({
+          incomingEmails: this.state.incomingEmails.map((e) =>
+            e.id === msg.emailId
+              ? { ...e, processed: true, error: msg.error ?? null }
+              : e
+          ),
+        });
         break;
 
       case "pong":
@@ -559,6 +576,17 @@ export class WorkspaceStore {
         `/api/chat/${this.state.projectId}/sessions`
       );
       this.setState({ chatSessions: data.sessions });
+    } catch {
+      // Ignore
+    }
+  }
+
+  async loadEmails() {
+    try {
+      const data = await api.get<{ emails: IncomingEmail[] }>(
+        `/api/projects/${this.state.projectId}/emails`
+      );
+      this.setState({ incomingEmails: data.emails });
     } catch {
       // Ignore
     }

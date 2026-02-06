@@ -16,6 +16,7 @@ interface AuthState {
   session: Session | null;
   loading: boolean;
   preferences: UserPreferences;
+  defaultApiKey: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
@@ -34,28 +35,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState<UserPreferences>({});
+  const [defaultApiKey, setDefaultApiKey] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const handleSession = (session: Session | null) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
         setPreferences(session.user.user_metadata?.preferences || {});
+        // Ensure a default API key exists (fire-and-forget)
+        api
+          .post<{ key: string; created: boolean }>("/api/keys/ensure-default")
+          .then((r) => setDefaultApiKey(r.key))
+          .catch(() => {});
+      } else {
+        setDefaultApiKey(null);
       }
       setLoading(false);
+    };
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      handleSession(session);
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setPreferences(session.user.user_metadata?.preferences || {});
-      }
-      setLoading(false);
+      handleSession(session);
     });
 
     return () => subscription.unsubscribe();
@@ -107,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         preferences,
+        defaultApiKey,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,

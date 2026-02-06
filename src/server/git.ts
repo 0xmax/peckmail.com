@@ -16,6 +16,14 @@ export async function initRepo(projectId: string) {
   // Always run git.init — it's idempotent and recreates missing HEAD/config/refs
   await git.init({ fs, dir });
 
+  // Allow pushes to update the working tree (Git 2.3+)
+  await git.setConfig({
+    fs,
+    dir,
+    path: "receive.denyCurrentBranch",
+    value: "updateInstead",
+  });
+
   // Create .perchpad/chats directory
   await fs.mkdir(join(dir, ".perchpad", "chats"), { recursive: true });
 

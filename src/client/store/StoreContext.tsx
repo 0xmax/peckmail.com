@@ -17,6 +17,7 @@ import type {
   ProjectSettings,
   TtsPlayback,
   HighlightRange,
+  IncomingEmail,
 } from "./types.js";
 
 const StoreContext = createContext<WorkspaceStore | null>(null);
@@ -47,6 +48,7 @@ export function StoreProvider({
     store.loadTree();
     store.loadChatSessions();
     store.loadSettings();
+    store.loadEmails();
 
     return () => {
       store.dispose();
@@ -131,6 +133,10 @@ export function useTtsFromLine(): number | null {
 
 export function useProjectSettings(): ProjectSettings {
   return useSelector((s) => s.projectSettings);
+}
+
+export function useIncomingEmails(): IncomingEmail[] {
+  return useSelector((s) => s.incomingEmails);
 }
 
 export function useLoadFileContent(): (path: string) => Promise<void> {

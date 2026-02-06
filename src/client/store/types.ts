@@ -67,6 +67,15 @@ export interface HighlightRange {
   toChar?: number;
 }
 
+export interface IncomingEmail {
+  id: string;
+  from_address: string;
+  subject: string;
+  processed: boolean;
+  error: string | null;
+  created_at: string;
+}
+
 export interface StoreState {
   projectId: string;
   connected: boolean;
@@ -85,6 +94,7 @@ export interface StoreState {
   chatError: string | null;
   ttsFromLine: number | null;
   projectSettings: ProjectSettings;
+  incomingEmails: IncomingEmail[];
 }
 
 export type StoreAction =

@@ -20,12 +20,16 @@ import {
   getProjectMembers,
   createShareLink,
   getShareLink,
+  getProjectEmail,
+  assignProjectEmail,
   supabaseAdmin,
 } from "./db.js";
+import { verifyWebhookSignature, processInboundEmail } from "./inbound.js";
 import { sendInvitationEmail } from "./email.js";
 import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit } from "./git.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
+import { gitRouter } from "./gitHttp.js";
 import { createHash, randomBytes } from "crypto";
 import { promises as fs } from "fs";
 import { join } from "path";
@@ -115,6 +119,27 @@ app.get("/api/invitations/:id/info", async (c) => {
   });
 });
 
+// --- Webhook: Resend inbound email (no auth) ---
+app.post("/api/webhooks/resend", async (c) => {
+  try {
+    const rawBody = await c.req.text();
+    const headers: Record<string, string> = {
+      "svix-id": c.req.header("svix-id") ?? "",
+      "svix-timestamp": c.req.header("svix-timestamp") ?? "",
+      "svix-signature": c.req.header("svix-signature") ?? "",
+    };
+    const payload = verifyWebhookSignature(rawBody, headers);
+    // Process asynchronously — return 200 immediately
+    processInboundEmail(payload).catch((err) =>
+      console.error("[webhook] Error processing inbound email:", err)
+    );
+    return c.json({ ok: true });
+  } catch (err: any) {
+    console.error("[webhook] Signature verification failed:", err.message);
+    return c.json({ error: "Invalid signature" }, 401);
+  }
+});
+
 // --- API: Auth required ---
 const api = new Hono();
 api.use("/*", authMiddleware);
@@ -174,6 +199,44 @@ api.delete("/keys/:id", async (c) => {
     .eq("user_id", user.id);
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ ok: true });
+});
+
+// Ensure user has a default API key (auto-creates on first call)
+api.post("/keys/ensure-default", async (c) => {
+  const user = getUser(c);
+
+  // Check if user already has a stored default key in metadata
+  const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  const existingDefault = authUser?.user_metadata?.default_api_key;
+  if (existingDefault) {
+    // Verify the key still exists in the database
+    const keyHash = createHash("sha256").update(existingDefault).digest("hex");
+    const { data: still } = await supabaseAdmin
+      .from("api_keys")
+      .select("id")
+      .eq("key_hash", keyHash)
+      .maybeSingle();
+    if (still) {
+      return c.json({ key: existingDefault, created: false });
+    }
+  }
+
+  // No valid default key — create one
+  const rawKey = "pp_" + randomBytes(32).toString("hex");
+  const keyHash = createHash("sha256").update(rawKey).digest("hex");
+  const { error } = await supabaseAdmin
+    .from("api_keys")
+    .insert({ user_id: user.id, key_hash: keyHash, name: "Default" })
+    .select("id")
+    .single();
+  if (error) return c.json({ error: error.message }, 500);
+
+  // Store raw key in user_metadata so we can return it on future calls
+  await supabaseAdmin.auth.admin.updateUserById(user.id, {
+    user_metadata: { ...authUser?.user_metadata, default_api_key: rawKey },
+  });
+
+  return c.json({ key: rawKey, created: true });
 });
 
 // Projects
@@ -433,6 +496,65 @@ api.put("/projects/:id/settings", async (c) => {
   return c.json({ ok: true });
 });
 
+// Incoming emails list
+api.get("/projects/:id/emails", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .select("id, from_address, subject, processed, error, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ emails: data });
+});
+
+// Send test email (simulates inbound flow)
+api.post("/projects/:id/emails/test", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  const userEmail = authUser?.email;
+  if (!userEmail) return c.json({ error: "No email on account" }, 400);
+
+  let projectEmail = await getProjectEmail(projectId);
+  if (!projectEmail) projectEmail = await assignProjectEmail(projectId);
+
+  // Simulate inbound by calling processInboundEmail directly
+  processInboundEmail({
+    data: {
+      from: userEmail,
+      to: [projectEmail],
+      subject: "Test email",
+      text: "This is a test email sent from the Perchpad UI to verify inbound email processing is working.",
+      email_id: `test-${Date.now()}`,
+    },
+  }).catch((err) => console.error("[test-email] Error:", err));
+
+  return c.json({ ok: true });
+});
+
+// Project email address
+api.get("/projects/:id/email", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  let email = await getProjectEmail(projectId);
+  if (!email) {
+    // Lazy backfill for existing projects
+    email = await assignProjectEmail(projectId);
+  }
+  return c.json({ email });
+});
+
 // Git history (revisions)
 api.get("/projects/:id/revisions", async (c) => {
   const user = getUser(c);
@@ -482,6 +604,7 @@ api.get("/projects/:id/revisions/:hash", async (c) => {
 app.route("/api", api);
 app.route("/api", ttsRouter);
 app.route("/mcp", mcpRouter);
+app.route("/git", gitRouter);
 
 // --- WebSocket ---
 app.get(

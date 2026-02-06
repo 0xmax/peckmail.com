@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { generateEmailAddress } from "./emailAddress.js";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
@@ -27,7 +28,7 @@ export async function getProfile(userId: string) {
 export async function getUserProjects(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("project_members")
-    .select("project_id, role, projects(id, name, created_at, deleted_at)")
+    .select("project_id, role, projects(id, name, email, created_at, deleted_at)")
     .eq("user_id", userId);
   if (error) throw error;
   return (data ?? [])
@@ -65,6 +66,11 @@ export async function createProject(name: string, ownerId: string) {
     .from("project_members")
     .insert({ project_id: project.id, user_id: ownerId, role: "owner" });
   if (memErr) throw memErr;
+
+  // Assign a unique email address (fire-and-forget on error)
+  assignProjectEmail(project.id).catch((err) =>
+    console.error("[db] Failed to assign project email:", err)
+  );
 
   return project;
 }
@@ -175,4 +181,107 @@ export async function getShareLink(token: string) {
     .single();
   if (error) return null;
   return data;
+}
+
+// --- Inbound Email Helpers ---
+
+export async function assignProjectEmail(projectId: string): Promise<string> {
+  const MAX_ATTEMPTS = 5;
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const email = generateEmailAddress();
+    const { error } = await supabaseAdmin
+      .from("projects")
+      .update({ email })
+      .eq("id", projectId);
+    if (!error) return email;
+    // Unique constraint collision — retry
+    if (!error.message?.includes("unique") && !error.code?.includes("23505")) {
+      throw error;
+    }
+  }
+  throw new Error("Failed to assign unique email after max attempts");
+}
+
+export async function getProjectByEmail(
+  email: string
+): Promise<{ id: string; name: string } | null> {
+  const { data, error } = await supabaseAdmin
+    .from("projects")
+    .select("id, name")
+    .eq("email", email)
+    .is("deleted_at", null)
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function insertIncomingEmail(record: {
+  project_id: string;
+  resend_email_id: string;
+  from_address: string;
+  to_address: string;
+  subject?: string;
+  body_text?: string;
+  body_html?: string;
+  headers?: Record<string, any>;
+  attachments?: any[];
+}): Promise<{ id: string } | null> {
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .insert(record)
+    .select("id")
+    .single();
+  if (error) {
+    // Duplicate resend_email_id — idempotency
+    if (error.code === "23505") return null;
+    throw error;
+  }
+  return data;
+}
+
+export async function markEmailProcessed(
+  emailId: string,
+  sessionId: string | null,
+  error?: string
+): Promise<void> {
+  const update: Record<string, any> = { processed: true };
+  if (sessionId) update.agent_session_id = sessionId;
+  if (error) update.error = error;
+  await supabaseAdmin
+    .from("incoming_emails")
+    .update(update)
+    .eq("id", emailId);
+}
+
+export async function getProjectMemberEmails(
+  projectId: string
+): Promise<string[]> {
+  const { data: members, error } = await supabaseAdmin
+    .from("project_members")
+    .select("user_id")
+    .eq("project_id", projectId);
+  if (error || !members?.length) return [];
+
+  const emails: string[] = [];
+  for (const m of members) {
+    try {
+      const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(m.user_id);
+      if (user?.email) emails.push(user.email.toLowerCase());
+    } catch {
+      // Skip users we can't look up
+    }
+  }
+  return emails;
+}
+
+export async function getProjectEmail(
+  projectId: string
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("projects")
+    .select("email")
+    .eq("id", projectId)
+    .single();
+  if (error) return null;
+  return data?.email ?? null;
 }

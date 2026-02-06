@@ -26,7 +26,7 @@ export async function sendInvitationEmail({
 
   try {
     await resend.emails.send({
-      from: "Perchpad <noreply@perchpad.co>",
+      from: "Perchpad <noreply@chirp.perchpad.co>",
       to,
       subject: `${inviterName} invited you to "${projectName}" on Perchpad`,
       html: `
@@ -62,6 +62,43 @@ export async function sendInvitationEmail({
   } catch (err) {
     console.error("Failed to send invitation email:", err);
   }
+}
+
+export async function sendEmail(params: {
+  to: string;
+  subject: string;
+  body: string;
+  replyTo?: string;
+}): Promise<void> {
+  if (!resend) {
+    throw new Error("RESEND_API_KEY not set");
+  }
+
+  const { to, subject, body, replyTo } = params;
+
+  await resend.emails.send({
+    from: "Perchpad <noreply@chirp.perchpad.co>",
+    to,
+    subject,
+    ...(replyTo ? { reply_to: replyTo } : {}),
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#faf5ff;font-family:system-ui,-apple-system,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e8dff0;padding:40px;">
+        <tr><td style="color:#4a4458;font-size:16px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(body)}</td></tr>
+        <tr><td style="text-align:center;padding-top:32px;color:#a89fb5;font-size:13px;line-height:1.5;">
+          <span>Perchpad — Your friendly writing workspace</span>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim(),
+  });
 }
 
 function escapeHtml(s: string): string {

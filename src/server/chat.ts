@@ -6,6 +6,8 @@ import type { WebSocket } from "ws";
 import { PROJECTS_DIR, safePath } from "./files.js";
 import { broadcast, sendTo } from "./ws.js";
 import * as fileOps from "./fileOps.js";
+import { getProjectMemberEmails } from "./db.js";
+import { sendEmail } from "./email.js";
 
 const anthropic = new Anthropic();
 
@@ -534,6 +536,29 @@ const tools: Anthropic.Tool[] = [
       required: ["path"],
     },
   },
+  {
+    name: "send_email",
+    description:
+      "Send an email to a workspace member. Can only send to email addresses of people who are members of this workspace.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        to: {
+          type: "string",
+          description: "Recipient email address (must be a workspace member)",
+        },
+        subject: {
+          type: "string",
+          description: "Email subject line",
+        },
+        body: {
+          type: "string",
+          description: "Email body in plain text",
+        },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
 ] as Anthropic.Tool[];
 
 // Recursively collect all file paths under a directory (excluding hidden dirs)
@@ -910,9 +935,99 @@ async function executeTool(
       }
     }
 
+    case "send_email": {
+      try {
+        const memberEmails = await getProjectMemberEmails(projectId);
+        const recipient = input.to.trim().toLowerCase();
+        if (!memberEmails.includes(recipient)) {
+          return `Error: "${input.to}" is not a member of this workspace. You can only send emails to workspace members.`;
+        }
+        await sendEmail({ to: recipient, subject: input.subject, body: input.body });
+        return `Email sent to ${recipient}`;
+      } catch (err: any) {
+        return `Error: Could not send email — ${err.message || "unknown error"}`;
+      }
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }
+}
+
+// Non-streaming headless agent runner (for inbound email processing)
+export async function runAgentHeadless(
+  projectId: string,
+  systemPrompt: string,
+  userMessage: string,
+  opts?: { model?: string; maxTokens?: number }
+): Promise<{ sessionId: string; messages: ChatMessage[] }> {
+  const session = await createSession(projectId);
+  session.messages.push({ role: "user", content: userMessage });
+
+  // No-op WebSocket stub — executeTool only uses ws for the highlight tool,
+  // which safely no-ops when readyState !== 1
+  const noopWs = { readyState: 0, send() {} } as unknown as WebSocket;
+
+  const model = opts?.model ?? "claude-opus-4-6";
+  const maxTokens = opts?.maxTokens ?? 16384;
+
+  let messages: Anthropic.MessageParam[] = session.messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  let continueLoop = true;
+  while (continueLoop) {
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      tools,
+      messages,
+    });
+
+    const fullContent: any[] = [];
+    const toolResults: Anthropic.MessageParam[] = [];
+    continueLoop = false;
+
+    for (const block of response.content) {
+      if (block.type === "text" || block.type === "tool_use") {
+        fullContent.push(block);
+      }
+      if (block.type === "tool_use") {
+        const result = await executeTool(projectId, block.name, block.input, noopWs);
+        toolResults.push({
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: block.id,
+              content: result,
+            },
+          ],
+        });
+      }
+    }
+
+    session.messages.push({ role: "assistant", content: fullContent });
+
+    if (toolResults.length > 0) {
+      for (const tr of toolResults) {
+        session.messages.push({ role: "user", content: tr.content as any });
+      }
+      messages = session.messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+      continueLoop = true;
+    }
+  }
+
+  session.updatedAt = new Date().toISOString();
+  session.title = userMessage.length > 50 ? userMessage.slice(0, 50) + "..." : userMessage;
+  await saveSession(projectId, session);
+
+  return { sessionId: session.id, messages: session.messages };
 }
 
 // Handle chat message from WebSocket

@@ -41,8 +41,8 @@ Perchpad's visual identity is **warm, pastel, and calming** — a cozy writing e
 | Editor | CodeMirror 6 with markdown + custom pastel theme |
 | Auth/DB | Supabase (Auth + Postgres with RLS) |
 | AI | Anthropic SDK (Claude for chat, Haiku for git commit messages) |
-| Version Control | isomorphic-git (auto-commits every 60s) |
-| Email | Resend (invitation emails) |
+| Version Control | isomorphic-git (auto-commits every 60s) + Git Smart HTTP (clone/push/pull) |
+| Email | Resend (invitation emails + inbound email processing via webhook) |
 | TTS | ElevenLabs / OpenAI (text-to-speech with sentence highlighting) |
 | MCP | Model Context Protocol server for external tool integrations |
 | Deploy | Fly.io (Docker, persistent volume at `/data`) |
@@ -61,14 +61,17 @@ perchpad/
 │   │   ├── fileOps.ts      # Shared file operations (used by chat.ts + mcp.ts)
 │   │   ├── ws.ts           # WebSocket manager, fs.watch, broadcasting
 │   │   ├── git.ts          # isomorphic-git init, auto-commit, history
+│   │   ├── gitHttp.ts      # Git Smart HTTP protocol (clone/push/pull via /git/:projectId)
 │   │   ├── db.ts           # Supabase database helpers
 │   │   ├── email.ts        # Resend email invitations
+│   │   ├── emailAddress.ts # Bird-themed email address generator
+│   │   ├── inbound.ts      # Inbound email processing (webhook + agent runner)
 │   │   └── tts.ts          # TTS API router
 │   └── client/
 │       ├── main.tsx        # Entry point
 │       ├── App.tsx         # Root component, URL-based routing
 │       ├── index.css       # Tailwind v4 theme + custom styles
-│       ├── components/     # 19 React components
+│       ├── components/     # 20 React components
 │       ├── context/        # AuthContext (Supabase auth state)
 │       ├── store/          # Global state (reducer pattern)
 │       └── lib/            # API client + Supabase client
@@ -107,6 +110,7 @@ The preview mode renders markdown with line-level highlighting and CSV as styled
 | `PORT` | Server port (default: 3000) |
 | `PROJECTS_DIR` | File storage directory (default: `./projects`) |
 | `RESEND_API_KEY` | Resend API key for invitation emails |
+| `RESEND_WEBHOOK_SECRET` | Svix signing secret from Resend webhook config for inbound email verification |
 | `ELEVENLABS_API_KEY` | ElevenLabs TTS API key |
 | `OPENAI_API_KEY` | OpenAI TTS API key (fallback) |
 
@@ -133,6 +137,7 @@ make deploy      # fly deploy
 - **invitations** — project_id, email, invited_by, role, status (`pending` | `accepted`)
 - **share_links** — token, project_id, file_path, created_by
 - **api_keys** — id, user_id, key_hash (SHA-256), name, last_used_at
+- **incoming_emails** — id, project_id, resend_email_id (idempotency), from/to/subject/body, processed, agent_session_id
 
 All tables have row-level security policies scoped to project membership.
 
@@ -171,6 +176,17 @@ All `/api/*` routes require a valid Supabase JWT or API key (`pp_` prefix).
 - `POST /api/chat/:projectId/sessions` — create session
 - `DELETE /api/chat/:projectId/sessions/:id` — delete session
 
+### Git Smart HTTP
+- `GET /git/:projectId/info/refs?service=...` — ref advertisement (clone/fetch/push discovery)
+- `POST /git/:projectId/git-upload-pack` — clone/fetch (streams pack data)
+- `POST /git/:projectId/git-receive-pack` — push (owner/editor only, broadcasts file:changed)
+
+Auth via HTTP Basic Auth: password is a `pp_` API key, username is ignored. Repos use `receive.denyCurrentBranch=updateInstead` so pushes auto-update the working tree.
+
+### Inbound Email
+- `GET /api/projects/:id/email` — get workspace email address (lazy backfill)
+- `POST /api/webhooks/resend` — Resend inbound email webhook (no auth, svix-verified)
+
 ### Other
 - `POST /api/projects/:id/invite` — invite user by email
 - `GET /api/invitations` — list pending invitations
@@ -178,6 +194,7 @@ All `/api/*` routes require a valid Supabase JWT or API key (`pp_` prefix).
 - `POST /api/projects/:id/share` — create share link
 - `GET /s/:token` — view shared file (public, no auth)
 - `POST /api/keys` / `GET /api/keys` / `DELETE /api/keys/:id` — API key management
+- `POST /api/keys/ensure-default` — auto-creates a default API key if user has none (called on login)
 - `GET /api/user/preferences` / `PUT /api/user/preferences` — TTS prefs
 
 ### WebSocket
@@ -196,13 +213,15 @@ The chat assistant (`src/server/chat.ts`) uses Claude with 21 tools for file ope
 
 **UI tools:** `highlight` (highlight lines in the editor for visual feedback)
 
+**Communication tools:** `send_email` (send an email to a workspace member — recipient must be a project member)
+
 Messages are streamed via WebSocket. The assistant has context about the currently open file and cursor position.
 
 ## MCP Server (External)
 
 The MCP server (`src/server/mcp.ts`) exposes 14 tools for external integrations:
 
-`list_projects`, `create_project`, `rename_project`, `delete_project`, `list_files`, `read_file`, `write_file`, `create_directory`, `delete_file`, `rename_file`, `copy_file`, `get_revisions`, `get_status`, `invite_to_project`
+`list_projects`, `create_project`, `rename_project`, `delete_project`, `list_files`, `read_file`, `write_file`, `create_directory`, `delete_file`, `rename_file`, `copy_file`, `get_revisions`, `get_status`, `invite_to_project`, `send_email`
 
 Both the internal assistant and MCP server share the same file operations layer (`src/server/fileOps.ts`) which handles path safety and WebSocket broadcasting.
 
@@ -225,6 +244,8 @@ Both the internal assistant and MCP server share the same file operations layer 
 | `ProjectList.tsx` | Project list, create/delete, view invitations |
 | `LoginPage.tsx` | Email magic link authentication |
 | `AccountSettings.tsx` | Profile, TTS preferences, API key management |
+| `GitPanel.tsx` | Git clone URL, copy-to-clipboard, push/pull instructions |
+| `EmailPanel.tsx` | Workspace inbound email address with copy button |
 | `OAuthConsent.tsx` | OAuth consent flow for MCP |
 | `UserAvatar.tsx` | Avatar with fallback initials |
 | `ChatMessage.tsx` | Individual chat message rendering |

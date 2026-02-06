@@ -4,8 +4,8 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { authMiddleware, getUser } from "./auth.js";
-import { getUserProjects, getProjectMembership, createProject, renameProject, deleteProject, createInvitation, supabaseAdmin } from "./db.js";
-import { sendInvitationEmail } from "./email.js";
+import { getUserProjects, getProjectMembership, getProjectMemberEmails, createProject, renameProject, deleteProject, createInvitation, supabaseAdmin } from "./db.js";
+import { sendInvitationEmail, sendEmail } from "./email.js";
 import * as fileOps from "./fileOps.js";
 import { getHistory, getUncommittedStatus, initRepo, stopGitManager } from "./git.js";
 
@@ -348,6 +348,32 @@ Perchpad is a web-based workspace where users organize their work into **project
         });
 
         return { content: [{ type: "text", text: `Invited ${normalizedEmail} to project. Invitation email sent.` }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: e.message }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "send_email",
+    "Send an email to a workspace member. Can only send to email addresses of people who are members of the specified project.",
+    {
+      project_id: z.string().describe("The project ID (UUID from list_projects)"),
+      to: z.string().describe("Recipient email address (must be a workspace member)"),
+      subject: z.string().describe("Email subject line"),
+      body: z.string().describe("Email body in plain text"),
+    },
+    async ({ project_id, to, subject, body }) => {
+      try {
+        if (!(await checkAccess(userId, project_id)))
+          return { content: [{ type: "text", text: "Access denied" }], isError: true };
+        const memberEmails = await getProjectMemberEmails(project_id);
+        const recipient = to.trim().toLowerCase();
+        if (!memberEmails.includes(recipient)) {
+          return { content: [{ type: "text", text: `"${to}" is not a member of this workspace. You can only send emails to workspace members.` }], isError: true };
+        }
+        await sendEmail({ to: recipient, subject, body });
+        return { content: [{ type: "text", text: `Email sent to ${recipient}` }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
       }
