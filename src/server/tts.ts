@@ -256,6 +256,10 @@ interface TtsRequest {
   speed?: number;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 // --- Routes ---
 
 // List voices
@@ -320,7 +324,7 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
           stability: body.stability ?? 0.5,
           similarityBoost: body.similarityBoost ?? 0.75,
           style: body.style ?? 0,
-          speed: body.speed ?? 1.0,
+          speed: clamp(body.speed ?? 1.0, 0.7, 1.2),
         }
       : undefined;
 

@@ -465,8 +465,20 @@ export class WorkspaceStore {
 
       case "tts:highlight": {
         const cur = this.state.highlight;
-        if (!cur || cur.fromLine !== action.line || cur.toLine !== action.line) {
-          this.setState({ highlight: { fromLine: action.line, toLine: action.line } });
+        const next = {
+          fromLine: action.line,
+          toLine: action.line,
+          fromChar: action.fromChar,
+          toChar: action.toChar,
+        };
+        if (
+          !cur ||
+          cur.fromLine !== next.fromLine ||
+          cur.toLine !== next.toLine ||
+          cur.fromChar !== next.fromChar ||
+          cur.toChar !== next.toChar
+        ) {
+          this.setState({ highlight: next });
         }
         break;
       }

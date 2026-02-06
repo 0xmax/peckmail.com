@@ -141,6 +141,9 @@ interface V2Settings {
   speed: number;
 }
 
+const V2_SPEED_MIN = 0.7;
+const V2_SPEED_MAX = 1.2;
+
 const DEFAULT_V2: V2Settings = {
   stability: 0.5,
   similarityBoost: 0.75,
@@ -148,39 +151,24 @@ const DEFAULT_V2: V2Settings = {
   speed: 1.0,
 };
 
-/**
- * Estimate timestamps by mapping character positions linearly to audio duration.
- * Good enough for immediate paragraph highlighting until Whisper provides real ones.
- */
-function estimateTimestamps(
-  text: string,
-  lineOffset: number,
-  duration: number
-): LineTimestamp[] {
-  const lines = text.split("\n");
-  const totalChars = text.length;
-  if (totalChars === 0 || duration <= 0) return [];
+function clampV2Settings(input: V2Settings): V2Settings {
+  return {
+    ...input,
+    speed: Math.max(V2_SPEED_MIN, Math.min(V2_SPEED_MAX, input.speed)),
+  };
+}
 
-  const result: LineTimestamp[] = [];
-  let charPos = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.trim()) {
-      const start = (charPos / totalChars) * duration;
-      const end = ((charPos + line.length) / totalChars) * duration;
-      result.push({
-        start,
-        end,
-        line: i + lineOffset,
-        fromChar: charPos,
-        toChar: charPos + line.length,
-      });
-    }
-    charPos += line.length + 1; // +1 for newline
-  }
-
-  return result;
+function isValidTimestamp(x: any): x is LineTimestamp {
+  return (
+    x &&
+    Number.isFinite(x.start) &&
+    Number.isFinite(x.end) &&
+    Number.isFinite(x.line) &&
+    Number.isFinite(x.fromChar) &&
+    Number.isFinite(x.toChar) &&
+    x.end > x.start &&
+    x.toChar > x.fromChar
+  );
 }
 
 /** Find 1-indexed line numbers where new chunks (paragraphs / headings) start */
@@ -214,20 +202,17 @@ export function AudioBar() {
   const [volume, setVolume] = useState(1);
   const [model, setModel] = useState<TtsModel>("v2");
   const [voiceId, setVoiceId] = useState(VOICES[0].id);
+  const [simpleMode, setSimpleMode] = useState(false);
   const [v2Settings, setV2Settings] = useState<V2Settings>(DEFAULT_V2);
   const [error, setError] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const timestampsRef = useRef<LineTimestamp[]>([]);
+  const missingTimingLoggedRef = useRef(false);
   const settingsInitialized = useRef(false);
   const lastHighlightLine = useRef<number | null>(null);
   const charOffsetRef = useRef(0);
-  const playbackCharsRef = useRef<{ fromChar: number; toChar: number } | null>(null);
-  const playbackStartedRef = useRef(false);
-  const estimatedTsRef = useRef(false); // true when timestamps are estimated, not from Whisper
-  const ttsTextRef = useRef(""); // text sent to TTS, for re-estimating when duration updates
-  const ttsLineOffsetRef = useRef(1);
   const forceRegenRef = useRef(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -240,7 +225,8 @@ export function AudioBar() {
     settingsInitialized.current = true;
     if (tts.voiceId) setVoiceId(tts.voiceId);
     if (tts.model) setModel(tts.model);
-    if (tts.v2) setV2Settings(tts.v2);
+    if (typeof tts.simpleMode === "boolean") setSimpleMode(tts.simpleMode);
+    if (tts.v2) setV2Settings(clampV2Settings(tts.v2));
   }, [projectSettings, userPrefs]);
 
   // Close settings on outside click
@@ -314,11 +300,12 @@ export function AudioBar() {
       tts: {
         voiceId,
         model,
+        simpleMode,
         v2: v2Settings,
       },
     };
     dispatch({ type: "settings:save", settings });
-  }, [voiceId, model, v2Settings]); // intentionally omit dispatch/projectSettings to avoid loops
+  }, [voiceId, model, simpleMode, v2Settings]); // intentionally omit dispatch/projectSettings to avoid loops
 
   const cleanup = useCallback(() => {
     activeStreamId.current = null;
@@ -332,7 +319,7 @@ export function AudioBar() {
     }
     audioRef.current = null;
     timestampsRef.current = [];
-    estimatedTsRef.current = false;
+    missingTimingLoggedRef.current = false;
     cleanup();
     setState("idle");
     setProgress(0);
@@ -351,7 +338,7 @@ export function AudioBar() {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
-  // Poll for real Whisper timestamps after streaming (replaces estimates)
+  // Poll for real Whisper timestamps (required for cursor animation).
   const pollTimestamps = useCallback(
     async (streamId: string, token: string) => {
       for (let i = 0; i < 60; i++) {
@@ -363,48 +350,120 @@ export function AudioBar() {
             `/api/tts/${projectId}/timestamps/${streamId}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
-          if (!res.ok) continue;
+          if (!res.ok) {
+            console.warn("[AudioBar] Timestamp poll failed", {
+              streamId,
+              attempt: i + 1,
+              status: res.status,
+            });
+            continue;
+          }
           const data = await res.json();
           if (data.ready) {
-            timestampsRef.current = data.timestamps || [];
-            estimatedTsRef.current = false;
+            const tsRaw = Array.isArray(data.timestamps) ? data.timestamps : [];
+            const ts = tsRaw.filter(isValidTimestamp) as LineTimestamp[];
+            if (ts.length > 0) {
+              timestampsRef.current = ts;
+              missingTimingLoggedRef.current = false;
+            } else {
+              timestampsRef.current = [];
+              console.error(
+                "[AudioBar] Timestamp refinement returned no valid segments; cursor animation disabled",
+                { streamId, count: tsRaw.length }
+              );
+            }
             setActivity(null);
             return;
           }
-        } catch {
-          // Retry
+        } catch (err) {
+          console.error("[AudioBar] Timestamp poll error", {
+            streamId,
+            attempt: i + 1,
+            error: err,
+          });
         }
+      }
+      // Poll timed out — keep playback, but disable cursor animation.
+      if (activeStreamId.current === streamId) {
+        console.error(
+          "[AudioBar] Timestamp refinement timed out; cursor animation disabled",
+          { streamId }
+        );
+        timestampsRef.current = [];
+        setActivity(null);
       }
     },
     [projectId]
   );
 
-  const dispatchPlaybackUpdate = useCallback(() => {
-    const audio = audioRef.current;
-    const chars = playbackCharsRef.current;
-    if (!audio || !chars) return;
+  const dispatchPlaybackFromCurrentTime = useCallback(
+    (audio: HTMLAudioElement) => {
+      const ts = timestampsRef.current;
+      if (ts.length === 0) {
+        if (!missingTimingLoggedRef.current) {
+          console.error(
+            "[AudioBar] Missing timing information; cursor animation disabled until real timestamps are available"
+          );
+          missingTimingLoggedRef.current = true;
+          dispatch({ type: "tts:highlight-clear" });
+          dispatch({ type: "tts:playback-stop" });
+        }
+        return;
+      }
 
-    // Use real duration if available, otherwise estimate from text length
-    let dur = audio.duration;
-    if (!Number.isFinite(dur) || dur <= 0) {
-      // ~150 words/min, ~5 chars/word → estimate seconds from char count
-      const charCount = chars.toChar - chars.fromChar;
-      dur = Math.max(10, (charCount / 5 / 150) * 60);
+      missingTimingLoggedRef.current = false;
+
+      const t = audio.currentTime;
+      let best: LineTimestamp | null = null;
+      for (const s of ts) {
+        if (t >= s.start) best = s;
+        else break;
+      }
+      if (!best) {
+        dispatch({ type: "tts:playback-stop" });
+        return;
+      }
+
+      const segmentDuration = Math.max(0.001, best.end - best.start);
+      const segmentElapsed = Math.max(
+        0,
+        Math.min(segmentDuration, t - best.start)
+      );
+      const charOffset = charOffsetRef.current;
+      const fromChar = charOffset + best.fromChar;
+      const toChar = charOffset + best.toChar;
+      lastHighlightLine.current = best.line;
+
+      dispatch({
+        type: "tts:highlight",
+        line: best.line,
+        fromChar,
+        toChar,
+      });
+      if (simpleMode) {
+        return;
+      }
+      dispatch({
+        type: "tts:playback",
+        playback: {
+          fromChar,
+          toChar,
+          duration: segmentDuration,
+          elapsed: segmentElapsed,
+          dispatchedAt: Date.now(),
+          playing: !audio.paused,
+        },
+      });
+    },
+    [dispatch, simpleMode]
+  );
+
+  // Simple mode disables cursor animation state entirely.
+  useEffect(() => {
+    if (simpleMode) {
+      dispatch({ type: "tts:playback-stop" });
     }
-
-    playbackStartedRef.current = true;
-    dispatch({
-      type: "tts:playback",
-      playback: {
-        fromChar: chars.fromChar,
-        toChar: chars.toChar,
-        duration: dur,
-        elapsed: audio.currentTime,
-        dispatchedAt: Date.now(),
-        playing: !audio.paused,
-      },
-    });
-  }, [dispatch]);
+  }, [dispatch, simpleMode]);
 
   const playFrom = useCallback(
     async (fromLine?: number) => {
@@ -440,10 +499,8 @@ export function AudioBar() {
           textToSend = lines.slice(lineOffset - 1).join("\n");
         }
         charOffsetRef.current = charOff;
-        playbackCharsRef.current = { fromChar: charOff, toChar: charOff + textToSend.length };
-        playbackStartedRef.current = false;
-        ttsTextRef.current = textToSend;
-        ttsLineOffsetRef.current = lineOffset;
+        timestampsRef.current = [];
+        missingTimingLoggedRef.current = false;
 
         const body: Record<string, any> = {
           text: textToSend,
@@ -454,10 +511,11 @@ export function AudioBar() {
         };
         forceRegenRef.current = false;
         if (model === "v2") {
+          const safeV2 = clampV2Settings(v2Settings);
           body.stability = v2Settings.stability;
           body.similarityBoost = v2Settings.similarityBoost;
           body.style = v2Settings.style;
-          body.speed = v2Settings.speed;
+          body.speed = safeV2.speed;
         }
 
         // Step 1: POST to prepare (cache check + Claude enhancement)
@@ -481,8 +539,15 @@ export function AudioBar() {
         if (data.cached) {
           // Cache hit: audio + timestamps available immediately
           audioUrl = data.audioUrl;
-          timestampsRef.current = data.timestamps || [];
-          estimatedTsRef.current = false;
+          const tsRaw = Array.isArray(data.timestamps) ? data.timestamps : [];
+          const ts = tsRaw.filter(isValidTimestamp) as LineTimestamp[];
+          timestampsRef.current = ts;
+          if (ts.length === 0) {
+            console.error(
+              "[AudioBar] Cached audio has no valid timestamps; cursor animation disabled",
+              { count: tsRaw.length }
+            );
+          }
           setActivity(null);
         } else {
           // Streaming: point audio.src at the stream URL directly
@@ -490,11 +555,6 @@ export function AudioBar() {
           activeStreamId.current = streamId;
           audioUrl = `/api/tts/${projectId}/stream/${streamId}?token=${encodeURIComponent(token)}`;
           setActivity("Generating audio...");
-
-          // Estimate timestamps immediately so highlighting works while streaming
-          const estDur = Math.max(10, (textToSend.length / 5 / 150) * 60);
-          timestampsRef.current = estimateTimestamps(textToSend, lineOffset, estDur);
-          estimatedTsRef.current = true;
 
           // Poll for real Whisper timestamps in background
           pollTimestamps(streamId, token);
@@ -513,41 +573,22 @@ export function AudioBar() {
         audio.addEventListener("durationchange", () => {
           if (Number.isFinite(audio.duration)) {
             setDuration(audio.duration);
-            // Re-estimate timestamps with the real duration for better accuracy
-            if (estimatedTsRef.current && ttsTextRef.current) {
-              timestampsRef.current = estimateTimestamps(
-                ttsTextRef.current, ttsLineOffsetRef.current, audio.duration
-              );
-            }
           }
-          // Always re-dispatch so cursor gets updated duration
-          dispatchPlaybackUpdate();
+          dispatchPlaybackFromCurrentTime(audio);
         });
         audio.addEventListener("timeupdate", () => {
           setCurrentTime(audio.currentTime);
           if (Number.isFinite(audio.duration) && audio.duration > 0) {
             setProgress(audio.currentTime / audio.duration);
           }
-
-          // Highlight current paragraph — look slightly ahead so highlight leads the voice
-          const ts = timestampsRef.current;
-          if (ts.length > 0) {
-            const t = audio.currentTime + 0.4;
-            let best: LineTimestamp | null = null;
-            for (const s of ts) {
-              if (t >= s.start) best = s;
-              else break;
-            }
-            if (best) {
-              lastHighlightLine.current = best.line;
-              dispatch({ type: "tts:highlight", line: best.line });
-            }
-          }
+          dispatchPlaybackFromCurrentTime(audio);
         });
         audio.addEventListener("ended", () => {
           setState("idle");
           setProgress(0);
           setCurrentTime(0);
+          setActivity(null);
+          cleanup();
           timestampsRef.current = [];
           lastHighlightLine.current = null;
           dispatch({ type: "tts:highlight-clear" });
@@ -558,7 +599,7 @@ export function AudioBar() {
         audio.src = audioUrl;
         await audio.play();
         setState("playing");
-        dispatchPlaybackUpdate();
+        dispatchPlaybackFromCurrentTime(audio);
       } catch (err: any) {
         console.error("[AudioBar]", err);
         setError(err.message || "Playback failed");
@@ -566,7 +607,7 @@ export function AudioBar() {
         setActivity(null);
       }
     },
-    [content, projectId, model, voiceId, v2Settings, volume, dispatch, cleanup, pollTimestamps, dispatchPlaybackUpdate]
+    [content, projectId, model, voiceId, v2Settings, volume, dispatch, cleanup, pollTimestamps, dispatchPlaybackFromCurrentTime]
   );
 
   // Handle "read from here" triggered from editor
@@ -580,24 +621,25 @@ export function AudioBar() {
     if (state === "paused" && audioRef.current) {
       audioRef.current.play();
       setState("playing");
-      dispatchPlaybackUpdate();
+      dispatchPlaybackFromCurrentTime(audioRef.current);
       return;
     }
     playFrom();
-  }, [state, playFrom, dispatchPlaybackUpdate]);
+  }, [state, playFrom, dispatchPlaybackFromCurrentTime]);
 
   const pause = useCallback(() => {
-    audioRef.current?.pause();
+    const audio = audioRef.current;
+    audio?.pause();
+    if (audio) dispatchPlaybackFromCurrentTime(audio);
     setState("paused");
-    dispatchPlaybackUpdate();
-  }, [dispatchPlaybackUpdate]);
+  }, [dispatchPlaybackFromCurrentTime]);
 
   const skipBack15 = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = Math.max(0, audio.currentTime - 15);
-    dispatchPlaybackUpdate();
-  }, [dispatchPlaybackUpdate]);
+    dispatchPlaybackFromCurrentTime(audio);
+  }, [dispatchPlaybackFromCurrentTime]);
 
   const skipNextChunk = useCallback(() => {
     const audio = audioRef.current;
@@ -613,9 +655,9 @@ export function AudioBar() {
     const entry = ts.find((t) => t.line >= nextChunkLine);
     if (entry) {
       audio.currentTime = entry.start;
-      dispatchPlaybackUpdate();
+      dispatchPlaybackFromCurrentTime(audio);
     }
-  }, [content, dispatchPlaybackUpdate]);
+  }, [content, dispatchPlaybackFromCurrentTime]);
 
   const seek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -627,9 +669,9 @@ export function AudioBar() {
         Math.min(1, (e.clientX - rect.left) / rect.width)
       );
       audio.currentTime = ratio * duration;
-      dispatchPlaybackUpdate();
+      dispatchPlaybackFromCurrentTime(audio);
     },
-    [duration, dispatchPlaybackUpdate]
+    [duration, dispatchPlaybackFromCurrentTime]
   );
 
   const fmt = (s: number) => {
@@ -969,6 +1011,26 @@ export function AudioBar() {
                 </button>
               </div>
 
+              {/* Reading mode */}
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-xs font-medium text-text">Simple mode</div>
+                  <div className="text-[10px] text-text-muted">
+                    Highlight only the current sentence
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSimpleMode((s) => !s)}
+                  className={`text-xs px-2 py-1 rounded-md transition-colors ${
+                    simpleMode
+                      ? "bg-accent text-white"
+                      : "bg-surface-alt text-text-muted hover:text-text"
+                  }`}
+                >
+                  {simpleMode ? "On" : "Off"}
+                </button>
+              </div>
+
               {/* Regenerate */}
               <button
                 onClick={() => {
@@ -1016,10 +1078,14 @@ export function AudioBar() {
                   <SliderSetting
                     label="Speed"
                     value={v2Settings.speed}
-                    min={0.5}
-                    max={2}
+                    min={V2_SPEED_MIN}
+                    max={V2_SPEED_MAX}
                     step={0.1}
-                    onChange={(v) => setV2Settings((s) => ({ ...s, speed: v }))}
+                    onChange={(v) =>
+                      setV2Settings((s) =>
+                        clampV2Settings({ ...s, speed: v })
+                      )
+                    }
                   />
                 </div>
               )}

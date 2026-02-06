@@ -7,7 +7,14 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
-import { useOpenFile, useStoreDispatch, useLoadFileContent, useHighlight, useTtsPlayback } from "../store/StoreContext.js";
+import {
+  useOpenFile,
+  useStoreDispatch,
+  useLoadFileContent,
+  useHighlight,
+  useProjectSettings,
+  useTtsPlayback,
+} from "../store/StoreContext.js";
 
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
@@ -48,6 +55,8 @@ export function Editor() {
   const dispatch = useStoreDispatch();
   const loadFileContent = useLoadFileContent();
   const highlight = useHighlight();
+  const projectSettings = useProjectSettings();
+  const simpleMode = Boolean(projectSettings.tts?.simpleMode);
   const ttsPlayback = useTtsPlayback();
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -266,7 +275,7 @@ export function Editor() {
     const cursor = cursorRef.current;
     if (!cursor) return;
 
-    if (!ttsPlayback) {
+    if (simpleMode || !ttsPlayback) {
       cursor.style.opacity = "0";
       return;
     }
@@ -303,7 +312,7 @@ export function Editor() {
 
     animId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animId);
-  }, [ttsPlayback]);
+  }, [simpleMode, ttsPlayback]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">

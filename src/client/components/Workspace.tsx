@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { useOpenFile, useConnected, useProjectId } from "../store/StoreContext.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useOpenFile,
+  useConnected,
+  useProjectId,
+  useLoadFileContent,
+} from "../store/StoreContext.js";
 import { FileTree } from "./FileTree.js";
 import { Editor } from "./Editor.js";
 import { Preview } from "./Preview.js";
@@ -10,16 +15,85 @@ import { ShareButton } from "./ShareButton.js";
 import { AudioBar } from "./ReadAloud.js";
 import { SaveIndicator } from "./SaveIndicator.js";
 
+const MODE_PREVIEW = "preview";
+const MODE_EDIT = "edit";
+const FILE_PARAM = "file";
+
 export function Workspace({ onBack }: { onBack: () => void }) {
   const { path: openFilePath, content: fileContent } = useOpenFile();
   const connected = useConnected();
   const projectId = useProjectId();
+  const loadFileContent = useLoadFileContent();
   const [showChat, setShowChat] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const modeStorageKey = useMemo(
+    () => `perchpad:view-mode:${projectId}`,
+    [projectId]
+  );
+  const [showPreview, setShowPreview] = useState(() => {
+    try {
+      return window.localStorage.getItem(`perchpad:view-mode:${projectId}`) === MODE_PREVIEW;
+    } catch {
+      return false;
+    }
+  });
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarWidth] = useState(240);
+  const openFilePathRef = useRef<string | null>(openFilePath);
+  const loadFileContentRef = useRef(loadFileContent);
+
+  useEffect(() => {
+    openFilePathRef.current = openFilePath;
+  }, [openFilePath]);
+
+  useEffect(() => {
+    loadFileContentRef.current = loadFileContent;
+  }, [loadFileContent]);
+
+  const applyStateFromUrl = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fileParam = params.get(FILE_PARAM);
+    if (fileParam && fileParam !== openFilePathRef.current) {
+      loadFileContentRef.current(fileParam);
+    }
+  }, []);
+
+  // Initialize workspace state from URL and keep it in sync on browser navigation.
+  useEffect(() => {
+    applyStateFromUrl();
+    const onPopState = () => applyStateFromUrl();
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [applyStateFromUrl]);
+
+  // Persist current mode per project.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        modeStorageKey,
+        showPreview ? MODE_PREVIEW : MODE_EDIT
+      );
+    } catch {
+      // Ignore storage access issues
+    }
+  }, [modeStorageKey, showPreview]);
+
+  // Keep workspace URL shareable with current file + mode.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    let changed = false;
+
+    if (openFilePath && params.get(FILE_PARAM) !== openFilePath) {
+      params.set(FILE_PARAM, openFilePath);
+      changed = true;
+    }
+
+    if (!changed) return;
+    const next = `${url.pathname}?${params.toString()}${url.hash}`;
+    window.history.replaceState(null, "", next);
+  }, [openFilePath]);
 
   return (
     <div className="h-screen flex flex-col bg-bg">
