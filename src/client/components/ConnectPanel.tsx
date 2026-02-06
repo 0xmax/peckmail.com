@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
-import { Monitor, Terminal } from "@phosphor-icons/react";
+import { Monitor, Terminal, EnvelopeSimple } from "@phosphor-icons/react";
 
 interface ApiKey {
   id: string;
@@ -13,7 +13,7 @@ interface ApiKey {
 const MCP_URL = "https://perchpad.co/mcp";
 
 export function ConnectPanel({ projectId }: { projectId: string }) {
-  const { defaultApiKey } = useAuth();
+  const { defaultApiKey, session } = useAuth();
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // MCP state
@@ -22,6 +22,10 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [creatingKey, setCreatingKey] = useState(false);
 
+  // Email state
+  const [email, setEmail] = useState<string | null>(null);
+  const [emailLoading, setEmailLoading] = useState(true);
+
   const host = window.location.host;
   const origin = window.location.origin;
   const keyDisplay = defaultApiKey || "pp_YOUR_KEY";
@@ -29,7 +33,14 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     api.get<{ keys: ApiKey[] }>("/api/keys").then((r) => setApiKeys(r.keys)).catch(() => {});
-  }, []);
+    fetch(`/api/projects/${projectId}/email`, {
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => setEmail(data.email ?? null))
+      .catch(() => setEmail(null))
+      .finally(() => setEmailLoading(false));
+  }, [projectId, session?.access_token]);
 
   const copy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
@@ -267,6 +278,39 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
                 </div>
               ))}
             </div>
+          )}
+        </section>
+
+        <div className="border-t border-border" />
+
+        {/* ── Email ────────────────────────────── */}
+        <section className="space-y-3">
+          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide">Email</h4>
+          <p className="text-text-muted">
+            Forward documents and instructions to this workspace.
+          </p>
+
+          {emailLoading ? (
+            <div className="h-8 bg-surface-alt rounded-lg animate-pulse" />
+          ) : email ? (
+            <div>
+              <label className="font-medium text-text-muted block mb-1">Workspace email</label>
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text break-all select-all">
+                  {email}
+                </code>
+                <button
+                  onClick={() => copy(email, "email")}
+                  className="shrink-0 px-2.5 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg hover:text-text hover:border-text-muted transition-colors"
+                >
+                  {copiedField === "email" ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-text-muted">
+              Could not load email address.
+            </p>
           )}
         </section>
       </div>

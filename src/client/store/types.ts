@@ -93,6 +93,7 @@ export interface StoreState {
   chatStreaming: boolean;
   chatError: string | null;
   ttsFromLine: number | null;
+  chatPrompt: string | null;
   projectSettings: ProjectSettings;
   incomingEmails: IncomingEmail[];
 }
@@ -132,6 +133,8 @@ export type StoreAction =
   | { type: "chat:done"; sessionId: string; title: string }
   | { type: "chat:error"; sessionId: string; error: string }
   | { type: "chat:streaming"; streaming: boolean }
+  | { type: "chat:prompt"; message: string }
+  | { type: "chat:prompt-clear" }
   // TTS
   | { type: "tts:play-from"; fromLine: number }
   | { type: "tts:clear" }

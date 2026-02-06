@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
-import { GearSix, Notebook, SignOut, SpinnerGap } from "@phosphor-icons/react";
+import { Envelope, GearSix, Notebook, SignOut, SpinnerGap } from "@phosphor-icons/react";
 import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
 
@@ -151,6 +151,13 @@ export function ProjectList({
                   Settings
                 </button>
               )}
+              <a
+                href="/contact"
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+              >
+                <Envelope size={16} className="text-text-muted" />
+                Contact
+              </a>
               <button
                 onClick={() => { setMenuOpen(false); signOut(); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors border-t border-border"

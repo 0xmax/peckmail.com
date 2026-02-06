@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useChatState, useStoreDispatch } from "../store/StoreContext.js";
+import { useChatState, useChatPrompt, useStoreDispatch } from "../store/StoreContext.js";
 import { ChatMessage } from "./ChatMessage.js";
 import { Archive, Plus, Lightbulb, PaperPlaneRight, ChatCircle } from "@phosphor-icons/react";
 
 export function ChatPanel() {
   const { sessions, currentSessionId, messages, streaming, error } = useChatState();
+  const chatPrompt = useChatPrompt();
   const dispatch = useStoreDispatch();
 
   const [input, setInput] = useState("");
@@ -16,6 +17,17 @@ export function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Auto-send prompt dispatched from context menus
+  useEffect(() => {
+    if (!chatPrompt || streaming) return;
+    dispatch({
+      type: "chat:send",
+      sessionId: currentSessionId ?? "",
+      message: chatPrompt,
+    });
+    dispatch({ type: "chat:prompt-clear" });
+  }, [chatPrompt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = useCallback(() => {
     if (!input.trim() || streaming) return;

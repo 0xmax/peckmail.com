@@ -1,15 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { MembersPanel } from "./MembersPanel.js";
-import { EmailPanel } from "./EmailPanel.js";
 import { InviteForm } from "./InviteModal.js";
-
-type Tab = "members" | "email" | "invite";
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: "members", label: "Members" },
-  { key: "email", label: "Email" },
-  { key: "invite", label: "Invite" },
-];
 
 export function SettingsModal({
   projectId,
@@ -18,8 +9,6 @@ export function SettingsModal({
   projectId: string;
   onClose: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<Tab>("members");
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -40,8 +29,8 @@ export function SettingsModal({
         style={{ maxHeight: "80vh" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          <h2 className="text-lg font-semibold text-text">Settings</h2>
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border">
+          <h2 className="text-lg font-semibold text-text">Share</h2>
           <button
             onClick={onClose}
             className="text-text-muted hover:text-text transition-colors text-xl leading-none"
@@ -50,30 +39,10 @@ export function SettingsModal({
           </button>
         </div>
 
-        {/* Tab bar */}
-        <div className="flex gap-1 px-6 pb-3 border-b border-border">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                activeTab === tab.key
-                  ? "bg-surface-alt text-accent"
-                  : "text-text-muted hover:text-text hover:bg-surface-alt"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          {activeTab === "members" && (
-            <MembersPanel projectId={projectId} />
-          )}
-          {activeTab === "email" && <EmailPanel projectId={projectId} />}
-          {activeTab === "invite" && <InviteForm projectId={projectId} />}
+          <InviteForm projectId={projectId} />
+          <MembersPanel projectId={projectId} />
         </div>
       </div>
     </div>

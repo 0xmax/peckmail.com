@@ -6,6 +6,8 @@ import {
   useProjectId,
   useLoadFileContent,
   useTree,
+  useTtsFromLine,
+  useChatPrompt,
 } from "../store/StoreContext.js";
 import type { FileNode } from "../store/types.js";
 import { FileTree } from "./FileTree.js";
@@ -15,13 +17,12 @@ import { EditorToolbar } from "./EditorToolbar.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
 import { ConnectPanel } from "./ConnectPanel.js";
-import { ShareButton } from "./ShareButton.js";
 import { AudioBar } from "./ReadAloud.js";
 import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { useAuth } from "../context/AuthContext.js";
-import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut } from "@phosphor-icons/react";
+import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users } from "@phosphor-icons/react";
 
 function fileExistsInTree(tree: FileNode[], path: string): boolean {
   for (const node of tree) {
@@ -44,7 +45,10 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   const projectId = useProjectId();
   const loadFileContent = useLoadFileContent();
   const [activePanel, setActivePanel] = useState<Panel>(null);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showAudioBar, setShowAudioBar] = useState(false);
+  const ttsFromLine = useTtsFromLine();
+  const chatPrompt = useChatPrompt();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, signOut } = useAuth();
@@ -67,6 +71,16 @@ export function Workspace({ onBack }: { onBack: () => void }) {
 
   const togglePanel = (panel: Panel) =>
     setActivePanel((prev) => (prev === panel ? null : panel));
+
+  // Show audio bar when TTS is triggered from any source
+  useEffect(() => {
+    if (ttsFromLine !== null) setShowAudioBar(true);
+  }, [ttsFromLine]);
+
+  // Open chat panel when a prompt is dispatched from context menus
+  useEffect(() => {
+    if (chatPrompt) setActivePanel("chat");
+  }, [chatPrompt]);
 
   useEffect(() => {
     openFilePathRef.current = openFilePath;
@@ -168,7 +182,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   const panelBtnClass = (panel: Panel) =>
     `p-2 rounded-lg transition-colors ${
       activePanel === panel
-        ? "bg-surface-alt text-accent"
+        ? "text-accent hover:text-accent"
         : "text-text-muted hover:text-text"
     }`;
 
@@ -189,18 +203,12 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             title="Pages"
             className={`p-2 rounded-lg transition-colors ${
               showSidebar
-                ? "bg-surface-alt text-accent"
-                : "text-text-muted hover:text-text hover:bg-surface-alt"
+                ? "text-accent hover:text-accent"
+                : "text-text-muted hover:text-text"
             }`}
           >
             <Sidebar size={16} />
           </button>
-          <div className="w-px h-5 bg-border" />
-          <span className="text-sm font-medium text-text">
-            {openFilePath
-              ? openFilePath.split("/").pop()
-              : "No file open"}
-          </span>
           <SaveIndicator projectId={projectId} />
         </div>
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
@@ -215,12 +223,13 @@ export function Workspace({ onBack }: { onBack: () => void }) {
               Reconnecting...
             </span>
           )}
-          {openFilePath && (
-            <ShareButton
-              projectId={projectId}
-              filePath={openFilePath}
-            />
-          )}
+          <button
+            onClick={() => setShowShare(true)}
+            title="Share workspace"
+            className="p-2 rounded-lg transition-colors text-text-muted hover:text-text"
+          >
+            <Users size={16} />
+          </button>
           {/* Panel toggle pill */}
           <div className="flex items-center gap-px bg-surface-alt/50 rounded-xl p-0.5">
             <button
@@ -294,7 +303,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             <FileTree />
             <div className="border-t border-border px-3 py-2 shrink-0">
               <button
-                onClick={() => setShowSettings(true)}
+                onClick={() => setShowShare(true)}
                 className="flex items-center gap-2 w-full text-sm px-2 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
               >
                 <GearSix size={15} />
@@ -312,6 +321,9 @@ export function Workspace({ onBack }: { onBack: () => void }) {
                 editorViewRef={editorViewRef}
                 showPreview={showPreview}
                 onTogglePreview={() => setShowPreview(!showPreview)}
+                projectId={projectId}
+                filePath={openFilePath}
+                onPlay={() => setShowAudioBar(true)}
               />
               {showPreview ? (
                 <Preview content={fileContent ?? ""} filePath={openFilePath} />
@@ -356,12 +368,12 @@ export function Workspace({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Audio player bar */}
-      <AudioBar />
+      {showAudioBar && <AudioBar onClose={() => setShowAudioBar(false)} />}
 
-      {showSettings && (
+      {showShare && (
         <SettingsModal
           projectId={projectId}
-          onClose={() => setShowSettings(false)}
+          onClose={() => setShowShare(false)}
         />
       )}
     </div>

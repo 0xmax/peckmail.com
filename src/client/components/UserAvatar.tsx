@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 export function UserAvatar({
   src,
   name,
@@ -9,6 +11,17 @@ export function UserAvatar({
   size?: number;
   className?: string;
 }) {
+  // Debounce src changes to avoid flickering on auth refreshes
+  const [stableSrc, setStableSrc] = useState(src);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setStableSrc(src), 30_000);
+    // Update immediately on first mount or when going from null to a value
+    if (!stableSrc && src) setStableSrc(src);
+    return () => clearTimeout(timer.current);
+  }, [src]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const initials = (name || "?")
     .split(" ")
     .map((w) => w[0])
@@ -16,10 +29,10 @@ export function UserAvatar({
     .slice(0, 2)
     .toUpperCase();
 
-  if (src) {
+  if (stableSrc) {
     return (
       <img
-        src={src}
+        src={stableSrc}
         alt={name || "Avatar"}
         className={`rounded-full object-cover shrink-0 ${className}`}
         style={{ width: size, height: size }}

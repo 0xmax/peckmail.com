@@ -1,0 +1,127 @@
+import { useState } from "react";
+import { Envelope, SpinnerGap, CheckCircle, ArrowLeft } from "@phosphor-icons/react";
+
+export function ContactPage() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const canSubmit = name.trim() && email.trim() && message.trim() && status !== "sending";
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setStatus("sending");
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), message: message.trim() }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to send message");
+      }
+      setStatus("sent");
+    } catch (err: any) {
+      setStatus("error");
+      setErrorMsg(err.message || "Something went wrong");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-bg">
+      <header className="bg-surface border-b border-border px-6 py-4 flex items-center gap-3">
+        <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <img src="/assets/logo.png" alt="Perchpad" className="h-7 w-auto" />
+          <span className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</span>
+        </a>
+      </header>
+
+      <div className="max-w-xl mx-auto px-6 py-16 sm:px-8">
+        <a href="/" className="inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-8">
+          <ArrowLeft size={14} />
+          Back
+        </a>
+
+        {status === "sent" ? (
+          <div className="text-center py-12">
+            <CheckCircle size={48} weight="duotone" className="mx-auto mb-4 text-green-600" />
+            <h1 className="font-heading text-2xl font-bold text-text mb-2">Message sent!</h1>
+            <p className="text-text-muted">Thanks for reaching out. We'll get back to you soon.</p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-8">
+              <h1 className="font-heading text-3xl font-bold text-text mb-2">Get in touch</h1>
+              <p className="text-text-muted">Have a question or feedback? We'd love to hear from you.</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-text mb-1.5">Name</label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  placeholder="Your name"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-text mb-1.5">Email</label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  placeholder="you@example.com"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="message" className="block text-sm font-medium text-text mb-1.5">Message</label>
+                <textarea
+                  id="message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={5}
+                  className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors resize-none"
+                  placeholder="What's on your mind?"
+                />
+              </div>
+
+              {status === "error" && (
+                <p className="text-sm text-red-600">{errorMsg}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors font-medium"
+              >
+                {status === "sending" ? (
+                  <>
+                    <SpinnerGap size={18} className="animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Envelope size={18} />
+                    Send message
+                  </>
+                )}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

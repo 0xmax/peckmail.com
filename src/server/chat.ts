@@ -590,6 +590,40 @@ const tools: Anthropic.Tool[] = [
       required: ["email"],
     },
   },
+  {
+    name: "web_search",
+    description:
+      "Search the web for information. Returns a list of results with titles, URLs, and short snippets. Use this to look up facts, find references, or research topics for the user's writing.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "The search query",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of results to return (1-10). Defaults to 5.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "fetch_page",
+    description:
+      "Fetch and read the contents of a web page. Returns the page as clean markdown text. Use this to read articles, documentation, or other web content that might be useful for the user's writing.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL of the page to fetch",
+        },
+      },
+      required: ["url"],
+    },
+  },
 ] as Anthropic.Tool[];
 
 // Recursively collect all file paths under a directory (excluding hidden dirs)
@@ -1068,6 +1102,71 @@ async function executeTool(
         return `Invitation sent to ${email} as ${role}. They'll receive an email with a link to join.`;
       } catch (err: any) {
         return `Error: Could not send invitation — ${err.message || "unknown error"}`;
+      }
+    }
+
+    case "web_search": {
+      const apiKey = process.env.FIRECRAWL_API_KEY;
+      if (!apiKey) return "Error: Web search is not configured.";
+      try {
+        const limit = Math.min(Math.max(input.limit || 5, 1), 10);
+        const res = await fetch("https://api.firecrawl.dev/v1/search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({ query: input.query, limit }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return `Error: Search failed (${res.status}): ${text.slice(0, 200)}`;
+        }
+        const data = await res.json() as {
+          data?: Array<{ url?: string; title?: string; description?: string; markdown?: string }>;
+        };
+        if (!data.data || data.data.length === 0) return "No results found.";
+        return data.data
+          .map((r, i) => {
+            let entry = `${i + 1}. **${r.title || "Untitled"}**\n   ${r.url || ""}`;
+            if (r.description) entry += `\n   ${r.description}`;
+            return entry;
+          })
+          .join("\n\n");
+      } catch (err: any) {
+        return `Error: Web search failed — ${err.message || "unknown error"}`;
+      }
+    }
+
+    case "fetch_page": {
+      const apiKey = process.env.FIRECRAWL_API_KEY;
+      if (!apiKey) return "Error: Page fetching is not configured.";
+      try {
+        const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            url: input.url,
+            formats: ["markdown"],
+          }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return `Error: Could not fetch page (${res.status}): ${text.slice(0, 200)}`;
+        }
+        const data = await res.json() as {
+          data?: { markdown?: string; title?: string; url?: string };
+        };
+        const md = data.data?.markdown || "";
+        const title = data.data?.title || "";
+        if (!md) return "Error: No content could be extracted from the page.";
+        const truncated = md.length > 12000 ? md.slice(0, 12000) + "\n\n... (content truncated)" : md;
+        return title ? `# ${title}\n\n${truncated}` : truncated;
+      } catch (err: any) {
+        return `Error: Could not fetch page — ${err.message || "unknown error"}`;
       }
     }
 

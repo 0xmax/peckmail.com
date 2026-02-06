@@ -28,7 +28,7 @@ import {
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail } from "./inbound.js";
-import { sendInvitationEmail } from "./email.js";
+import { sendInvitationEmail, sendEmail } from "./email.js";
 import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit } from "./git.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
@@ -136,6 +136,29 @@ app.get("/api/invitations/:id/info", async (c) => {
     email: masked,
     status: inv.status,
   });
+});
+
+// --- Contact form (no auth) ---
+app.post("/api/contact", async (c) => {
+  const { name, email, message } = await c.req.json<{ name: string; email: string; message: string }>();
+  if (!name?.trim() || !email?.trim() || !message?.trim()) {
+    return c.json({ error: "All fields are required" }, 400);
+  }
+  if (message.trim().length > 5000) {
+    return c.json({ error: "Message too long" }, 400);
+  }
+  try {
+    await sendEmail({
+      to: "max@markets.sh",
+      subject: `[Perchpad Contact] from ${name.trim()}`,
+      body: `From: ${name.trim()} <${email.trim()}>\n\n${message.trim()}`,
+      replyTo: email.trim(),
+    });
+    return c.json({ ok: true });
+  } catch (err: any) {
+    console.error("Contact form error:", err);
+    return c.json({ error: "Failed to send message" }, 500);
+  }
 });
 
 // --- Webhook: Resend inbound email (no auth) ---
@@ -1021,6 +1044,7 @@ function landingPageHtml(): string {
           <a href="/login" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Sign In</a>
           <a href="/login" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Get Started</a>
           <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">FAQ</a>
+          <a href="/contact" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Contact</a>
         </div>
         <div>
           <h4 class="text-xs uppercase tracking-wider text-footer-muted mb-3 font-semibold">Features</h4>

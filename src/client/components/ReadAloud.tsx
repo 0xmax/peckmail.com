@@ -197,7 +197,7 @@ function getChunkStartLines(content: string): number[] {
   return starts;
 }
 
-export function AudioBar() {
+export function AudioBar({ onClose }: { onClose: () => void }) {
   const { path: openFilePath, content } = useOpenFile();
   const projectId = useProjectId();
   const dispatch = useStoreDispatch();
@@ -879,7 +879,7 @@ export function AudioBar() {
         </div>
       </div>
 
-      {/* Right: download + volume + settings */}
+      {/* Right: download + volume + settings + close */}
       <div className="flex items-center gap-3 w-56 justify-end">
         <button
           onClick={downloadAudio}
@@ -1083,6 +1083,13 @@ export function AudioBar() {
             </div>
           )}
         </div>
+        <button
+          onClick={() => { stop(); onClose(); }}
+          className="text-text-muted hover:text-text transition-colors ml-1"
+          title="Close player"
+        >
+          <X size={14} />
+        </button>
       </div>
     </div>
   );

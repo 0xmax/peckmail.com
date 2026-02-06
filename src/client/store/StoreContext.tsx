@@ -131,6 +131,10 @@ export function useTtsFromLine(): number | null {
   return useSelector((s) => s.ttsFromLine);
 }
 
+export function useChatPrompt(): string | null {
+  return useSelector((s) => s.chatPrompt);
+}
+
 export function useProjectSettings(): ProjectSettings {
   return useSelector((s) => s.projectSettings);
 }

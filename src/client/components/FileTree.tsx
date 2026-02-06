@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useTree, useOpenFile, useStoreDispatch, useLoadFileContent } from "../store/StoreContext.js";
 import type { FileNode } from "../store/types.js";
-import { File, Folder, FolderPlus, Plus, CaretRight, Play } from "@phosphor-icons/react";
+import { File, Folder, FolderPlus, Plus, CaretRight, Play, ChatCircle } from "@phosphor-icons/react";
 
 function FileIcon({ type }: { type: "file" | "directory" }) {
   if (type === "directory") {
@@ -260,20 +260,32 @@ export function FileTree() {
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           {contextMenu.node!.type === "file" && (
-            <button
-              onClick={() => {
-                openFile(contextMenu.node!.path);
-                // Small delay so file content loads before TTS triggers
-                setTimeout(() => {
-                  dispatch({ type: "tts:play-from", fromLine: 1 });
-                }, 300);
-                closeContextMenu();
-              }}
-              className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
-            >
-              <Play size={14} weight="fill" className="shrink-0" />
-              Read aloud
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  openFile(contextMenu.node!.path);
+                  // Small delay so file content loads before TTS triggers
+                  setTimeout(() => {
+                    dispatch({ type: "tts:play-from", fromLine: 1 });
+                  }, 300);
+                  closeContextMenu();
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+              >
+                <Play size={14} weight="fill" className="shrink-0" />
+                Read aloud
+              </button>
+              <button
+                onClick={() => {
+                  dispatch({ type: "chat:prompt", message: `Summarize the ${contextMenu.node!.name} file` });
+                  closeContextMenu();
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+              >
+                <ChatCircle size={14} className="shrink-0" />
+                Quick summary
+              </button>
+            </>
           )}
           <button
             onClick={() => {

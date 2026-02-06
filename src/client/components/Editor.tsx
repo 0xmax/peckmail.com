@@ -16,7 +16,7 @@ import {
   useProjectSettings,
   useTtsPlayback,
 } from "../store/StoreContext.js";
-import { Play } from "@phosphor-icons/react";
+import { Play, ChatCircle, MagnifyingGlass, PencilLine } from "@phosphor-icons/react";
 
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
@@ -258,6 +258,7 @@ export function Editor({ editorViewRef }: EditorProps) {
 
     if (highlight) {
       const doc = view.state.doc;
+      if (!doc.lines) return;
       const fromLine = Math.max(1, Math.min(highlight.fromLine, doc.lines));
       const toLine = Math.max(fromLine, Math.min(highlight.toLine, doc.lines));
       const from = doc.line(fromLine).from;
@@ -368,7 +369,7 @@ export function Editor({ editorViewRef }: EditorProps) {
       {/* Context menu */}
       {ctxMenu && (
         <div
-          className="fixed z-50 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[160px]"
+          className="fixed z-50 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[180px]"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -380,7 +381,31 @@ export function Editor({ editorViewRef }: EditorProps) {
             }}
           >
             <Play size={14} weight="fill" className="shrink-0" />
-            Read from line {ctxMenu.line}
+            Read from here
+          </button>
+          <div className="my-1 border-t border-border" />
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+            onClick={() => {
+              const lineText = editorViewRef.current?.state.doc.line(ctxMenu.line).text.trim();
+              const snippet = lineText && lineText.length > 60 ? lineText.slice(0, 60) + "..." : lineText;
+              dispatch({ type: "chat:prompt", message: `Fact-check this: "${snippet || `line ${ctxMenu.line}`}"` });
+              setCtxMenu(null);
+            }}
+          >
+            <MagnifyingGlass size={14} className="shrink-0" />
+            Fact check this
+          </button>
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+            onClick={() => {
+              const fileName = openFilePath?.split("/").pop() ?? "this file";
+              dispatch({ type: "chat:prompt", message: `Review the writing in ${fileName} around line ${ctxMenu.line}. Suggest improvements for clarity and style.` });
+              setCtxMenu(null);
+            }}
+          >
+            <PencilLine size={14} className="shrink-0" />
+            Review the writing
           </button>
         </div>
       )}

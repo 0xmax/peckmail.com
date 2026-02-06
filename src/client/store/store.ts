@@ -35,6 +35,7 @@ export class WorkspaceStore {
       chatStreaming: false,
       chatError: null,
       ttsFromLine: null,
+      chatPrompt: null,
       projectSettings: {},
       incomingEmails: [],
     };
@@ -466,6 +467,16 @@ export class WorkspaceStore {
 
       case "chat:streaming": {
         this.setState({ chatStreaming: action.streaming });
+        break;
+      }
+
+      case "chat:prompt": {
+        this.setState({ chatPrompt: action.message });
+        break;
+      }
+
+      case "chat:prompt-clear": {
+        this.setState({ chatPrompt: null });
         break;
       }
 
