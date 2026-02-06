@@ -807,9 +807,11 @@ app.get(
 // --- SPA fallback ---
 app.get("*", async (c) => {
   let html = await fs.readFile("dist/public/index.html", "utf-8");
-  // Inject Supabase config
+  const baseUrl = new URL(c.req.url).origin;
+  // Inject config
   html = html
     .replaceAll("%%ASSET_VERSION%%", ASSET_VERSION)
+    .replaceAll("%%BASE_URL%%", baseUrl)
     .replace("%%SUPABASE_URL%%", process.env.SUPABASE_URL || "")
     .replace("%%SUPABASE_ANON_KEY%%", process.env.SUPABASE_ANON_KEY || "");
   return c.html(html);
@@ -937,7 +939,7 @@ function landingPageHtml(): string {
         <h1 class="font-heading text-4xl sm:text-[3.5rem] font-extrabold leading-[1.1] text-text tracking-tight">A writing workspace that thinks with you</h1>
       </div>
       <div class="sm:flex-1">
-        <p class="text-lg text-text-body leading-relaxed">Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.</p>
+        <p class="text-lg text-text leading-relaxed">Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.</p>
       </div>
     </div>
     <picture>
