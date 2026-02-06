@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, Decoration, type DecorationSet } from "@codemirror/view";
 import { EditorState, StateField, StateEffect, Compartment } from "@codemirror/state";
@@ -51,7 +52,11 @@ const highlightField = StateField.define<DecorationSet>({
 });
 
 
-export function Editor() {
+interface EditorProps {
+  editorViewRef: RefObject<EditorView | null>;
+}
+
+export function Editor({ editorViewRef }: EditorProps) {
   const { path: openFilePath, content: fileContent } = useOpenFile();
   const dispatch = useStoreDispatch();
   const loadFileContent = useLoadFileContent();
@@ -62,7 +67,6 @@ export function Editor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
   const playbackRef = useRef(ttsPlayback);
   playbackRef.current = ttsPlayback;
   const wrapCompartment = useRef(new Compartment());
@@ -117,7 +121,7 @@ export function Editor() {
             if (liveBroadcastTimer.current) clearTimeout(liveBroadcastTimer.current);
             liveBroadcastTimer.current = setTimeout(() => {
               if (!openFilePath) return;
-              const latest = viewRef.current?.state.doc.toString();
+              const latest = editorViewRef.current?.state.doc.toString();
               if (latest !== undefined && latest !== lastBroadcastContent.current) {
                 lastBroadcastContent.current = latest;
                 dispatch({ type: "file:live", path: openFilePath, content: latest });
@@ -128,7 +132,7 @@ export function Editor() {
             if (diskWriteTimer.current) clearTimeout(diskWriteTimer.current);
             diskWriteTimer.current = setTimeout(() => {
               if (!openFilePath) return;
-              const latest = viewRef.current?.state.doc.toString();
+              const latest = editorViewRef.current?.state.doc.toString();
               if (latest !== undefined && latest !== lastWrittenContent.current) {
                 lastWrittenContent.current = latest;
                 dispatch({ type: "file:write", path: openFilePath, content: latest });
@@ -175,7 +179,7 @@ export function Editor() {
       parent: containerRef.current,
     });
 
-    viewRef.current = view;
+    editorViewRef.current = view;
 
     return () => {
       // Flush pending timers
@@ -184,21 +188,21 @@ export function Editor() {
       liveBroadcastTimer.current = null;
       diskWriteTimer.current = null;
       // Final disk write if needed
-      if (viewRef.current && openFilePath) {
-        const content = viewRef.current.state.doc.toString();
+      if (editorViewRef.current && openFilePath) {
+        const content = editorViewRef.current.state.doc.toString();
         if (content !== lastWrittenContent.current) {
           dispatch({ type: "file:write", path: openFilePath, content });
         }
       }
       view.destroy();
-      viewRef.current = null;
+      editorViewRef.current = null;
     };
   }, [openFilePath, fileContent === null]); // Only recreate on file change
 
   // Toggle word wrap
   useEffect(() => {
-    if (!viewRef.current) return;
-    viewRef.current.dispatch({
+    if (!editorViewRef.current) return;
+    editorViewRef.current.dispatch({
       effects: wrapCompartment.current.reconfigure(
         wordWrap ? EditorView.lineWrapping : []
       ),
@@ -207,7 +211,7 @@ export function Editor() {
 
   // Handle external content updates (file:live / file:updated from other clients)
   useEffect(() => {
-    if (!viewRef.current || fileContent === null || !openFilePath) return;
+    if (!editorViewRef.current || fileContent === null || !openFilePath) return;
 
     // Skip if this was triggered by our own local edit
     if (isLocalEdit.current) {
@@ -215,11 +219,11 @@ export function Editor() {
       return;
     }
 
-    const currentContent = viewRef.current.state.doc.toString();
+    const currentContent = editorViewRef.current.state.doc.toString();
     if (fileContent === currentContent) return;
 
     // Apply remote changes into the editor
-    const view = viewRef.current;
+    const view = editorViewRef.current;
     view.dispatch({
       changes: {
         from: 0,
@@ -249,7 +253,7 @@ export function Editor() {
   // Handle AI / TTS paragraph highlight
   const lastScrolledLine = useRef<number | null>(null);
   useEffect(() => {
-    const view = viewRef.current;
+    const view = editorViewRef.current;
     if (!view) return;
 
     if (highlight) {
@@ -284,7 +288,7 @@ export function Editor() {
     let animId: number;
     const animate = () => {
       const pb = playbackRef.current;
-      const view = viewRef.current;
+      const view = editorViewRef.current;
       const wrapper = wrapperRef.current;
       if (!pb || !view || !cursor || !wrapper) return;
 

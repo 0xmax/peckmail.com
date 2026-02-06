@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { EditorView } from "@codemirror/view";
 import {
   useOpenFile,
   useConnected,
@@ -8,6 +9,7 @@ import {
 import { FileTree } from "./FileTree.js";
 import { Editor } from "./Editor.js";
 import { Preview } from "./Preview.js";
+import { EditorToolbar } from "./EditorToolbar.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
 import { ShareButton } from "./ShareButton.js";
@@ -31,6 +33,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   const [showRevisions, setShowRevisions] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const { user } = useAuth();
+  const editorViewRef = useRef<EditorView | null>(null);
   const modeStorageKey = useMemo(
     () => `perchpad:view-mode:${projectId}`,
     [projectId]
@@ -142,23 +145,10 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             </span>
           )}
           {openFilePath && (
-            <>
-              <ShareButton
-                projectId={projectId}
-                filePath={openFilePath}
-              />
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                  showPreview
-                    ? "bg-surface-alt text-accent"
-                    : "text-text-muted hover:text-text hover:bg-surface-alt"
-                }`}
-                title={showPreview ? "Edit mode" : "Preview mode"}
-              >
-                {showPreview ? "Edit" : "Preview"}
-              </button>
-            </>
+            <ShareButton
+              projectId={projectId}
+              filePath={openFilePath}
+            />
           )}
           <button
             onClick={() => setShowRevisions(!showRevisions)}
@@ -212,11 +202,18 @@ export function Workspace({ onBack }: { onBack: () => void }) {
         {/* Editor / Preview area */}
         <div className="flex-1 min-w-0 flex flex-col">
           {openFilePath ? (
-            showPreview ? (
-              <Preview content={fileContent ?? ""} filePath={openFilePath} />
-            ) : (
-              <Editor />
-            )
+            <>
+              <EditorToolbar
+                editorViewRef={editorViewRef}
+                showPreview={showPreview}
+                onTogglePreview={() => setShowPreview(!showPreview)}
+              />
+              {showPreview ? (
+                <Preview content={fileContent ?? ""} filePath={openFilePath} />
+              ) : (
+                <Editor editorViewRef={editorViewRef} />
+              )}
+            </>
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">

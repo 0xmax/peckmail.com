@@ -50,6 +50,11 @@ function setNoCacheHeaders(c: any) {
 
 // --- Static files ---
 app.use("/assets/*", serveStatic({ root: "dist/public" }));
+app.get("/favicon.ico", serveStatic({ path: "dist/public/favicon.ico" }));
+app.get("/apple-touch-icon.png", serveStatic({ path: "dist/public/apple-touch-icon.png" }));
+app.get("/icon-192.png", serveStatic({ path: "dist/public/icon-192.png" }));
+app.get("/icon-512.png", serveStatic({ path: "dist/public/icon-512.png" }));
+app.get("/site.webmanifest", serveStatic({ path: "dist/public/site.webmanifest" }));
 app.get(
   "/app.js",
   serveStatic({
@@ -751,6 +756,23 @@ function landingPageHtml(): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Perchpad — A collaborative writing workspace</title>
+  <meta name="description" content="A calm writing workspace with a smart little bird. Organize projects, write in markdown, and collaborate in real time.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://perchpad.co/">
+  <meta property="og:title" content="Perchpad — A writing workspace that thinks with you">
+  <meta property="og:description" content="Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.">
+  <meta property="og:image" content="https://perchpad.co/assets/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="628">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Perchpad — A writing workspace that thinks with you">
+  <meta name="twitter:description" content="Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.">
+  <meta name="twitter:image" content="https://perchpad.co/assets/og.jpg">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#faf6f1">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
   <script>
