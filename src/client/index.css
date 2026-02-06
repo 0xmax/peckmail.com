@@ -220,6 +220,53 @@ body {
   box-shadow: 0 0 0 1px rgba(196, 149, 106, 0.18) inset;
 }
 
+/* CSV table preview */
+.csv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.csv-table th,
+.csv-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csv-table th {
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.csv-table tbody tr:hover {
+  background: rgba(196, 149, 106, 0.06);
+}
+
+.csv-table td {
+  color: var(--color-text);
+}
+
+.csv-row-num {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  width: 3rem;
+  min-width: 3rem;
+  text-align: right;
+  opacity: 0.6;
+}
+
 /* TTS reading cursor with swoosh trail */
 .tts-cursor {
   position: absolute;

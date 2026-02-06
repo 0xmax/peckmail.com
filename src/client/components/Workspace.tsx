@@ -222,7 +222,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
         <div className="flex-1 min-w-0 flex flex-col">
           {openFilePath ? (
             showPreview ? (
-              <Preview content={fileContent ?? ""} />
+              <Preview content={fileContent ?? ""} filePath={openFilePath} />
             ) : (
               <Editor />
             )
