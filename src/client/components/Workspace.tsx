@@ -22,7 +22,7 @@ import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { useAuth } from "../context/AuthContext.js";
-import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users } from "@phosphor-icons/react";
+import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope } from "@phosphor-icons/react";
 
 function fileExistsInTree(tree: FileNode[], path: string): boolean {
   for (const node of tree) {
@@ -38,7 +38,7 @@ const FILE_PARAM = "file";
 
 type Panel = "connect" | "revisions" | "chat" | null;
 
-export function Workspace({ onBack }: { onBack: () => void }) {
+export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOpenSettings: () => void }) {
   const { path: openFilePath, content: fileContent } = useOpenFile();
   const { tree, loading: treeLoading } = useTree();
   const connected = useConnected();
@@ -51,7 +51,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
   const chatPrompt = useChatPrompt();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const { user, signOut } = useAuth();
+  const { user, signOut, handle } = useAuth();
   const editorViewRef = useRef<EditorView | null>(null);
   const modeStorageKey = useMemo(
     () => `perchpad:view-mode:${projectId}`,
@@ -65,7 +65,12 @@ export function Workspace({ onBack }: { onBack: () => void }) {
     }
   });
   const [showSidebar, setShowSidebar] = useState(true);
-  const [sidebarWidth] = useState(240);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try { return Number(localStorage.getItem("perchpad:sidebar-w")) || 240; } catch { return 240; }
+  });
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try { return Number(localStorage.getItem("perchpad:panel-w")) || 320; } catch { return 320; }
+  });
   const openFilePathRef = useRef<string | null>(openFilePath);
   const loadFileContentRef = useRef(loadFileContent);
 
@@ -186,6 +191,38 @@ export function Workspace({ onBack }: { onBack: () => void }) {
         : "text-text-muted hover:text-text"
     }`;
 
+  // --- Resize helpers ---
+  const startResize = (
+    setter: (w: number) => void,
+    storageKey: string,
+    min: number,
+    max: number,
+    direction: "left" | "right",
+  ) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const el = (e.target as HTMLElement).parentElement!;
+    const startW = el.getBoundingClientRect().width;
+    const onMove = (ev: MouseEvent) => {
+      const delta = direction === "right"
+        ? ev.clientX - startX
+        : startX - ev.clientX;
+      const next = Math.min(max, Math.max(min, startW + delta));
+      setter(next);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try { localStorage.setItem(storageKey, String(el.getBoundingClientRect().width)); } catch {}
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   return (
     <div className="h-screen flex flex-col bg-bg">
       {/* Top bar */}
@@ -266,11 +303,14 @@ export function Workspace({ onBack }: { onBack: () => void }) {
               />
             </button>
             {userMenuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50">
-                <div className="px-4 py-2.5 border-b border-border">
+              <div className="absolute right-0 top-full mt-2 w-56 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50">
+                <div className="px-4 py-3 border-b border-border">
                   <div className="text-sm font-medium text-text truncate">
                     {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
                   </div>
+                  {handle && (
+                    <div className="text-xs text-text-muted truncate mt-0.5">@{handle}</div>
+                  )}
                 </div>
                 <button
                   onClick={() => { setUserMenuOpen(false); onBack(); }}
@@ -279,6 +319,20 @@ export function Workspace({ onBack }: { onBack: () => void }) {
                   <ArrowLeft size={16} className="text-text-muted" />
                   All workspaces
                 </button>
+                <button
+                  onClick={() => { setUserMenuOpen(false); onOpenSettings(); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                >
+                  <GearSix size={16} className="text-text-muted" />
+                  Settings
+                </button>
+                <a
+                  href="/contact"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                >
+                  <Envelope size={16} className="text-text-muted" />
+                  Contact
+                </a>
                 <button
                   onClick={() => { setUserMenuOpen(false); signOut(); }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors border-t border-border"
@@ -297,7 +351,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
         {/* Sidebar - File tree */}
         {showSidebar && (
           <div
-            className="bg-surface border-r border-border flex flex-col shrink-0"
+            className="bg-surface border-r border-border flex flex-col shrink-0 relative"
             style={{ width: sidebarWidth }}
           >
             <FileTree />
@@ -310,6 +364,10 @@ export function Workspace({ onBack }: { onBack: () => void }) {
                 Settings
               </button>
             </div>
+            <div
+              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10"
+              onMouseDown={startResize(setSidebarWidth, "perchpad:sidebar-w", 180, 400, "right")}
+            />
           </div>
         )}
 
@@ -347,21 +405,18 @@ export function Workspace({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* Side panels — only one at a time */}
-        {activePanel === "chat" && (
-          <div className="w-80 border-l border-border bg-surface flex flex-col shrink-0">
-            <ChatPanel />
-          </div>
-        )}
-
-        {activePanel === "revisions" && (
-          <div className="w-72 border-l border-border bg-surface flex flex-col shrink-0">
-            <Revisions projectId={projectId} />
-          </div>
-        )}
-
-        {activePanel === "connect" && (
-          <div className="w-80 border-l border-border bg-surface flex flex-col shrink-0">
-            <ConnectPanel projectId={projectId} />
+        {activePanel && (
+          <div
+            className="border-l border-border bg-surface flex flex-col shrink-0 relative"
+            style={{ width: panelWidth }}
+          >
+            <div
+              className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10"
+              onMouseDown={startResize(setPanelWidth, "perchpad:panel-w", 260, 600, "left")}
+            />
+            {activePanel === "chat" && <ChatPanel />}
+            {activePanel === "revisions" && <Revisions projectId={projectId} />}
+            {activePanel === "connect" && <ConnectPanel projectId={projectId} />}
           </div>
         )}
 

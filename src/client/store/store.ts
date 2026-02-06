@@ -161,6 +161,12 @@ export class WorkspaceStore {
         }
         break;
 
+      case "editor:open_file":
+        if (msg.path && msg.path !== this.state.openFilePath) {
+          this.loadFileContent(msg.path);
+        }
+        break;
+
       case "editor:highlight":
         if (msg.path === this.state.openFilePath) {
           this.setState({ highlight: { fromLine: msg.fromLine, toLine: msg.toLine } });

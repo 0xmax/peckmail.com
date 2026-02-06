@@ -91,7 +91,7 @@ export function App() {
   if (route.page === "workspace") {
     return (
       <StoreProvider projectId={route.projectId}>
-        <Workspace onBack={() => navigate({ page: "projects" })} />
+        <Workspace onBack={() => navigate({ page: "projects" })} onOpenSettings={() => navigate({ page: "settings" })} />
       </StoreProvider>
     );
   }

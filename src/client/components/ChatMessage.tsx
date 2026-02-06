@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+import { marked } from "marked";
 import { Eye, PencilSimple, FilePlus, ListBullets, Wrench } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
@@ -46,6 +48,10 @@ function toolIcon(tool: string): ReactNode {
 
 export function ChatMessage({ message }: { message: Message }) {
   const isUser = message.role === "user";
+  const html = useMemo(() => {
+    if (isUser || !message.content) return null;
+    return marked.parse(message.content, { async: false }) as string;
+  }, [isUser, message.content]);
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -75,9 +81,16 @@ export function ChatMessage({ message }: { message: Message }) {
 
         {/* Message text */}
         {message.content && (
-          <div className="whitespace-pre-wrap break-words">
-            {message.content}
-          </div>
+          isUser ? (
+            <div className="whitespace-pre-wrap break-words">
+              {message.content}
+            </div>
+          ) : (
+            <div
+              className="chat-markdown break-words"
+              dangerouslySetInnerHTML={{ __html: html! }}
+            />
+          )
         )}
       </div>
     </div>

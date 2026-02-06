@@ -3,7 +3,8 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { supabase } from "../lib/supabase.js";
 import type { UserPreferences } from "../store/types.js";
-import { Monitor, Terminal, Play, Stop, CurrencyDollar } from "@phosphor-icons/react";
+import { Monitor, Terminal, Play, Stop, CurrencyDollar, Envelope, SignOut, ArrowLeft } from "@phosphor-icons/react";
+import { UserAvatar } from "./UserAvatar.js";
 
 interface ApiKey {
   id: string;
@@ -58,7 +59,9 @@ interface CreditTransaction {
 }
 
 export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void; onOpenProject?: (id: string) => void }) {
-  const { user, preferences, updatePreferences, credits, refreshCredits } = useAuth();
+  const { user, preferences, updatePreferences, credits, refreshCredits, signOut, handle } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [voiceId, setVoiceId] = useState(preferences.tts?.voiceId || VOICES[0].id);
   const [model, setModel] = useState<TtsModel>(preferences.tts?.model || "v3");
   const [v2Settings, setV2Settings] = useState<V2Settings>(preferences.tts?.v2 || DEFAULT_V2);
@@ -75,11 +78,22 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   const [creatingKey, setCreatingKey] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
   const [cliCopied, setCliCopied] = useState(false);
-  const [showApiKeys, setShowApiKeys] = useState(false);
   const [creatingStarter, setCreatingStarter] = useState(false);
   const [showTransactions, setShowTransactions] = useState(false);
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   useEffect(() => {
     api.get<{ keys: ApiKey[] }>("/api/keys").then((r) => setApiKeys(r.keys)).catch(() => {});
@@ -212,15 +226,54 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   return (
     <div className="min-h-screen bg-bg">
       <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <img src="/assets/logo.png" alt="Perchpad" className="h-7 w-auto" />
+          <h1 className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</h1>
+        </div>
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={onBack}
-            className="text-text-muted hover:text-text transition-colors text-sm"
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="flex items-center gap-2 rounded-full hover:opacity-80 transition-opacity"
           >
-            &larr; Back
+            <UserAvatar
+              src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
+              name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+              size={32}
+            />
           </button>
-          <div className="w-px h-5 bg-border" />
-          <h1 className="text-lg font-semibold text-text">Settings</h1>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-56 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50">
+              <div className="px-4 py-3 border-b border-border">
+                <div className="text-sm font-medium text-text truncate">
+                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+                </div>
+                {handle && (
+                  <div className="text-xs text-text-muted truncate mt-0.5">@{handle}</div>
+                )}
+              </div>
+              <button
+                onClick={() => { setMenuOpen(false); onBack(); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+              >
+                <ArrowLeft size={16} className="text-text-muted" />
+                All workspaces
+              </button>
+              <a
+                href="/contact"
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+              >
+                <Envelope size={16} className="text-text-muted" />
+                Contact
+              </a>
+              <button
+                onClick={() => { setMenuOpen(false); signOut(); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors border-t border-border"
+              >
+                <SignOut size={16} className="text-text-muted" />
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -448,34 +501,26 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
             {/* Existing keys */}
             {apiKeys.length > 0 && (
               <div>
-                <button
-                  onClick={() => setShowApiKeys(!showApiKeys)}
-                  className="text-xs font-medium text-text-muted hover:text-text transition-colors flex items-center gap-1"
-                >
-                  <span className={`transition-transform ${showApiKeys ? "rotate-90" : ""}`}>&rsaquo;</span>
-                  {apiKeys.length} API key{apiKeys.length !== 1 ? "s" : ""}
-                </button>
-                {showApiKeys && (
-                  <div className="space-y-2 mt-2">
-                    {apiKeys.map((k) => (
-                      <div key={k.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-3 py-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-text truncate">{k.name}</div>
-                          <div className="text-xs text-text-muted">
-                            Created {new Date(k.created_at).toLocaleDateString()}
-                            {k.last_used_at && ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}`}
-                          </div>
+                <label className="text-xs font-medium text-text-muted block mb-2">Your API keys</label>
+                <div className="space-y-2">
+                  {apiKeys.map((k) => (
+                    <div key={k.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-text truncate">{k.name}</div>
+                        <div className="text-xs text-text-muted">
+                          Created {new Date(k.created_at).toLocaleDateString()}
+                          {k.last_used_at && ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}`}
                         </div>
-                        <button
-                          onClick={() => handleDeleteKey(k.id)}
-                          className="shrink-0 text-xs text-red-500 hover:text-red-700 transition-colors ml-3"
-                        >
-                          Revoke
-                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <button
+                        onClick={() => handleDeleteKey(k.id)}
+                        className="shrink-0 text-xs text-red-500 hover:text-red-700 transition-colors ml-3"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

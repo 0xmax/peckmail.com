@@ -850,6 +850,8 @@ function landingPageHtml(): string {
   <meta name="theme-color" content="#faf6f1">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-Z3V6P9TKHC"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-Z3V6P9TKHC')</script>
 </head>
 <body class="bg-bg text-text">
 

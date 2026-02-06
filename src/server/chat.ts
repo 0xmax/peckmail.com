@@ -182,6 +182,21 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "open_file",
+    description:
+      "Open a file in the user's editor. Use this to navigate the user to a file you are working on — for example after creating a new file, or before making edits so the user can see the changes happen in real time.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file relative to the project root",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  {
     name: "highlight",
     description:
       "Highlight a range of text in the user's editor to draw their attention to it. Use this when referring to specific lines or passages.",
@@ -696,6 +711,14 @@ async function executeTool(
       } catch {
         return "Error: Could not list files";
       }
+    }
+
+    case "open_file": {
+      sendTo(ws, {
+        type: "editor:open_file",
+        path: input.path,
+      });
+      return `Opened "${input.path}" in the editor.`;
     }
 
     case "highlight": {
@@ -1402,6 +1425,8 @@ export async function handleChatMessage(
         {
           type: "text",
           text: `You are a friendly writing assistant in Perchpad, a collaborative workspace for markdown and CSV files. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. You can also use the highlight tool to draw attention to specific lines in the editor. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.
+
+When you create or edit a file, use the open_file tool to open it in the user's editor so they can see the result. Always open files you are actively working on — the user should be able to watch your changes happen in real time.
 
 Perchpad primarily works with two file formats:
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose.
