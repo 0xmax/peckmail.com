@@ -49,6 +49,15 @@ export interface ProjectSettings {
   };
 }
 
+export interface TtsPlayback {
+  fromChar: number;
+  toChar: number;
+  duration: number;
+  elapsed: number;
+  dispatchedAt: number;
+  playing: boolean;
+}
+
 export interface StoreState {
   projectId: string;
   connected: boolean;
@@ -58,7 +67,8 @@ export interface StoreState {
   fileContent: string | null;
   fileLoading: boolean;
   cursorPosition: CursorPosition | null;
-  highlight: { fromLine: number; toLine: number; fromChar?: number; toChar?: number } | null;
+  highlight: { fromLine: number; toLine: number } | null;
+  ttsPlayback: TtsPlayback | null;
   chatSessions: ChatSession[];
   currentSessionId: string | null;
   chatMessages: ChatMessage[];
@@ -106,8 +116,10 @@ export type StoreAction =
   // TTS
   | { type: "tts:play-from"; fromLine: number }
   | { type: "tts:clear" }
-  | { type: "tts:highlight"; line: number; fromChar?: number; toChar?: number }
+  | { type: "tts:highlight"; line: number }
   | { type: "tts:highlight-clear" }
+  | { type: "tts:playback"; playback: TtsPlayback }
+  | { type: "tts:playback-stop" }
   // Settings
   | { type: "settings:set"; settings: ProjectSettings }
   | { type: "settings:save"; settings: ProjectSettings };

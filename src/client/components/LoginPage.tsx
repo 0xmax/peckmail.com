@@ -28,7 +28,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg">
+    <div className="min-h-screen flex items-center justify-center bg-bg px-4">
       <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border">
         <div className="text-center mb-8">
           <img src="/assets/logo.png" alt="Perchpad" className="h-14 w-auto mx-auto mb-3" />

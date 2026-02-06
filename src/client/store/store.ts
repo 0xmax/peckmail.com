@@ -28,6 +28,7 @@ export class WorkspaceStore {
       fileLoading: false,
       cursorPosition: null,
       highlight: null,
+      ttsPlayback: null,
       chatSessions: [],
       currentSessionId: null,
       chatMessages: [],
@@ -458,20 +459,30 @@ export class WorkspaceStore {
       }
 
       case "tts:clear": {
-        this.setState({ ttsFromLine: null, highlight: null });
+        this.setState({ ttsFromLine: null, highlight: null, ttsPlayback: null });
         break;
       }
 
       case "tts:highlight": {
         const cur = this.state.highlight;
-        if (!cur || cur.fromLine !== action.line || cur.toLine !== action.line || cur.fromChar !== action.fromChar || cur.toChar !== action.toChar) {
-          this.setState({ highlight: { fromLine: action.line, toLine: action.line, fromChar: action.fromChar, toChar: action.toChar } });
+        if (!cur || cur.fromLine !== action.line || cur.toLine !== action.line) {
+          this.setState({ highlight: { fromLine: action.line, toLine: action.line } });
         }
         break;
       }
 
       case "tts:highlight-clear": {
         this.setState({ highlight: null });
+        break;
+      }
+
+      case "tts:playback": {
+        this.setState({ ttsPlayback: action.playback });
+        break;
+      }
+
+      case "tts:playback-stop": {
+        this.setState({ ttsPlayback: null });
         break;
       }
 

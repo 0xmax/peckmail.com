@@ -7,7 +7,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
-import { useOpenFile, useStoreDispatch, useLoadFileContent, useHighlight } from "../store/StoreContext.js";
+import { useOpenFile, useStoreDispatch, useLoadFileContent, useHighlight, useTtsPlayback } from "../store/StoreContext.js";
 
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
@@ -42,35 +42,19 @@ const highlightField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-// Sentence-level mark decoration (highlights the specific sentence within the paragraph)
-const setSentenceEffect = StateEffect.define<{ from: number; to: number } | null>();
-
-const sentenceDeco = Decoration.mark({ class: "cm-sentence-highlight" });
-
-const sentenceField = StateField.define<DecorationSet>({
-  create() {
-    return Decoration.none;
-  },
-  update(decorations, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setSentenceEffect)) {
-        if (effect.value === null) return Decoration.none;
-        const { from, to } = effect.value;
-        return Decoration.set([sentenceDeco.range(from, to)]);
-      }
-    }
-    return decorations.map(tr.changes);
-  },
-  provide: (f) => EditorView.decorations.from(f),
-});
 
 export function Editor() {
   const { path: openFilePath, content: fileContent } = useOpenFile();
   const dispatch = useStoreDispatch();
   const loadFileContent = useLoadFileContent();
   const highlight = useHighlight();
+  const ttsPlayback = useTtsPlayback();
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const playbackRef = useRef(ttsPlayback);
+  playbackRef.current = ttsPlayback;
   const wrapCompartment = useRef(new Compartment());
   const [wordWrap, setWordWrap] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -101,7 +85,6 @@ export function Editor() {
         syntaxHighlighting(defaultHighlightStyle),
         markdown({ codeLanguages: languages }),
         highlightField,
-        sentenceField,
         wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
         keymap.of([
           ...defaultKeymap,
@@ -172,10 +155,6 @@ export function Editor() {
           ".cm-ai-highlight": {
             backgroundColor: "rgba(196, 149, 106, 0.1)",
             borderLeft: "3px solid #c4956a",
-          },
-          ".cm-sentence-highlight": {
-            backgroundColor: "rgba(196, 149, 106, 0.3)",
-            borderRadius: "2px",
           },
         }),
       ],
@@ -257,7 +236,7 @@ export function Editor() {
     };
   }, [ctxMenu]);
 
-  // Handle AI / TTS highlight
+  // Handle AI / TTS paragraph highlight
   const lastScrolledLine = useRef<number | null>(null);
   useEffect(() => {
     const view = viewRef.current;
@@ -271,22 +250,6 @@ export function Editor() {
       const to = doc.line(toLine).to;
 
       const effects: any[] = [setHighlightEffect.of({ from, to })];
-
-      // Sentence-level highlight
-      if (highlight.fromChar !== undefined && highlight.toChar !== undefined) {
-        const docLen = doc.length;
-        const sFrom = Math.max(0, Math.min(highlight.fromChar, docLen));
-        const sTo = Math.max(sFrom, Math.min(highlight.toChar, docLen));
-        if (sTo > sFrom) {
-          effects.push(setSentenceEffect.of({ from: sFrom, to: sTo }));
-        } else {
-          effects.push(setSentenceEffect.of(null));
-        }
-      } else {
-        effects.push(setSentenceEffect.of(null));
-      }
-
-      // Only scroll when the line changes to avoid jitter
       if (lastScrolledLine.current !== fromLine) {
         lastScrolledLine.current = fromLine;
         effects.push(EditorView.scrollIntoView(from, { y: "center" }));
@@ -294,11 +257,53 @@ export function Editor() {
       view.dispatch({ effects });
     } else {
       lastScrolledLine.current = null;
-      view.dispatch({
-        effects: [setHighlightEffect.of(null), setSentenceEffect.of(null)],
-      });
+      view.dispatch({ effects: setHighlightEffect.of(null) });
     }
   }, [highlight]);
+
+  // Animated TTS cursor
+  useEffect(() => {
+    const cursor = cursorRef.current;
+    if (!cursor) return;
+
+    if (!ttsPlayback) {
+      cursor.style.opacity = "0";
+      return;
+    }
+
+    let animId: number;
+    const animate = () => {
+      const pb = playbackRef.current;
+      const view = viewRef.current;
+      const wrapper = wrapperRef.current;
+      if (!pb || !view || !cursor || !wrapper) return;
+
+      const now = Date.now();
+      const elapsed = pb.playing
+        ? pb.elapsed + (now - pb.dispatchedAt) / 1000
+        : pb.elapsed;
+      const progress = Math.min(1, Math.max(0, elapsed / pb.duration));
+      const charPos = Math.floor(pb.fromChar + progress * (pb.toChar - pb.fromChar));
+      const clampedPos = Math.min(charPos, view.state.doc.length);
+
+      const coords = view.coordsAtPos(clampedPos);
+      if (coords) {
+        const rect = wrapper.getBoundingClientRect();
+        cursor.style.opacity = "1";
+        cursor.style.transform = `translate(${coords.left - rect.left}px, ${coords.top - rect.top}px)`;
+        cursor.style.height = `${coords.bottom - coords.top}px`;
+      } else {
+        cursor.style.opacity = "0";
+      }
+
+      if (progress < 1 && pb.playing) {
+        animId = requestAnimationFrame(animate);
+      }
+    };
+
+    animId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animId);
+  }, [ttsPlayback]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -317,7 +322,10 @@ export function Editor() {
       </div>
 
       {/* Editor container */}
-      <div ref={containerRef} className="flex-1 overflow-hidden" />
+      <div ref={wrapperRef} className="flex-1 overflow-hidden relative">
+        <div ref={containerRef} className="h-full" />
+        <div ref={cursorRef} className="tts-cursor" style={{ opacity: 0 }} />
+      </div>
 
       {/* Toast */}
       {toast && (

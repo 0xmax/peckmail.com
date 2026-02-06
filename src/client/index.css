@@ -230,9 +230,39 @@ body {
   border-radius: 0 0.25rem 0.25rem 0;
 }
 
-.sentence-hl {
-  background-color: rgba(196, 149, 106, 0.3);
+/* TTS reading cursor with swoosh trail */
+.tts-cursor {
+  position: absolute;
+  width: 2px;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent), 0 0 20px rgba(196, 149, 106, 0.4);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.3s;
+  will-change: transform;
+}
+
+.tts-cursor::after {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 0;
+  width: 40px;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(196, 149, 106, 0.25));
   border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Activity pulse for TTS processing indicator */
+@keyframes activity-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.75); }
+}
+
+.activity-pulse {
+  animation: activity-pulse 1.5s ease-in-out infinite;
 }
 
 /* Transitions */

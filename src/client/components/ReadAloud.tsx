@@ -148,6 +148,41 @@ const DEFAULT_V2: V2Settings = {
   speed: 1.0,
 };
 
+/**
+ * Estimate timestamps by mapping character positions linearly to audio duration.
+ * Good enough for immediate paragraph highlighting until Whisper provides real ones.
+ */
+function estimateTimestamps(
+  text: string,
+  lineOffset: number,
+  duration: number
+): LineTimestamp[] {
+  const lines = text.split("\n");
+  const totalChars = text.length;
+  if (totalChars === 0 || duration <= 0) return [];
+
+  const result: LineTimestamp[] = [];
+  let charPos = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim()) {
+      const start = (charPos / totalChars) * duration;
+      const end = ((charPos + line.length) / totalChars) * duration;
+      result.push({
+        start,
+        end,
+        line: i + lineOffset,
+        fromChar: charPos,
+        toChar: charPos + line.length,
+      });
+    }
+    charPos += line.length + 1; // +1 for newline
+  }
+
+  return result;
+}
+
 /** Find 1-indexed line numbers where new chunks (paragraphs / headings) start */
 function getChunkStartLines(content: string): number[] {
   const lines = content.split("\n");
@@ -181,12 +216,19 @@ export function AudioBar() {
   const [voiceId, setVoiceId] = useState(VOICES[0].id);
   const [v2Settings, setV2Settings] = useState<V2Settings>(DEFAULT_V2);
   const [error, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const timestampsRef = useRef<LineTimestamp[]>([]);
   const settingsInitialized = useRef(false);
   const lastHighlightLine = useRef<number | null>(null);
   const charOffsetRef = useRef(0);
+  const playbackCharsRef = useRef<{ fromChar: number; toChar: number } | null>(null);
+  const playbackStartedRef = useRef(false);
+  const estimatedTsRef = useRef(false); // true when timestamps are estimated, not from Whisper
+  const ttsTextRef = useRef(""); // text sent to TTS, for re-estimating when duration updates
+  const ttsLineOffsetRef = useRef(1);
+  const forceRegenRef = useRef(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -290,10 +332,12 @@ export function AudioBar() {
     }
     audioRef.current = null;
     timestampsRef.current = [];
+    estimatedTsRef.current = false;
     cleanup();
     setState("idle");
     setProgress(0);
     setCurrentTime(0);
+    setActivity(null);
     dispatch({ type: "tts:clear" });
   }, [dispatch, cleanup]);
 
@@ -307,12 +351,13 @@ export function AudioBar() {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
-  // Poll for timestamps after streaming
+  // Poll for real Whisper timestamps after streaming (replaces estimates)
   const pollTimestamps = useCallback(
     async (streamId: string, token: string) => {
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         if (activeStreamId.current !== streamId) return;
+        if (i === 2) setActivity("Refining timestamps...");
         try {
           const res = await fetch(
             `/api/tts/${projectId}/timestamps/${streamId}`,
@@ -322,6 +367,8 @@ export function AudioBar() {
           const data = await res.json();
           if (data.ready) {
             timestampsRef.current = data.timestamps || [];
+            estimatedTsRef.current = false;
+            setActivity(null);
             return;
           }
         } catch {
@@ -332,12 +379,40 @@ export function AudioBar() {
     [projectId]
   );
 
+  const dispatchPlaybackUpdate = useCallback(() => {
+    const audio = audioRef.current;
+    const chars = playbackCharsRef.current;
+    if (!audio || !chars) return;
+
+    // Use real duration if available, otherwise estimate from text length
+    let dur = audio.duration;
+    if (!Number.isFinite(dur) || dur <= 0) {
+      // ~150 words/min, ~5 chars/word → estimate seconds from char count
+      const charCount = chars.toChar - chars.fromChar;
+      dur = Math.max(10, (charCount / 5 / 150) * 60);
+    }
+
+    playbackStartedRef.current = true;
+    dispatch({
+      type: "tts:playback",
+      playback: {
+        fromChar: chars.fromChar,
+        toChar: chars.toChar,
+        duration: dur,
+        elapsed: audio.currentTime,
+        dispatchedAt: Date.now(),
+        playing: !audio.paused,
+      },
+    });
+  }, [dispatch]);
+
   const playFrom = useCallback(
     async (fromLine?: number) => {
       if (!content?.trim()) return;
 
       setState("loading");
       setError(null);
+      setActivity(model === "v3" ? "Enhancing text with AI..." : "Preparing audio...");
       dispatch({ type: "tts:clear" });
 
       // Stop existing playback
@@ -365,13 +440,19 @@ export function AudioBar() {
           textToSend = lines.slice(lineOffset - 1).join("\n");
         }
         charOffsetRef.current = charOff;
+        playbackCharsRef.current = { fromChar: charOff, toChar: charOff + textToSend.length };
+        playbackStartedRef.current = false;
+        ttsTextRef.current = textToSend;
+        ttsLineOffsetRef.current = lineOffset;
 
         const body: Record<string, any> = {
           text: textToSend,
           model,
           voiceId,
           lineOffset, // tells server which absolute line this text starts at
+          force: forceRegenRef.current,
         };
+        forceRegenRef.current = false;
         if (model === "v2") {
           body.stability = v2Settings.stability;
           body.similarityBoost = v2Settings.similarityBoost;
@@ -401,15 +482,21 @@ export function AudioBar() {
           // Cache hit: audio + timestamps available immediately
           audioUrl = data.audioUrl;
           timestampsRef.current = data.timestamps || [];
+          estimatedTsRef.current = false;
+          setActivity(null);
         } else {
           // Streaming: point audio.src at the stream URL directly
-          // Browser handles progressive MP3 download + playback natively
           const streamId = data.streamId;
           activeStreamId.current = streamId;
           audioUrl = `/api/tts/${projectId}/stream/${streamId}?token=${encodeURIComponent(token)}`;
+          setActivity("Generating audio...");
 
-          // Poll for timestamps in background
-          timestampsRef.current = [];
+          // Estimate timestamps immediately so highlighting works while streaming
+          const estDur = Math.max(10, (textToSend.length / 5 / 150) * 60);
+          timestampsRef.current = estimateTimestamps(textToSend, lineOffset, estDur);
+          estimatedTsRef.current = true;
+
+          // Poll for real Whisper timestamps in background
           pollTimestamps(streamId, token);
         }
 
@@ -424,17 +511,28 @@ export function AudioBar() {
         );
         // Duration may update as more data streams in
         audio.addEventListener("durationchange", () => {
-          if (Number.isFinite(audio.duration)) setDuration(audio.duration);
+          if (Number.isFinite(audio.duration)) {
+            setDuration(audio.duration);
+            // Re-estimate timestamps with the real duration for better accuracy
+            if (estimatedTsRef.current && ttsTextRef.current) {
+              timestampsRef.current = estimateTimestamps(
+                ttsTextRef.current, ttsLineOffsetRef.current, audio.duration
+              );
+            }
+          }
+          // Always re-dispatch so cursor gets updated duration
+          dispatchPlaybackUpdate();
         });
         audio.addEventListener("timeupdate", () => {
           setCurrentTime(audio.currentTime);
-          if (Number.isFinite(audio.duration) && audio.duration > 0)
+          if (Number.isFinite(audio.duration) && audio.duration > 0) {
             setProgress(audio.currentTime / audio.duration);
+          }
 
-          // Highlight current line — look slightly ahead so highlight leads the voice
+          // Highlight current paragraph — look slightly ahead so highlight leads the voice
           const ts = timestampsRef.current;
           if (ts.length > 0) {
-            const t = audio.currentTime + 0.4; // look-ahead
+            const t = audio.currentTime + 0.4;
             let best: LineTimestamp | null = null;
             for (const s of ts) {
               if (t >= s.start) best = s;
@@ -442,12 +540,7 @@ export function AudioBar() {
             }
             if (best) {
               lastHighlightLine.current = best.line;
-              dispatch({
-                type: "tts:highlight",
-                line: best.line,
-                fromChar: charOffsetRef.current + best.fromChar,
-                toChar: charOffsetRef.current + best.toChar,
-              });
+              dispatch({ type: "tts:highlight", line: best.line });
             }
           }
         });
@@ -458,19 +551,22 @@ export function AudioBar() {
           timestampsRef.current = [];
           lastHighlightLine.current = null;
           dispatch({ type: "tts:highlight-clear" });
+          dispatch({ type: "tts:playback-stop" });
         });
 
         // Set src after listeners are attached, then play
         audio.src = audioUrl;
         await audio.play();
         setState("playing");
+        dispatchPlaybackUpdate();
       } catch (err: any) {
         console.error("[AudioBar]", err);
         setError(err.message || "Playback failed");
         setState("idle");
+        setActivity(null);
       }
     },
-    [content, projectId, model, voiceId, v2Settings, volume, dispatch, cleanup, pollTimestamps]
+    [content, projectId, model, voiceId, v2Settings, volume, dispatch, cleanup, pollTimestamps, dispatchPlaybackUpdate]
   );
 
   // Handle "read from here" triggered from editor
@@ -484,21 +580,24 @@ export function AudioBar() {
     if (state === "paused" && audioRef.current) {
       audioRef.current.play();
       setState("playing");
+      dispatchPlaybackUpdate();
       return;
     }
     playFrom();
-  }, [state, playFrom]);
+  }, [state, playFrom, dispatchPlaybackUpdate]);
 
   const pause = useCallback(() => {
     audioRef.current?.pause();
     setState("paused");
-  }, []);
+    dispatchPlaybackUpdate();
+  }, [dispatchPlaybackUpdate]);
 
   const skipBack15 = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = Math.max(0, audio.currentTime - 15);
-  }, []);
+    dispatchPlaybackUpdate();
+  }, [dispatchPlaybackUpdate]);
 
   const skipNextChunk = useCallback(() => {
     const audio = audioRef.current;
@@ -514,8 +613,9 @@ export function AudioBar() {
     const entry = ts.find((t) => t.line >= nextChunkLine);
     if (entry) {
       audio.currentTime = entry.start;
+      dispatchPlaybackUpdate();
     }
-  }, [content]);
+  }, [content, dispatchPlaybackUpdate]);
 
   const seek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -527,8 +627,9 @@ export function AudioBar() {
         Math.min(1, (e.clientX - rect.left) / rect.width)
       );
       audio.currentTime = ratio * duration;
+      dispatchPlaybackUpdate();
     },
-    [duration]
+    [duration, dispatchPlaybackUpdate]
   );
 
   const fmt = (s: number) => {
@@ -556,6 +657,12 @@ export function AudioBar() {
     }
   }, [voiceId, openFilePath]);
 
+  const regenerate = useCallback(() => {
+    forceRegenRef.current = true;
+    stop();
+    playFrom();
+  }, [stop, playFrom]);
+
   const hasContent = !!content?.trim();
   const isActive = state !== "idle";
   const hasDuration = Number.isFinite(duration) && duration > 0;
@@ -567,7 +674,12 @@ export function AudioBar() {
     <div className="h-16 bg-surface border-t border-border shrink-0 flex items-center px-4 gap-4">
       {/* Left: file info */}
       <div className="flex items-center gap-3 w-56 min-w-0">
-        <AlbumArt text={content || ""} />
+        <div className="relative">
+          <AlbumArt text={content || ""} />
+          {activity && (
+            <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent activity-pulse" />
+          )}
+        </div>
         <div className="min-w-0">
           <div className="text-sm text-text font-medium truncate">
             {fileName}
@@ -580,6 +692,8 @@ export function AudioBar() {
               >
                 Error &middot; Click to dismiss
               </button>
+            ) : activity ? (
+              <span className="text-accent">{activity}</span>
             ) : (
               <span className="text-text-muted">
                 {currentVoice?.name ?? "Rachel"} &middot;{" "}
@@ -670,7 +784,7 @@ export function AudioBar() {
             className="flex-1 h-1 bg-border/50 rounded-full cursor-pointer group relative"
             onClick={seek}
           >
-            {isActive && !hasDuration ? (
+            {state === "loading" ? (
               <div className="h-full w-full overflow-hidden rounded-full">
                 <div
                   className="h-full w-1/3 bg-accent rounded-full"
@@ -854,6 +968,23 @@ export function AudioBar() {
                   v2 Classic
                 </button>
               </div>
+
+              {/* Regenerate */}
+              <button
+                onClick={() => {
+                  setShowSettings(false);
+                  regenerate();
+                }}
+                disabled={!hasContent}
+                className="w-full text-xs py-1.5 px-2 rounded-md bg-surface-alt text-text-muted hover:text-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-3 flex items-center justify-center gap-1.5"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 4v6h6" />
+                  <path d="M23 20v-6h-6" />
+                  <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" />
+                </svg>
+                Regenerate audio
+              </button>
 
               {model === "v3" && (
                 <p className="text-[10px] text-text-muted leading-relaxed">

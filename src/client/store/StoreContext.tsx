@@ -8,7 +8,7 @@ import {
 } from "react";
 import { WorkspaceStore } from "./store.js";
 import { useAuth } from "../context/AuthContext.js";
-import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession, ProjectSettings } from "./types.js";
+import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession, ProjectSettings, TtsPlayback } from "./types.js";
 
 const StoreContext = createContext<WorkspaceStore | null>(null);
 
@@ -108,8 +108,12 @@ export function useStoreDispatch(): (action: StoreAction) => void {
   return store.dispatch;
 }
 
-export function useHighlight(): { fromLine: number; toLine: number; fromChar?: number; toChar?: number } | null {
+export function useHighlight(): { fromLine: number; toLine: number } | null {
   return useSelector((s) => s.highlight);
+}
+
+export function useTtsPlayback(): TtsPlayback | null {
+  return useSelector((s) => s.ttsPlayback);
 }
 
 export function useTtsFromLine(): number | null {

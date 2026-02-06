@@ -249,6 +249,7 @@ interface TtsRequest {
   voiceId?: string;
   model?: "v2" | "v3";
   lineOffset?: number; // 1-based absolute line number where this text starts
+  force?: boolean; // skip cache, regenerate audio
   stability?: number;
   similarityBoost?: number;
   style?: number;
@@ -303,7 +304,7 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
   }
 
   const body = await c.req.json<TtsRequest>();
-  const { text, voiceId, model = "v3", lineOffset = 1 } = body;
+  const { text, voiceId, model = "v3", lineOffset = 1, force = false } = body;
 
   if (!text?.trim()) {
     return c.json({ error: "Text is required" }, 400);
@@ -326,6 +327,13 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
   const filename = makeCacheFilename(originalText, model, voice, v2Settings);
   const dir = await ensureTtsDir(projectId);
   const cachePath = join(dir, filename);
+
+  // Force regeneration: delete cached files
+  if (force) {
+    const tsPath = cachePath.replace(/\.mp3$/, ".ts.json");
+    await fs.unlink(cachePath).catch(() => {});
+    await fs.unlink(tsPath).catch(() => {});
+  }
 
   // Check disk cache
   try {
