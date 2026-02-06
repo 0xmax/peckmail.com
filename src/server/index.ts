@@ -29,12 +29,40 @@ import { join } from "path";
 
 const app = new Hono();
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+const ASSET_VERSION =
+  process.env.FLY_IMAGE_REF ||
+  process.env.RELEASE_VERSION ||
+  Date.now().toString();
+
+function setNoCacheHeaders(c: any) {
+  c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+  c.header("Pragma", "no-cache");
+  c.header("Expires", "0");
+}
 
 // --- Static files ---
 app.use("/assets/*", serveStatic({ root: "dist/public" }));
-app.get("/app.js", serveStatic({ path: "dist/public/app.js" }));
-app.get("/app.js.map", serveStatic({ path: "dist/public/app.js.map" }));
-app.get("/style.css", serveStatic({ path: "dist/public/style.css" }));
+app.get(
+  "/app.js",
+  serveStatic({
+    path: "dist/public/app.js",
+    onFound: (_path, c) => setNoCacheHeaders(c),
+  })
+);
+app.get(
+  "/app.js.map",
+  serveStatic({
+    path: "dist/public/app.js.map",
+    onFound: (_path, c) => setNoCacheHeaders(c),
+  })
+);
+app.get(
+  "/style.css",
+  serveStatic({
+    path: "dist/public/style.css",
+    onFound: (_path, c) => setNoCacheHeaders(c),
+  })
+);
 
 // --- Share link (public, no auth) ---
 app.get("/s/:token", async (c) => {
@@ -320,6 +348,7 @@ app.get("*", async (c) => {
   let html = await fs.readFile("dist/public/index.html", "utf-8");
   // Inject Supabase config
   html = html
+    .replaceAll("%%ASSET_VERSION%%", ASSET_VERSION)
     .replace("%%SUPABASE_URL%%", process.env.SUPABASE_URL || "")
     .replace("%%SUPABASE_ANON_KEY%%", process.env.SUPABASE_ANON_KEY || "");
   return c.html(html);
@@ -346,7 +375,7 @@ function sharePageHtml(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${fileName} — Perchpad</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
   <style>
     body { background: #faf5ff; margin: 0; padding: 2rem; font-family: system-ui, -apple-system, sans-serif; }
     .share-container { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 1rem; padding: 2rem; border: 1px solid #e8dff0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
