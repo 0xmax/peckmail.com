@@ -6,7 +6,7 @@ import type { WebSocket } from "ws";
 import { PROJECTS_DIR, safePath } from "./files.js";
 import { broadcast, sendTo } from "./ws.js";
 import * as fileOps from "./fileOps.js";
-import { getProjectMemberEmails, supabaseAdmin } from "./db.js";
+import { getProjectMemberEmails, getProjectMembers, getProjectEmail, supabaseAdmin } from "./db.js";
 import { sendEmail } from "./email.js";
 
 const anthropic = new Anthropic();
@@ -559,6 +559,16 @@ const tools: Anthropic.Tool[] = [
       required: ["to", "subject", "body"],
     },
   },
+  {
+    name: "get_workspace_info",
+    description:
+      "Get information about the current workspace including its name, email address, and list of members with their names and emails.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
 ] as Anthropic.Tool[];
 
 // Recursively collect all file paths under a directory (excluding hidden dirs)
@@ -946,6 +956,39 @@ async function executeTool(
         return `Email sent to ${recipient}`;
       } catch (err: any) {
         return `Error: Could not send email — ${err.message || "unknown error"}`;
+      }
+    }
+
+    case "get_workspace_info": {
+      try {
+        const [email, members] = await Promise.all([
+          getProjectEmail(projectId),
+          getProjectMembers(projectId),
+        ]);
+        // Look up emails for each member
+        const memberDetails = await Promise.all(
+          members.map(async (m) => {
+            const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(m.user_id);
+            return {
+              name: m.profiles?.display_name || user?.user_metadata?.full_name || null,
+              email: user?.email || null,
+              role: m.role,
+            };
+          })
+        );
+        // Get project name from the projects table
+        const { data: project } = await supabaseAdmin
+          .from("projects")
+          .select("name")
+          .eq("id", projectId)
+          .single();
+        return JSON.stringify({
+          name: project?.name || "Unknown",
+          email: email || "Not assigned",
+          members: memberDetails,
+        }, null, 2);
+      } catch (err: any) {
+        return `Error: Could not fetch workspace info — ${err.message || "unknown error"}`;
       }
     }
 
