@@ -15,6 +15,7 @@ import {
   useProjectSettings,
   useTtsPlayback,
 } from "../store/StoreContext.js";
+import { Play } from "@phosphor-icons/react";
 
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
@@ -374,9 +375,7 @@ export function Editor() {
               setCtxMenu(null);
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-              <path d="M4.5 2v12l9-6z" />
-            </svg>
+            <Play size={14} weight="fill" className="shrink-0" />
             Read from line {ctxMenu.line}
           </button>
         </div>

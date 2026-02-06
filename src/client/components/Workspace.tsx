@@ -16,6 +16,7 @@ import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { useAuth } from "../context/AuthContext.js";
+import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, GearSix } from "@phosphor-icons/react";
 
 const MODE_PREVIEW = "preview";
 const MODE_EDIT = "edit";
@@ -107,18 +108,18 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             onClick={onBack}
             className="text-text-muted hover:text-text transition-colors text-sm"
           >
-            ← Back
+            <ArrowLeft size={14} weight="bold" className="inline" /> Back
           </button>
           <div className="w-px h-5 bg-border" />
           <button
             onClick={() => setShowSidebar(!showSidebar)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+            className={`text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
               showSidebar
                 ? "bg-surface-alt text-accent"
                 : "text-text-muted hover:text-text hover:bg-surface-alt"
             }`}
           >
-            Pages
+            <Sidebar size={15} /> Pages
           </button>
           <div className="w-px h-5 bg-border" />
           <span className="text-sm font-medium text-text">
@@ -161,35 +162,24 @@ export function Workspace({ onBack }: { onBack: () => void }) {
           )}
           <button
             onClick={() => setShowRevisions(!showRevisions)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+            className={`text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
               showRevisions
                 ? "bg-surface-alt text-accent"
                 : "text-text-muted hover:text-text hover:bg-surface-alt"
             }`}
           >
-            History
+            <ClockCounterClockwise size={15} /> History
           </button>
           <button
             onClick={() => setShowChat(!showChat)}
-            className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
+            className={`text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
               showChat
                 ? "bg-surface-alt text-accent"
                 : "text-text-muted hover:text-text hover:bg-surface-alt"
             }`}
           >
-            Assistant
+            <ChatCircle size={15} /> Assistant
           </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="text-sm px-2.5 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
-            title="Settings"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6.86 1.45a1.2 1.2 0 0 1 2.28 0l.27.83a1.2 1.2 0 0 0 1.52.72l.82-.3a1.2 1.2 0 0 1 1.61 1.14l-.04.87a1.2 1.2 0 0 0 1.02 1.22l.86.13a1.2 1.2 0 0 1 .79 1.97l-.58.65a1.2 1.2 0 0 0 0 1.59l.58.65a1.2 1.2 0 0 1-.79 1.97l-.86.13a1.2 1.2 0 0 0-1.02 1.22l.04.87a1.2 1.2 0 0 1-1.61 1.14l-.82-.3a1.2 1.2 0 0 0-1.52.72l-.27.83a1.2 1.2 0 0 1-2.28 0l-.27-.83a1.2 1.2 0 0 0-1.52-.72l-.82.3A1.2 1.2 0 0 1 2.64 14l.04-.87a1.2 1.2 0 0 0-1.02-1.22l-.86-.13a1.2 1.2 0 0 1-.79-1.97l.58-.65a1.2 1.2 0 0 0 0-1.59L.01 6.92a1.2 1.2 0 0 1 .79-1.97l.86-.13a1.2 1.2 0 0 0 1.02-1.22L2.64 2.73a1.2 1.2 0 0 1 1.61-1.14l.82.3a1.2 1.2 0 0 0 1.52-.72l.27-.83Z" />
-              <circle cx="8" cy="8" r="2.5" />
-            </svg>
-          </button>
-          <div className="w-px h-5 bg-border" />
           <UserAvatar
             src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
             name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
@@ -207,6 +197,15 @@ export function Workspace({ onBack }: { onBack: () => void }) {
             style={{ width: sidebarWidth }}
           >
             <FileTree />
+            <div className="border-t border-border px-3 py-2 shrink-0">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="flex items-center gap-2 w-full text-sm px-2 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
+              >
+                <GearSix size={15} />
+                Settings
+              </button>
+            </div>
           </div>
         )}
 
@@ -221,7 +220,7 @@ export function Workspace({ onBack }: { onBack: () => void }) {
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <div className="text-4xl mb-3">✍️</div>
+                <img src="/assets/logo.png" alt="Perchpad" className="h-10 w-auto mx-auto mb-3 opacity-40" />
                 <p className="text-text-muted">
                   Select a page to start editing
                 </p>

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../server/index.ts";
 
 @theme {
   --color-bg: #faf6f1;
@@ -7,12 +8,20 @@
   --color-accent: #c4956a;
   --color-accent-hover: #b07d52;
   --color-text: #3d3229;
+  --color-text-body: #544840;
+  --color-text-secondary: #6b5d50;
   --color-text-muted: #9a8b7a;
   --color-border: #e8ddd0;
+  --color-dark: #2a211a;
   --color-chat-user: #e5eed8;
   --color-chat-ai: #f5ebe0;
   --color-success: #81c784;
   --color-danger: #e57373;
+  --color-footer-bg: #1a1510;
+  --color-footer-text: #a89a8c;
+  --color-footer-muted: #7a6e62;
+  --color-footer-dim: #5a4e42;
+  --font-heading: 'Playfair Display', Georgia, serif;
 }
 
 /* Base styles */

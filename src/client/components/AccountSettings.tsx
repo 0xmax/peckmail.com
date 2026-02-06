@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { supabase } from "../lib/supabase.js";
 import type { UserPreferences } from "../store/types.js";
+import { Monitor, Terminal, Play, Stop } from "@phosphor-icons/react";
 
 interface ApiKey {
   id: string;
@@ -253,10 +254,7 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
             <div className="bg-surface-alt rounded-lg p-4 space-y-2">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent">
-                    <rect x="2" y="3" width="20" height="14" rx="2" />
-                    <path d="M8 21h8M12 17v4" />
-                  </svg>
+                  <Monitor size={12} className="text-accent" />
                 </div>
                 <span className="text-sm font-medium text-text">Claude Desktop</span>
               </div>
@@ -269,10 +267,7 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
             <div className="bg-surface-alt rounded-lg p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent">
-                    <polyline points="4 17 10 11 4 5" />
-                    <line x1="12" y1="19" x2="20" y2="19" />
-                  </svg>
+                  <Terminal size={12} className="text-accent" />
                 </div>
                 <span className="text-sm font-medium text-text">Claude Code</span>
               </div>
@@ -424,13 +419,9 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
                       title={previewingVoice === v.id ? "Stop preview" : `Preview ${v.name}`}
                     >
                       {previewingVoice === v.id ? (
-                        <svg width="10" height="10" viewBox="0 0 8 8" fill="currentColor">
-                          <rect x="1" y="1" width="6" height="6" rx="1" />
-                        </svg>
+                        <Stop size={10} weight="fill" />
                       ) : (
-                        <svg width="10" height="10" viewBox="0 0 8 8" fill="currentColor">
-                          <path d="M2 1v6l5-3z" />
-                        </svg>
+                        <Play size={10} weight="fill" />
                       )}
                     </span>
                   </button>

@@ -1,3 +1,6 @@
+import { Eye, PencilSimple, FilePlus, ListBullets, Wrench } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+
 interface ToolUse {
   tool: string;
   input: any;
@@ -25,18 +28,19 @@ function toolLabel(tool: string, input: any): string {
   }
 }
 
-function toolIcon(tool: string): string {
+function toolIcon(tool: string): ReactNode {
+  const props = { size: 14, className: "inline shrink-0" };
   switch (tool) {
     case "read_file":
-      return "👀";
+      return <Eye {...props} />;
     case "edit_file":
-      return "✏️";
+      return <PencilSimple {...props} />;
     case "create_file":
-      return "📝";
+      return <FilePlus {...props} />;
     case "list_files":
-      return "📋";
+      return <ListBullets {...props} />;
     default:
-      return "🔧";
+      return <Wrench {...props} />;
   }
 }
 

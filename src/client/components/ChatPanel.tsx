@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatState, useStoreDispatch } from "../store/StoreContext.js";
 import { ChatMessage } from "./ChatMessage.js";
+import { Archive, Plus, Lightbulb, PaperPlaneRight, ChatCircle } from "@phosphor-icons/react";
 
 export function ChatPanel() {
   const { sessions, currentSessionId, messages, streaming, error } = useChatState();
@@ -47,18 +48,14 @@ export function ChatPanel() {
             className="text-xs text-text-muted hover:text-text p-1 transition-colors"
             title="Chat history"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
+            <Archive size={16} />
           </button>
           <button
             onClick={() => dispatch({ type: "chat:new-session" })}
             className="text-xs text-text-muted hover:text-text p-1 transition-colors"
             title="New chat"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <Plus size={16} />
           </button>
         </div>
       </div>
@@ -101,7 +98,7 @@ export function ChatPanel() {
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-8">
-            <div className="text-3xl mb-2">💬</div>
+            <ChatCircle size={32} weight="duotone" className="mx-auto mb-2 text-text-muted" />
             <p className="text-text-muted text-sm">
               Ask me anything about your writing!
             </p>
@@ -165,18 +162,14 @@ export function ChatPanel() {
             }`}
             title={thinking ? "Thinking enabled" : "Enable thinking"}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
+            <Lightbulb size={16} weight={thinking ? "duotone" : "regular"} />
           </button>
           <button
             onClick={handleSend}
             disabled={!input.trim() || streaming}
             className="px-3 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-40 transition-colors shrink-0"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
+            <PaperPlaneRight size={16} weight="fill" />
           </button>
         </div>
       </div>

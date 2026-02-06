@@ -741,83 +741,8 @@ function landingPageHtml(): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Perchpad — A collaborative writing workspace</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #faf6f1; font-family: system-ui, -apple-system, sans-serif; color: #3d3229; line-height: 1.6; }
-    a { color: #c4956a; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    /* Nav */
-    .nav { display: flex; align-items: center; justify-content: space-between; max-width: 1100px; margin: 0 auto; padding: 1.25rem 2rem; }
-    .nav-logo { display: flex; align-items: center; gap: 0.5rem; font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; font-weight: 700; color: #3d3229; text-decoration: none; }
-    .nav-logo:hover { text-decoration: none; }
-    .nav-logo img { height: 1.75rem; width: auto; }
-    .nav .cta { padding: 0.5rem 1.35rem; font-size: 0.9rem; }
-
-    /* Hero */
-    .hero { max-width: 1100px; margin: 0 auto; padding: 4rem 2rem 0; }
-    .hero-text { display: flex; align-items: center; gap: 3rem; margin-bottom: 3rem; }
-    .hero-heading { flex: 1.2; }
-    .hero h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 3.5rem; font-weight: 800; line-height: 1.1; color: #3d3229; letter-spacing: -0.02em; }
-    .hero-desc { flex: 1; }
-    .hero p { font-size: 1.1rem; color: #544840; line-height: 1.7; }
-    .cta { display: inline-block; background: #2a211a; color: #fff; padding: 0.8rem 2.25rem; border-radius: 0.5rem; font-size: 1.05rem; font-weight: 600; transition: opacity 0.15s; }
-    .cta:hover { opacity: 0.85; text-decoration: none; }
-    .nav-signin { font-size: 0.95rem; color: #6b5d50; font-weight: 500; transition: color 0.15s; }
-    .nav-signin:hover { color: #3d3229; text-decoration: none; }
-    .hero-img { width: 100%; }
-    .hero-img img { width: 100%; border-radius: 1.25rem; display: block; }
-
-    /* Features */
-    .features { max-width: 1100px; margin: 0 auto; padding: 2rem 2rem 3rem; }
-    .features h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.75rem; text-align: center; margin-bottom: 2rem; color: #3d3229; }
-    .features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
-    .feature-card { background: #fff; border: 1px solid #e8ddd0; border-radius: 1rem; padding: 1.75rem; box-shadow: 0 2px 8px rgb(0 0 0 / 0.04); }
-    .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    .feature-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: #3d3229; }
-    .feature-card p { font-size: 0.95rem; color: #6b5d50; line-height: 1.65; }
-
-    /* Sub-features */
-    .sub-features { max-width: 1100px; margin: 0 auto; padding: 0 2rem 3rem; }
-    .sub-features h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; text-align: center; margin-bottom: 1.5rem; color: #544840; font-weight: 600; }
-    .sub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-    .sub-item { text-align: center; padding: 1.25rem 1rem; }
-    .sub-item svg { width: 1.25rem; height: 1.25rem; stroke: #6b5d50; margin-bottom: 0.5rem; }
-    .sub-item h3 { font-size: 0.95rem; color: #3d3229; margin-bottom: 0.35rem; font-weight: 600; }
-    .sub-item p { font-size: 0.85rem; color: #6b5d50; line-height: 1.55; }
-
-    /* FAQ */
-    .faq { max-width: 800px; margin: 0 auto; padding: 2rem 2rem 3rem; }
-    .faq h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.75rem; text-align: center; margin-bottom: 2rem; color: #3d3229; }
-    .faq-item { background: #fff; border: 1px solid #e8ddd0; border-radius: 1rem; padding: 1.5rem 2rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgb(0 0 0 / 0.04); }
-    .faq-item h3 { font-size: 1.05rem; margin-bottom: 0.5rem; color: #c4956a; }
-    .faq-item p { font-size: 0.95rem; color: #3d3229; line-height: 1.7; }
-    .faq-item code { background: #f5ebe0; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
-
-    /* Footer */
-    .footer { background: #1a1510; color: #a89a8c; padding: 4rem 2rem 2.5rem; }
-    .footer-inner { max-width: 1100px; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 4rem; }
-    .footer-brand { font-family: 'Playfair Display', Georgia, serif; font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem; }
-    .footer-tagline { font-size: 0.85rem; color: #7a6e62; max-width: 280px; line-height: 1.5; }
-    .footer-links { display: flex; gap: 4rem; }
-    .footer-col h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6e62; margin-bottom: 0.75rem; font-weight: 600; }
-    .footer-col a { display: block; font-size: 0.9rem; color: #a89a8c; margin-bottom: 0.5rem; transition: color 0.15s; }
-    .footer-col a:hover { color: #fff; text-decoration: none; }
-    .footer-bottom { max-width: 1100px; margin: 2.5rem auto 0; padding-top: 1.5rem; border-top: 1px solid #2a211a; font-size: 0.8rem; color: #5a4e42; }
-
-    @media (max-width: 640px) {
-      .hero { padding: 2rem 1.5rem 0; }
-      .hero-text { flex-direction: column; gap: 1.25rem; margin-bottom: 2rem; }
-      .hero h1 { font-size: 2.25rem; }
-      .features-grid { grid-template-columns: 1fr; }
-      .sub-grid { grid-template-columns: repeat(2, 1fr); }
-      .nav { padding: 1rem 1.5rem; }
-      .faq { padding: 2rem 1.5rem; }
-      .footer-inner { flex-direction: column; gap: 2rem; }
-      .footer-links { gap: 2rem; }
-    }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
   <script>
     try {
       var sb = JSON.parse(localStorage.getItem('sb-' + location.hostname + '-auth-token') || '{}');
@@ -834,152 +759,153 @@ function landingPageHtml(): string {
     } catch(e) {}
   </script>
 </head>
-<body>
-  <nav class="nav">
-    <a href="/" class="nav-logo"><img src="/assets/logo.png" alt="">Perchpad</a>
-    <div style="display:flex;align-items:center;gap:1.25rem">
-      <a href="/login" class="nav-signin">Sign In</a>
-      <a href="/login" class="cta">Get Started</a>
+<body class="bg-bg text-text">
+
+  <nav class="flex items-center justify-between max-w-[1100px] mx-auto px-6 py-4 sm:px-8 sm:py-5">
+    <a href="/" class="flex items-center gap-2 font-heading text-[1.35rem] font-bold text-text">
+      <img src="/assets/logo.png" alt="" class="h-7 w-auto">Perchpad
+    </a>
+    <div class="flex items-center gap-5">
+      <a href="/login" class="text-[0.95rem] text-text-secondary font-medium hover:text-text transition-colors">Sign In</a>
+      <a href="/login" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Get Started</a>
     </div>
   </nav>
 
-  <section class="hero">
-    <div class="hero-text">
-      <div class="hero-heading">
-        <h1>A writing workspace that thinks with you</h1>
+  <section class="max-w-[1100px] mx-auto px-6 pt-8 sm:px-8 sm:pt-16">
+    <div class="flex flex-col gap-5 mb-8 sm:flex-row sm:items-center sm:gap-12 sm:mb-12">
+      <div class="sm:flex-[1.2]">
+        <h1 class="font-heading text-4xl sm:text-[3.5rem] font-extrabold leading-[1.1] text-text tracking-tight">A writing workspace that thinks with you</h1>
       </div>
-      <div class="hero-desc">
-        <p>Organize projects, write in markdown, manage data in tables, and collaborate in real time — with a built-in AI assistant that understands your files.</p>
+      <div class="sm:flex-1">
+        <p class="text-lg text-text-body leading-relaxed">Organize projects, write in markdown, manage data in tables, and collaborate in real time — with a built-in AI assistant that understands your files.</p>
       </div>
     </div>
-    <div class="hero-img">
-      <picture>
-        <source media="(max-width: 640px)" srcset="/assets/hero-mobile.jpg">
-        <img src="/assets/hero.jpg" alt="A person writing under a tree with a bird perched on a branch" loading="eager">
-      </picture>
-    </div>
+    <picture>
+      <source media="(max-width: 640px)" srcset="/assets/hero-mobile.jpg">
+      <img src="/assets/hero.jpg" alt="A person writing under a tree with a bird perched on a branch" loading="eager" class="w-full rounded-2xl block">
+    </picture>
   </section>
 
-  <section class="features">
-    <h2>A calm place to get things done</h2>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon">&#128038;</div>
-        <h3>A Smart Little Bird</h3>
-        <p>A friendly assistant that lives in your workspace. It can read your files, help you draft, organize your thoughts, and answer questions — like a companion that quietly knows the whole project.</p>
+  <section class="max-w-[1100px] mx-auto px-6 pt-8 pb-12 sm:px-8">
+    <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">A calm place to get things done</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
+        <div class="text-2xl mb-2">&#128038;</div>
+        <h3 class="text-[1.1rem] mb-2 text-text">A Smart Little Bird</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">A friendly assistant that lives in your workspace. It can read your files, help you draft, organize your thoughts, and answer questions — like a companion that quietly knows the whole project.</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">&#9998;</div>
-        <h3>Write Together</h3>
-        <p>Invite your family, your team, or a friend. Everyone sees changes as they happen — no emailing files back and forth, no version confusion. Just open the same project and go.</p>
+      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
+        <div class="text-2xl mb-2">&#9998;</div>
+        <h3 class="text-[1.1rem] mb-2 text-text">Write Together</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Invite your family, your team, or a friend. Everyone sees changes as they happen — no emailing files back and forth, no version confusion. Just open the same project and go.</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">&#128220;</div>
-        <h3>Hear the Chirps</h3>
-        <p>Send an email to your workspace and the bird takes care of it — reading what you sent, updating your documents, filing things where they belong. You stay focused while it works in the background.</p>
+      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
+        <div class="text-2xl mb-2">&#128220;</div>
+        <h3 class="text-[1.1rem] mb-2 text-text">Hear the Chirps</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Send an email to your workspace and the bird takes care of it — reading what you sent, updating your documents, filing things where they belong. You stay focused while it works in the background.</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">&#128066;</div>
-        <h3>It Listens to Your Docs</h3>
-        <p>The bird watches your files as you write. It knows what changed, what you're working on, and what you might need next. Ask it anything about your project — it's already paying attention.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="sub-features">
-    <h2>And a few more things you might like</h2>
-    <div class="sub-grid">
-      <div class="sub-item">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-        <h3>Markdown-Based</h3>
-        <p>Write in plain markdown with live preview. No proprietary formats — your files are always yours.</p>
-      </div>
-      <div class="sub-item">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
-        <h3>Never Lose a Thing</h3>
-        <p>Auto-saves every minute with full version history. Go back to any point, no manual saving needed.</p>
-      </div>
-      <div class="sub-item">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
-        <h3>Claude Integration</h3>
-        <p>Connect via MCP from Claude Desktop or Cursor. Manage your projects from any compatible AI tool.</p>
-      </div>
-      <div class="sub-item">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <h3>Teams</h3>
-        <p>Invite collaborators with roles — owners, editors, or viewers. Everyone gets the right level of access.</p>
-      </div>
-      <div class="sub-item">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-        <h3>Notifications</h3>
-        <p>Know when something changes. File updates, new collaborators, and incoming emails — all surfaced quietly.</p>
-      </div>
-      <div class="sub-item">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
-        <h3>Change Tracking</h3>
-        <p>Browse diffs, see who changed what, and review the full history of any file at any time.</p>
+      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
+        <div class="text-2xl mb-2">&#128066;</div>
+        <h3 class="text-[1.1rem] mb-2 text-text">It Listens to Your Docs</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">The bird watches your files as you write. It knows what changed, what you're working on, and what you might need next. Ask it anything about your project — it's already paying attention.</p>
       </div>
     </div>
   </section>
 
-  <section class="faq" id="faq">
-    <h2>Under the Hood</h2>
-    <div class="faq-item">
-      <h3>What is Perchpad?</h3>
-      <p>A collaborative writing workspace where every project is a git repository. You write in markdown, manage data in CSV tables, and get help from a built-in AI assistant powered by Claude. Everything syncs in real time.</p>
-    </div>
-    <div class="faq-item">
-      <h3>What file formats are supported?</h3>
-      <p>Markdown (<code>.md</code>) with live preview, and CSV (<code>.csv</code>) rendered as editable tables with sticky headers. Markdown supports syntax highlighting for code blocks.</p>
-    </div>
-    <div class="faq-item">
-      <h3>How does version control work?</h3>
-      <p>Every project is a real git repository. Changes auto-commit every 60 seconds. You can <code>git clone</code>, <code>git push</code>, and <code>git pull</code> with standard tools — your work is never locked in.</p>
-    </div>
-    <div class="faq-item">
-      <h3>How does the email integration work?</h3>
-      <p>Each workspace gets a unique email address. Send content there and the AI processes it into your project — creating files, updating documents, or organizing things based on what you sent. Configure it with an <code>AGENTS.md</code> file.</p>
-    </div>
-    <div class="faq-item">
-      <h3>Can I connect Claude Desktop or Cursor?</h3>
-      <p>Yes. Perchpad includes a Model Context Protocol (MCP) server, so you can connect from Claude Desktop, Cursor, or any MCP-compatible client to manage your projects directly.</p>
-    </div>
-    <div class="faq-item">
-      <h3>How does sharing work?</h3>
-      <p>Invite people by email with role-based access — owners, editors, or viewers. You can also share individual files via public links. All changes sync instantly for everyone.</p>
-    </div>
-    <div class="faq-item">
-      <h3>Can I use it for reading and research?</h3>
-      <p>Absolutely. Create playlists of documents — reading lists, paper collections, study notes — and work through them at your own pace. The bird can summarize, annotate, and help you make sense of what you're reading.</p>
-    </div>
-    <div class="faq-item">
-      <h3>Is my data private?</h3>
-      <p>Yes. Projects are isolated per user and never shared unless you explicitly invite someone. Your files are stored as git repositories and are fully yours — clone them anytime.</p>
+  <section class="max-w-[1100px] mx-auto px-6 pb-12 sm:px-8">
+    <h2 class="font-heading text-[1.35rem] text-center mb-6 text-text-body font-semibold">And a few more things you might like</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Markdown-Based</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Write in plain markdown with live preview. No proprietary formats — your files are always yours.</p>
+      </div>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Never Lose a Thing</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Auto-saves every minute with full version history. Go back to any point, no manual saving needed.</p>
+      </div>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Claude Integration</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Connect via MCP from Claude Desktop or Cursor. Manage your projects from any compatible AI tool.</p>
+      </div>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Teams</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Invite collaborators with roles — owners, editors, or viewers. Everyone gets the right level of access.</p>
+      </div>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Notifications</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Know when something changes. File updates, new collaborators, and incoming emails — all surfaced quietly.</p>
+      </div>
+      <div class="text-center px-4 py-5">
+        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Change Tracking</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Browse diffs, see who changed what, and review the full history of any file at any time.</p>
+      </div>
     </div>
   </section>
 
-  <footer class="footer">
-    <div class="footer-inner">
+  <section id="faq" class="max-w-[800px] mx-auto px-6 pt-8 pb-12 sm:px-8">
+    <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">Under the Hood</h2>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">What is Perchpad?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">A collaborative writing workspace where every project is a git repository. You write in markdown, manage data in CSV tables, and get help from a built-in AI assistant powered by Claude. Everything syncs in real time.</p>
+    </div>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">What file formats are supported?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Markdown (<code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">.md</code>) with live preview, and CSV (<code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">.csv</code>) rendered as editable tables with sticky headers. Markdown supports syntax highlighting for code blocks.</p>
+    </div>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">How does version control work?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Every project is a real git repository. Changes auto-commit every 60 seconds. You can <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">git clone</code>, <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">git push</code>, and <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">git pull</code> with standard tools — your work is never locked in.</p>
+    </div>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">How does the email integration work?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Each workspace gets a unique email address. Send content there and the AI processes it into your project — creating files, updating documents, or organizing things based on what you sent. Configure it with an <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">AGENTS.md</code> file.</p>
+    </div>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">Can I connect Claude Desktop or Cursor?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Perchpad includes a Model Context Protocol (MCP) server, so you can connect from Claude Desktop, Cursor, or any MCP-compatible client to manage your projects directly.</p>
+    </div>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">How does sharing work?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Invite people by email with role-based access — owners, editors, or viewers. You can also share individual files via public links. All changes sync instantly for everyone.</p>
+    </div>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">Can I use it for reading and research?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Absolutely. Create playlists of documents — reading lists, paper collections, study notes — and work through them at your own pace. The bird can summarize, annotate, and help you make sense of what you're reading.</p>
+    </div>
+    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
+      <h3 class="text-[1.05rem] mb-2 text-accent">Is my data private?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Projects are isolated per user and never shared unless you explicitly invite someone. Your files are stored as git repositories and are fully yours — clone them anytime.</p>
+    </div>
+  </section>
+
+  <footer class="bg-footer-bg text-footer-text pt-16 px-6 pb-10 sm:px-8">
+    <div class="max-w-[1100px] mx-auto flex flex-col gap-8 sm:flex-row sm:justify-between sm:items-start sm:gap-16">
       <div>
-        <div class="footer-brand">Perchpad</div>
-        <div class="footer-tagline">A calm writing workspace with a smart little bird.</div>
+        <div class="font-heading text-xl font-bold text-white mb-2">Perchpad</div>
+        <div class="text-[0.85rem] text-footer-muted max-w-[280px] leading-relaxed">A calm writing workspace with a smart little bird.</div>
       </div>
-      <div class="footer-links">
-        <div class="footer-col">
-          <h4>Product</h4>
-          <a href="/login">Sign In</a>
-          <a href="/login">Get Started</a>
-          <a href="#faq">FAQ</a>
+      <div class="flex gap-8 sm:gap-16">
+        <div>
+          <h4 class="text-xs uppercase tracking-wider text-footer-muted mb-3 font-semibold">Product</h4>
+          <a href="/login" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Sign In</a>
+          <a href="/login" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Get Started</a>
+          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">FAQ</a>
         </div>
-        <div class="footer-col">
-          <h4>Features</h4>
-          <a href="#faq">AI Assistant</a>
-          <a href="#faq">Collaboration</a>
-          <a href="#faq">Version Control</a>
+        <div>
+          <h4 class="text-xs uppercase tracking-wider text-footer-muted mb-3 font-semibold">Features</h4>
+          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">AI Assistant</a>
+          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Collaboration</a>
+          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Version Control</a>
         </div>
       </div>
     </div>
-    <div class="footer-bottom">&copy; 2026 Perchpad</div>
+    <div class="max-w-[1100px] mx-auto mt-10 pt-6 border-t border-dark text-[0.8rem] text-footer-dim">&copy; 2026 Perchpad</div>
   </footer>
 ${isDev ? `<script>
 (function(){var t;function c(){var ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=function(){if(t){location.reload()}};ws.onclose=function(){t=true;setTimeout(c,500)}}c()})();

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api.js";
+import { ClockCounterClockwise } from "@phosphor-icons/react";
 
 interface Revision {
   hash: string;
@@ -82,7 +83,7 @@ export function Revisions({ projectId }: { projectId: string }) {
           </div>
         ) : revisions.length === 0 ? (
           <div className="text-center py-8">
-            <div className="text-3xl mb-2">📜</div>
+            <ClockCounterClockwise size={32} weight="duotone" className="mx-auto mb-2 text-text-muted" />
             <p className="text-text-muted text-sm">No history yet</p>
             <p className="text-text-muted text-xs mt-1">
               Changes are saved automatically

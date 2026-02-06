@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../lib/api.js";
+import { Check } from "@phosphor-icons/react";
 
 interface GitStatus {
   hasChanges: boolean;
@@ -86,9 +87,7 @@ export function SaveIndicator({ projectId }: { projectId: string }) {
     <div className="relative flex items-center">
       {justSaved ? (
         <span className="text-xs text-success flex items-center gap-1">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
+          <Check size={12} weight="bold" />
           Saved
         </span>
       ) : (

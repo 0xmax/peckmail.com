@@ -7,7 +7,7 @@ export function GitPanel({ projectId }: { projectId: string }) {
   const host = window.location.host;
   const origin = window.location.origin;
   const keyDisplay = defaultApiKey || "pp_YOUR_KEY";
-  const cloneCmd = `git clone https://${keyDisplay}@${host}/git/${projectId}`;
+  const cloneCmd = `git clone https://x-token:${keyDisplay}@${host}/git/${projectId}`;
 
   const copy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);

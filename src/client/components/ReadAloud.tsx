@@ -8,6 +8,7 @@ import {
 } from "../store/StoreContext.js";
 import { useAuth } from "../context/AuthContext.js";
 import { supabase } from "../lib/supabase.js";
+import { Rewind, Stop, Pause, Play, SkipForward, DownloadSimple, SpeakerX, SpeakerLow, SpeakerHigh, GearSix, Warning, X, ArrowsClockwise, SpinnerGap } from "@phosphor-icons/react";
 
 // Pastel palette for generative art
 const PASTELS = [
@@ -794,11 +795,7 @@ export function AudioBar() {
             className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             title="Back 15 seconds"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 4v6h6" />
-              <path d="M3.51 15a9 9 0 105.64-11.36L1 10" />
-              <text x="12" y="16" textAnchor="middle" fill="currentColor" stroke="none" fontSize="8" fontWeight="bold">15</text>
-            </svg>
+            <Rewind size={16} />
           </button>
 
           <button
@@ -807,9 +804,7 @@ export function AudioBar() {
             className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             title="Stop"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="3" y="3" width="10" height="10" rx="1.5" />
-            </svg>
+            <Stop size={14} weight="fill" />
           </button>
 
           {state === "playing" ? (
@@ -818,10 +813,7 @@ export function AudioBar() {
               className="w-8 h-8 rounded-full bg-text text-surface flex items-center justify-center hover:scale-105 transition-transform"
               title="Pause"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                <rect x="3" y="2" width="3.5" height="12" rx="1" />
-                <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
-              </svg>
+              <Pause size={14} weight="fill" />
             </button>
           ) : (
             <button
@@ -831,13 +823,9 @@ export function AudioBar() {
               title="Read aloud"
             >
               {state === "loading" ? (
-                <svg width="14" height="14" viewBox="0 0 16 16" className="animate-spin" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="8" cy="8" r="5" strokeDasharray="20" strokeDashoffset="5" strokeLinecap="round" />
-                </svg>
+                <SpinnerGap size={14} className="animate-spin" />
               ) : (
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M4.5 2v12l9-6z" />
-                </svg>
+                <Play size={14} weight="fill" />
               )}
             </button>
           )}
@@ -848,10 +836,7 @@ export function AudioBar() {
             className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             title="Skip to next paragraph"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 2v12l7-6z" />
-              <rect x="11" y="2" width="3" height="12" rx="0.5" />
-            </svg>
+            <SkipForward size={14} weight="fill" />
           </button>
         </div>
 
@@ -902,11 +887,7 @@ export function AudioBar() {
           className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
           title="Download audio"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
+          <DownloadSimple size={16} />
         </button>
         <div className="flex items-center gap-2">
           <button
@@ -915,21 +896,11 @@ export function AudioBar() {
             title={volume > 0 ? "Mute" : "Unmute"}
           >
             {volume === 0 ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <line x1="23" y1="9" x2="17" y2="15" />
-                <line x1="17" y1="9" x2="23" y2="15" />
-              </svg>
+              <SpeakerX size={16} />
             ) : volume < 0.5 ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M15.54 8.46a5 5 0 010 7.07" />
-              </svg>
+              <SpeakerLow size={16} />
             ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
-              </svg>
+              <SpeakerHigh size={16} />
             )}
           </button>
           <input
@@ -949,21 +920,14 @@ export function AudioBar() {
             className={`text-text-muted hover:text-text transition-colors ${showSettings ? "text-accent" : ""}`}
             title="Voice settings"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-            </svg>
+            <GearSix size={16} />
           </button>
 
           {/* Error popup */}
           {error && (
             <div className="absolute right-0 bottom-full mb-2 w-72 bg-surface border border-danger/30 rounded-lg shadow-lg p-4 z-50">
               <div className="flex items-start gap-3">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-danger shrink-0 mt-0.5">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
+                <Warning size={20} className="text-danger shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-text mb-1">Playback Error</div>
                   <div className="text-xs text-text-muted break-words">{error}</div>
@@ -972,10 +936,7 @@ export function AudioBar() {
                   onClick={() => setError(null)}
                   className="text-text-muted hover:text-text transition-colors shrink-0"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <X size={14} />
                 </button>
               </div>
             </div>
@@ -1011,13 +972,9 @@ export function AudioBar() {
                       title={previewingVoice === v.id ? "Stop preview" : `Preview ${v.name}`}
                     >
                       {previewingVoice === v.id ? (
-                        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
-                          <rect x="1" y="1" width="6" height="6" rx="1" />
-                        </svg>
+                        <Stop size={8} weight="fill" />
                       ) : (
-                        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
-                          <path d="M2 1v6l5-3z" />
-                        </svg>
+                        <Play size={8} weight="fill" />
                       )}
                     </span>
                   </button>
@@ -1078,11 +1035,7 @@ export function AudioBar() {
                 disabled={!hasContent}
                 className="w-full text-xs py-1.5 px-2 rounded-md bg-surface-alt text-text-muted hover:text-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-3 flex items-center justify-center gap-1.5"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 4v6h6" />
-                  <path d="M23 20v-6h-6" />
-                  <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" />
-                </svg>
+                <ArrowsClockwise size={12} />
                 Regenerate audio
               </button>
 

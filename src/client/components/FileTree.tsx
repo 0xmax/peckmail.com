@@ -1,12 +1,13 @@
 import { useState, useCallback } from "react";
 import { useTree, useOpenFile, useStoreDispatch, useLoadFileContent } from "../store/StoreContext.js";
 import type { FileNode } from "../store/types.js";
+import { File, Folder, FolderPlus, Plus, CaretRight, Play } from "@phosphor-icons/react";
 
 function FileIcon({ type }: { type: "file" | "directory" }) {
   if (type === "directory") {
-    return <span className="text-accent">📁</span>;
+    return <Folder size={16} weight="duotone" className="text-accent shrink-0" />;
   }
-  return <span className="text-text-muted">📄</span>;
+  return <File size={16} className="text-text-muted shrink-0" />;
 }
 
 function TreeItem({
@@ -50,13 +51,13 @@ function TreeItem({
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         {node.type === "directory" && (
-          <span
-            className={`text-xs text-text-muted transition-transform ${
+          <CaretRight
+            size={12}
+            weight="bold"
+            className={`text-text-muted transition-transform shrink-0 ${
               expanded ? "rotate-90" : ""
             }`}
-          >
-            ▶
-          </span>
+          />
         )}
         <FileIcon type={node.type} />
         <span className="truncate">{displayName}</span>
@@ -168,9 +169,7 @@ export function FileTree() {
             className="text-text-muted hover:text-accent transition-colors p-1"
             title="New page"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <Plus size={16} />
           </button>
           <button
             onClick={() => {
@@ -181,9 +180,7 @@ export function FileTree() {
             className="text-text-muted hover:text-accent transition-colors p-1"
             title="New folder"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-            </svg>
+            <FolderPlus size={16} />
           </button>
         </div>
       </div>
@@ -274,9 +271,7 @@ export function FileTree() {
               }}
               className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-                <path d="M4.5 2v12l9-6z" />
-              </svg>
+              <Play size={14} weight="fill" className="shrink-0" />
               Read aloud
             </button>
           )}
