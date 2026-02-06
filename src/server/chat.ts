@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { promises as fs } from "fs";
-import { join, dirname, relative, basename } from "path";
+import { join, relative, basename } from "path";
 import { v4 as uuidv4 } from "uuid";
 import type { WebSocket } from "ws";
-import { PROJECTS_DIR, safePath, listTree } from "./files.js";
+import { PROJECTS_DIR, safePath } from "./files.js";
 import { broadcast, sendTo } from "./ws.js";
+import * as fileOps from "./fileOps.js";
 
 const anthropic = new Anthropic();
 
@@ -480,6 +481,59 @@ const tools: Anthropic.Tool[] = [
     },
     cache_control: { type: "ephemeral" },
   },
+  {
+    name: "move_file",
+    description:
+      "Move or rename a file or directory. Parent directories of the destination are created automatically.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        from: {
+          type: "string",
+          description: "Current path relative to the project root",
+        },
+        to: {
+          type: "string",
+          description: "New path relative to the project root",
+        },
+      },
+      required: ["from", "to"],
+    },
+  },
+  {
+    name: "copy_file",
+    description:
+      "Copy a file to a new location. Parent directories of the destination are created automatically.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        from: {
+          type: "string",
+          description: "Source file path relative to the project root",
+        },
+        to: {
+          type: "string",
+          description: "Destination file path relative to the project root",
+        },
+      },
+      required: ["from", "to"],
+    },
+  },
+  {
+    name: "delete_file",
+    description:
+      "Delete a file or directory. Directories are deleted recursively.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description: "Path to the file or directory relative to the project root",
+        },
+      },
+      required: ["path"],
+    },
+  },
 ] as Anthropic.Tool[];
 
 // Recursively collect all file paths under a directory (excluding hidden dirs)
@@ -519,9 +573,7 @@ async function executeTool(
   switch (toolName) {
     case "read_file": {
       try {
-        const resolved = safePath(projectId, input.path);
-        const content = await fs.readFile(resolved, "utf-8");
-        return content;
+        return await fileOps.readFile(projectId, input.path);
       } catch {
         return `Error: Could not read file "${input.path}"`;
       }
@@ -529,24 +581,17 @@ async function executeTool(
 
     case "edit_file": {
       try {
-        const resolved = safePath(projectId, input.path);
-        let content = await fs.readFile(resolved, "utf-8");
-        if (!content.includes(input.old_text)) {
-          return `Error: Could not find the specified text in "${input.path}"`;
-        }
-        content = content.replace(input.old_text, input.new_text);
-        await fs.writeFile(resolved, content, "utf-8");
+        await fileOps.editFile(projectId, input.path, input.old_text, input.new_text);
         return `Successfully edited "${input.path}"`;
-      } catch {
+      } catch (err: any) {
+        if (err?.message?.includes("Could not find")) return `Error: ${err.message}`;
         return `Error: Could not edit file "${input.path}"`;
       }
     }
 
     case "create_file": {
       try {
-        const resolved = safePath(projectId, input.path);
-        await fs.mkdir(dirname(resolved), { recursive: true });
-        await fs.writeFile(resolved, input.content, "utf-8");
+        await fileOps.writeFile(projectId, input.path, input.content);
         return `Successfully created "${input.path}"`;
       } catch {
         return `Error: Could not create file "${input.path}"`;
@@ -555,7 +600,7 @@ async function executeTool(
 
     case "list_files": {
       try {
-        const tree = await listTree(dir, dir);
+        const tree = await fileOps.listFiles(projectId);
         return JSON.stringify(tree, null, 2);
       } catch {
         return "Error: Could not list files";
@@ -708,6 +753,7 @@ async function executeTool(
         });
         const newContent = newLines.join("\n");
         await fs.writeFile(resolved, newContent, "utf-8");
+        await fileOps.notifyFileUpdated(projectId, input.path);
         return `Replaced ${changeCount} line(s) in "${input.path}"`;
       } catch (err: any) {
         if (err?.message === "Path traversal detected") {
@@ -778,9 +824,7 @@ async function executeTool(
 
     case "append": {
       try {
-        const resolved = safePath(projectId, input.path);
-        await fs.mkdir(dirname(resolved), { recursive: true });
-        await fs.appendFile(resolved, input.text, "utf-8");
+        await fileOps.appendFile(projectId, input.path, input.text);
         return `Appended to "${input.path}"`;
       } catch {
         return `Error: Could not append to "${input.path}"`;
@@ -811,6 +855,7 @@ async function executeTool(
         const deleted = to - from + 1;
         allLines.splice(from - 1, deleted);
         await fs.writeFile(resolved, allLines.join("\n"), "utf-8");
+        await fileOps.notifyFileUpdated(projectId, input.path);
         return `Deleted lines ${from}-${to} (${deleted} lines) from "${input.path}"`;
       } catch {
         return `Error: Could not edit "${input.path}"`;
@@ -835,6 +880,33 @@ async function executeTool(
         return headings.join("\n");
       } catch {
         return `Error: Could not read "${input.path}"`;
+      }
+    }
+
+    case "move_file": {
+      try {
+        await fileOps.moveFile(projectId, input.from, input.to);
+        return `Moved "${input.from}" → "${input.to}"`;
+      } catch {
+        return `Error: Could not move "${input.from}" to "${input.to}"`;
+      }
+    }
+
+    case "copy_file": {
+      try {
+        await fileOps.copyFile(projectId, input.from, input.to);
+        return `Copied "${input.from}" → "${input.to}"`;
+      } catch {
+        return `Error: Could not copy "${input.from}" to "${input.to}"`;
+      }
+    }
+
+    case "delete_file": {
+      try {
+        await fileOps.deleteFile(projectId, input.path);
+        return `Deleted "${input.path}"`;
+      } catch {
+        return `Error: Could not delete "${input.path}"`;
       }
     }
 
@@ -984,32 +1056,6 @@ export async function handleChatMessage(
             block.input,
             ws
           );
-
-          // Broadcast incremental updates for file modifications
-          if (block.name === "edit_file") {
-            // Read the updated content and broadcast to all clients
-            try {
-              const updatedPath = safePath(projectId, (block.input as any).path);
-              const updatedContent = await fs.readFile(updatedPath, "utf-8");
-              broadcast(projectId, {
-                type: "file:updated",
-                path: (block.input as any).path,
-                content: updatedContent,
-              });
-            } catch {
-              // Fallback to generic change
-              broadcast(projectId, {
-                type: "file:changed",
-                path: (block.input as any).path,
-              });
-            }
-          } else if (block.name === "create_file") {
-            broadcast(projectId, {
-              type: "tree:add",
-              path: (block.input as any).path,
-              nodeType: "file",
-            });
-          }
 
           toolResults.push({
             role: "user",

@@ -3,12 +3,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { randomUUID } from "crypto";
 import { z } from "zod";
-import { promises as fs } from "fs";
-import { dirname } from "path";
 import { authMiddleware, getUser } from "./auth.js";
 import { getUserProjects, getProjectMembership, createProject, renameProject, deleteProject, createInvitation, supabaseAdmin } from "./db.js";
 import { sendInvitationEmail } from "./email.js";
-import { safePath, projectDir, listTree } from "./files.js";
+import * as fileOps from "./fileOps.js";
 import { getHistory, getUncommittedStatus, initRepo, stopGitManager } from "./git.js";
 
 interface McpSession {
@@ -128,8 +126,7 @@ Perchpad is a web-based writing environment where users organize their work into
       try {
         if (!(await checkAccess(userId, projectId)))
           return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const dir = projectDir(projectId);
-        const tree = await listTree(dir, dir);
+        const tree = await fileOps.listFiles(projectId);
         return { content: [{ type: "text", text: JSON.stringify(tree, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
@@ -148,8 +145,7 @@ Perchpad is a web-based writing environment where users organize their work into
       try {
         if (!(await checkAccess(userId, projectId)))
           return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const resolved = safePath(projectId, path);
-        const content = await fs.readFile(resolved, "utf-8");
+        const content = await fileOps.readFile(projectId, path);
         return { content: [{ type: "text", text: content }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
@@ -169,9 +165,7 @@ Perchpad is a web-based writing environment where users organize their work into
       try {
         if (!(await checkAccess(userId, projectId)))
           return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const resolved = safePath(projectId, path);
-        await fs.mkdir(dirname(resolved), { recursive: true });
-        await fs.writeFile(resolved, content, "utf-8");
+        await fileOps.writeFile(projectId, path, content);
         return { content: [{ type: "text", text: `Wrote ${path}` }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
@@ -190,8 +184,7 @@ Perchpad is a web-based writing environment where users organize their work into
       try {
         if (!(await checkAccess(userId, projectId)))
           return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const resolved = safePath(projectId, path);
-        await fs.mkdir(resolved, { recursive: true });
+        await fileOps.createDirectory(projectId, path);
         return { content: [{ type: "text", text: `Created directory ${path}` }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
@@ -210,13 +203,7 @@ Perchpad is a web-based writing environment where users organize their work into
       try {
         if (!(await checkAccess(userId, projectId)))
           return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const resolved = safePath(projectId, path);
-        const stat = await fs.stat(resolved);
-        if (stat.isDirectory()) {
-          await fs.rm(resolved, { recursive: true });
-        } else {
-          await fs.unlink(resolved);
-        }
+        await fileOps.deleteFile(projectId, path);
         return { content: [{ type: "text", text: `Deleted ${path}` }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
@@ -236,11 +223,28 @@ Perchpad is a web-based writing environment where users organize their work into
       try {
         if (!(await checkAccess(userId, projectId)))
           return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const fromResolved = safePath(projectId, from);
-        const toResolved = safePath(projectId, to);
-        await fs.mkdir(dirname(toResolved), { recursive: true });
-        await fs.rename(fromResolved, toResolved);
+        await fileOps.moveFile(projectId, from, to);
         return { content: [{ type: "text", text: `Renamed ${from} → ${to}` }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: e.message }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "copy_file",
+    "Copy a file to a new location within a Perchpad project. Parent directories are created automatically.",
+    {
+      projectId: z.string().describe("The project ID (UUID from list_projects)"),
+      from: z.string().describe("Source file path relative to project root"),
+      to: z.string().describe("Destination file path relative to project root"),
+    },
+    async ({ projectId, from, to }) => {
+      try {
+        if (!(await checkAccess(userId, projectId)))
+          return { content: [{ type: "text", text: "Access denied" }], isError: true };
+        await fileOps.copyFile(projectId, from, to);
+        return { content: [{ type: "text", text: `Copied ${from} → ${to}` }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
       }
