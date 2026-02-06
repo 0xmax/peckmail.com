@@ -29,14 +29,16 @@ function createMcpServer(userId: string): McpServer {
       description: "Perchpad is a collaborative writing and note-taking platform. Use these tools to read, write, and manage files across your Perchpad projects.",
     },
     {
-      instructions: `You are connected to Perchpad — a collaborative writing and note-taking platform at https://perchpad.co.
+      instructions: `You are connected to Perchpad — a collaborative writing and data platform at https://perchpad.co.
 
 ## What is Perchpad?
-Perchpad is a web-based writing environment where users organize their work into **projects**. Each project is a collection of files (primarily markdown documents) with built-in version control.
+Perchpad is a web-based workspace where users organize their work into **projects**. Each project is a collection of files with built-in version control. Perchpad focuses on two primary file formats:
+- **Markdown (.md)** — rich text documents, notes, outlines, and prose.
+- **CSV (.csv)** — structured tabular data such as lists, trackers, logs, and datasets.
 
 ## Key concepts:
 - **Projects**: Top-level containers for files. Users can own or be invited to projects. Use list_projects to see available projects.
-- **Files**: Mostly markdown (.md) documents organized in directories. The editor supports rich markdown with a pastel theme.
+- **Files**: Markdown and CSV files organized in directories. The editor supports rich markdown with a pastel theme and renders CSV as editable tables.
 - **Auto-versioning**: Perchpad automatically commits changes via git every 60 seconds. Use get_revisions to browse the edit history.
 - **Collaboration**: Projects can be shared with other users who get editor access.
 - **AI chat**: Perchpad has a built-in AI assistant (separate from this MCP connection) that can read and edit files within projects.
@@ -45,11 +47,17 @@ Perchpad is a web-based writing environment where users organize their work into
 1. Start with list_projects to see what projects the user has
 2. Use create_project to make a new project, or rename_project / delete_project to manage existing ones
 3. Use list_files to browse a project's file tree
-4. Use read_file / write_file to view and edit documents
+4. Use read_file / write_file to view and edit documents and data files
 5. Use get_revisions and get_status to understand the edit history
 
+## Working with CSV files:
+- CSV files use the first row as a header row with column names
+- When writing CSV, preserve consistent column counts and properly quote fields that contain commas or newlines
+- Always read the file first to understand the existing structure before making edits
+- Common use cases: task trackers, reading lists, habit logs, contact lists, inventories, and any structured data
+
 ## Tips:
-- File paths are relative to the project root (e.g. "notes/ideas.md", not "/notes/ideas.md")
+- File paths are relative to the project root (e.g. "notes/ideas.md", "data/tasks.csv")
 - Project IDs are UUIDs — get them from list_projects
 - When writing files, provide the complete file content (not a diff)
 - New directories are created automatically when writing to a nested path`,
