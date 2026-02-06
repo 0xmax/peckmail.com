@@ -24,7 +24,7 @@ import {
   assignProjectEmail,
   supabaseAdmin,
 } from "./db.js";
-import { verifyWebhookSignature, processInboundEmail } from "./inbound.js";
+import { verifyWebhookSignature, receiveInboundEmail, processInboundEmail } from "./inbound.js";
 import { sendInvitationEmail } from "./email.js";
 import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit } from "./git.js";
 import { ttsRouter } from "./tts.js";
@@ -97,6 +97,11 @@ app.get("/s/:token", async (c) => {
   }
 });
 
+// --- FAQ page (public, no auth) ---
+app.get("/faq", async (c) => {
+  return c.html(faqPageHtml());
+});
+
 // --- Public invitation info (no auth) ---
 app.get("/api/invitations/:id/info", async (c) => {
   const invId = c.req.param("id");
@@ -129,10 +134,14 @@ app.post("/api/webhooks/resend", async (c) => {
       "svix-signature": c.req.header("svix-signature") ?? "",
     };
     const payload = verifyWebhookSignature(rawBody, headers);
-    // Process asynchronously — return 200 immediately
-    processInboundEmail(payload).catch((err) =>
-      console.error("[webhook] Error processing inbound email:", err)
-    );
+    // Phase 1: persist to DB synchronously before returning 200
+    const record = await receiveInboundEmail(payload);
+    if (record) {
+      // Phase 2: run AI agent asynchronously
+      processInboundEmail(record).catch((err) =>
+        console.error("[webhook] Error processing inbound email:", err)
+      );
+    }
     return c.json({ ok: true });
   } catch (err: any) {
     console.error("[webhook] Signature verification failed:", err.message);
@@ -504,7 +513,7 @@ api.get("/projects/:id/emails", async (c) => {
   if (!membership) return c.json({ error: "Access denied" }, 403);
   const { data, error } = await supabaseAdmin
     .from("incoming_emails")
-    .select("id, from_address, subject, processed, error, created_at")
+    .select("id, from_address, subject, status, error, created_at")
     .eq("project_id", projectId)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -526,8 +535,8 @@ api.post("/projects/:id/emails/test", async (c) => {
   let projectEmail = await getProjectEmail(projectId);
   if (!projectEmail) projectEmail = await assignProjectEmail(projectId);
 
-  // Simulate inbound by calling processInboundEmail directly
-  processInboundEmail({
+  // Phase 1: persist to DB synchronously
+  const payload = {
     data: {
       from: userEmail,
       to: [projectEmail],
@@ -535,7 +544,14 @@ api.post("/projects/:id/emails/test", async (c) => {
       text: "This is a test email sent from the Perchpad UI to verify inbound email processing is working.",
       email_id: `test-${Date.now()}`,
     },
-  }).catch((err) => console.error("[test-email] Error:", err));
+  };
+  const record = await receiveInboundEmail(payload);
+  if (record) {
+    // Phase 2: run AI agent asynchronously
+    processInboundEmail(record).catch((err) =>
+      console.error("[test-email] Error:", err)
+    );
+  }
 
   return c.json({ ok: true });
 });
@@ -709,4 +725,104 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function faqPageHtml(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perchpad — Features &amp; FAQ</title>
+  <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
+  <style>
+    body { background: #faf6f1; margin: 0; padding: 2rem; font-family: system-ui, -apple-system, sans-serif; color: #3d3229; }
+    .faq-container { max-width: 800px; margin: 0 auto; }
+    .faq-header { text-align: center; margin-bottom: 2.5rem; }
+    .faq-header h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 2rem; margin: 0 0 0.5rem; color: #3d3229; }
+    .faq-header p { color: #9a8b7a; font-size: 1.1rem; margin: 0; }
+    .faq-section { background: #fff; border-radius: 1rem; padding: 1.5rem 2rem; border: 1px solid #e8ddd0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); margin-bottom: 1.25rem; }
+    .faq-section h2 { font-size: 1.15rem; margin: 0 0 0.75rem; color: #c4956a; }
+    .faq-section p, .faq-section ul { margin: 0; line-height: 1.7; color: #3d3229; }
+    .faq-section ul { padding-left: 1.25rem; }
+    .faq-section li { margin-bottom: 0.35rem; }
+    .faq-section code { background: #f5ebe0; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
+    .faq-footer { text-align: center; margin-top: 2rem; color: #9a8b7a; font-size: 0.9rem; }
+    .faq-footer a { color: #c4956a; text-decoration: none; }
+    .faq-footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="faq-container">
+    <div class="faq-header">
+      <h1>Perchpad</h1>
+      <p>A collaborative writing workspace for markdown and data</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>What is Perchpad?</h2>
+      <p>Perchpad is a web-based collaborative writing workspace. Organize your work into projects, write in markdown, manage structured data in CSV files, and let the built-in AI assistant help you along the way. Everything is version-controlled and synced in real time.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>File Formats</h2>
+      <p>Perchpad supports two primary formats:</p>
+      <ul>
+        <li><strong>Markdown (.md)</strong> — rich text documents, notes, outlines, and prose. Rendered with live preview and line-level highlighting.</li>
+        <li><strong>CSV (.csv)</strong> — structured tabular data like task trackers, reading lists, and datasets. Rendered as styled, editable tables with sticky headers.</li>
+      </ul>
+    </div>
+
+    <div class="faq-section">
+      <h2>AI Assistant</h2>
+      <p>Perchpad includes a built-in AI assistant powered by Claude. It has access to 21 tools for reading, editing, creating, and searching files within your project. The assistant streams responses in real time and is aware of your currently open file and cursor position.</p>
+      <p>Tools include file operations (read, edit, create, move, copy, delete), text utilities (grep, find, sort, diff, sed), editor highlighting, and the ability to send emails to workspace members.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>Auto-Save &amp; Version History</h2>
+      <p>Perchpad automatically saves and commits your changes every 60 seconds using git. You can browse the full revision history, view diffs for any commit, and see exactly what changed over time. Manual commits are also supported.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>Git Integration</h2>
+      <p>Every project is a git repository. Perchpad exposes Git Smart HTTP endpoints so you can clone, push, and pull using standard git commands. Authentication uses API keys via HTTP Basic Auth (password is your <code>pp_</code> API key, username is ignored).</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>Real-Time Collaboration</h2>
+      <p>Multiple users can work on the same project simultaneously. File changes, cursor positions, and chat messages are synchronized in real time over WebSockets. File system changes are detected via <code>fs.watch</code> and broadcast to all connected clients.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>Email Integration</h2>
+      <p>Each workspace gets a unique email address (e.g. <code>robin-willow-42@in.perchpad.co</code>). Emails sent to this address are processed by an AI agent that reads the email content and updates project files accordingly. You can configure how the agent behaves by creating an <code>AGENTS.md</code> file in your project root.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>Text-to-Speech</h2>
+      <p>Perchpad can read your documents aloud using ElevenLabs or OpenAI TTS. As audio plays, the current sentence is highlighted in the editor for easy follow-along. You can choose your preferred TTS provider and voice in account settings.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>MCP Server</h2>
+      <p>Perchpad includes a Model Context Protocol (MCP) server that exposes 14 tools for external AI integrations. Connect from Claude Desktop or any MCP-compatible client to manage projects, read and write files, browse revision history, invite collaborators, and send emails — all programmatically.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>Sharing</h2>
+      <p>Share individual files via public links that anyone can view without logging in. Invite collaborators by email with role-based access control: owners have full control, editors can read and write, and viewers have read-only access.</p>
+    </div>
+
+    <div class="faq-section">
+      <h2>API Keys</h2>
+      <p>Generate API keys (prefixed with <code>pp_</code>) for programmatic access to Perchpad. API keys authenticate Git operations, the MCP server, and the REST API. Manage your keys from account settings.</p>
+    </div>
+
+    <div class="faq-footer">
+      <p><a href="/">Go to Perchpad</a></p>
+    </div>
+  </div>
+</body>
+</html>`;
 }

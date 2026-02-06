@@ -380,8 +380,65 @@ Perchpad is a web-based workspace where users organize their work into **project
     }
   );
 
+  server.resource(
+    "faq",
+    "perchpad://faq",
+    {
+      description: "Perchpad FAQ and features guide — lists all capabilities including file editing, AI assistant, git integration, email processing, TTS, and collaboration features.",
+      mimeType: "text/plain",
+    },
+    async () => {
+      return {
+        contents: [
+          {
+            uri: "perchpad://faq",
+            text: FAQ_TEXT,
+            mimeType: "text/plain",
+          },
+        ],
+      };
+    }
+  );
+
   return server;
 }
+
+const FAQ_TEXT = `# Perchpad — Features & FAQ
+
+## What is Perchpad?
+Perchpad is a web-based collaborative writing workspace. Organize your work into projects, write in markdown, manage structured data in CSV files, and let the built-in AI assistant help you along the way. Everything is version-controlled and synced in real time.
+
+## File Formats
+- **Markdown (.md)** — rich text documents, notes, outlines, and prose. Rendered with live preview and line-level highlighting.
+- **CSV (.csv)** — structured tabular data like task trackers, reading lists, and datasets. Rendered as styled, editable tables with sticky headers.
+
+## AI Assistant
+Built-in AI assistant powered by Claude with 21 tools for reading, editing, creating, and searching files within your project. Streams responses in real time and is aware of your currently open file and cursor position. Tools include file operations (read, edit, create, move, copy, delete), text utilities (grep, find, sort, diff, sed), editor highlighting, and email to workspace members.
+
+## Auto-Save & Version History
+Automatically saves and commits changes every 60 seconds using git. Browse the full revision history, view diffs for any commit, and see exactly what changed over time. Manual commits are also supported.
+
+## Git Integration
+Every project is a git repository. Git Smart HTTP endpoints let you clone, push, and pull using standard git commands. Auth uses API keys via HTTP Basic Auth (password is your pp_ API key, username is ignored).
+
+## Real-Time Collaboration
+Multiple users can work on the same project simultaneously. File changes, cursor positions, and chat messages sync in real time over WebSockets.
+
+## Email Integration
+Each workspace gets a unique email address (e.g. robin-willow-42@in.perchpad.co). Emails sent to this address are processed by an AI agent that reads the content and updates project files. Configure agent behavior via an AGENTS.md file in the project root.
+
+## Text-to-Speech
+Read documents aloud using ElevenLabs or OpenAI TTS. The current sentence is highlighted in the editor during playback. Choose your preferred provider and voice in account settings.
+
+## MCP Server
+Model Context Protocol server with 14 tools for external AI integrations. Connect from Claude Desktop or any MCP-compatible client to manage projects, read/write files, browse revision history, invite collaborators, and send emails.
+
+## Sharing
+Share individual files via public links (no login needed). Invite collaborators by email with role-based access: owners (full control), editors (read+write), viewers (read-only).
+
+## API Keys
+Generate API keys (pp_ prefix) for programmatic access. API keys authenticate Git operations, the MCP server, and the REST API. Manage keys from account settings.
+`;
 
 export const mcpRouter = new Hono();
 

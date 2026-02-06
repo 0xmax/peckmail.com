@@ -71,7 +71,7 @@ export interface IncomingEmail {
   id: string;
   from_address: string;
   subject: string;
-  processed: boolean;
+  status: "received" | "processing" | "processed" | "failed";
   error: string | null;
   created_at: string;
 }

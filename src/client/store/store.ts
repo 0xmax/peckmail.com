@@ -207,11 +207,11 @@ export class WorkspaceStore {
         });
         break;
 
-      case "email:processed":
+      case "email:status":
         this.setState({
           incomingEmails: this.state.incomingEmails.map((e) =>
             e.id === msg.emailId
-              ? { ...e, processed: true, error: msg.error ?? null }
+              ? { ...e, status: msg.status, error: msg.error ?? null }
               : e
           ),
         });

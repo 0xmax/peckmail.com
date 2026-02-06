@@ -3,7 +3,7 @@ import {
   getProjectByEmail,
   getProjectMemberEmails,
   insertIncomingEmail,
-  markEmailProcessed,
+  updateEmailStatus,
 } from "./db.js";
 import { runAgentHeadless } from "./chat.js";
 import { broadcast } from "./ws.js";
@@ -29,7 +29,25 @@ export function verifyWebhookSignature(
   });
 }
 
-export async function processInboundEmail(payload: any) {
+export interface InboundEmailRecord {
+  id: string;
+  project_id: string;
+  project_name: string;
+  from_address: string;
+  to_address: string;
+  subject: string;
+  body_text: string;
+  resend_email_id: string;
+}
+
+/**
+ * Phase 1: Parse payload, find project, insert into DB with status 'received',
+ * and broadcast to connected clients. Returns the record, or null if the email
+ * should be skipped (no matching project or duplicate).
+ */
+export async function receiveInboundEmail(
+  payload: any
+): Promise<InboundEmailRecord | null> {
   const data = payload.data ?? payload;
   const toAddresses: string[] = Array.isArray(data.to) ? data.to : [data.to];
   const fromAddress: string = Array.isArray(data.from)
@@ -57,7 +75,7 @@ export async function processInboundEmail(payload: any) {
 
   if (!project) {
     console.warn("[inbound] No project found for:", toAddresses);
-    return;
+    return null;
   }
 
   // Store in database (idempotent — returns null on duplicate)
@@ -75,7 +93,7 @@ export async function processInboundEmail(payload: any) {
 
   if (!record) {
     console.log("[inbound] Duplicate email, skipping:", resendEmailId);
-    return;
+    return null;
   }
 
   // Broadcast new email to connected clients
@@ -85,52 +103,95 @@ export async function processInboundEmail(payload: any) {
       id: record.id,
       from_address: fromAddress,
       subject,
-      processed: false,
+      status: "received",
       error: null,
       created_at: new Date().toISOString(),
     },
   });
 
+  return {
+    id: record.id,
+    project_id: project.id,
+    project_name: project.name,
+    from_address: fromAddress,
+    to_address: matchedTo,
+    subject,
+    body_text: bodyText,
+    resend_email_id: resendEmailId,
+  };
+}
+
+/**
+ * Phase 2: Run the AI agent on a received email record.
+ * Sets status to 'processing', then 'processed' or 'failed'.
+ */
+export async function processInboundEmail(
+  record: InboundEmailRecord
+): Promise<void> {
+  // Mark as processing
+  await updateEmailStatus(record.id, "processing");
+  broadcast(record.project_id, {
+    type: "email:status",
+    emailId: record.id,
+    status: "processing",
+    error: null,
+  });
+
   // Build agent system prompt
-  const systemPrompt = await buildSystemPrompt(project.id, project.name, fromAddress);
+  const systemPrompt = await buildSystemPrompt(
+    record.project_id,
+    record.project_name,
+    record.from_address
+  );
 
   // Format user message
-  const userMessage = formatEmailAsMessage(fromAddress, subject, bodyText);
+  const userMessage = formatEmailAsMessage(
+    record.from_address,
+    record.subject,
+    record.body_text
+  );
 
   try {
     const { sessionId } = await runAgentHeadless(
-      project.id,
+      record.project_id,
       systemPrompt,
       userMessage
     );
-    await markEmailProcessed(record.id, sessionId);
-    broadcast(project.id, {
-      type: "email:processed",
+    await updateEmailStatus(record.id, "processed", sessionId);
+    broadcast(record.project_id, {
+      type: "email:status",
       emailId: record.id,
+      status: "processed",
       error: null,
     });
     console.log(
-      `[inbound] Processed email ${resendEmailId} for project ${project.id}, session ${sessionId}`
+      `[inbound] Processed email ${record.resend_email_id} for project ${record.project_id}, session ${sessionId}`
     );
   } catch (err: any) {
     const errorMsg = err.message || "Unknown error";
     console.error("[inbound] Agent error:", err);
-    await markEmailProcessed(record.id, null, errorMsg);
-    broadcast(project.id, {
-      type: "email:processed",
+    await updateEmailStatus(record.id, "failed", null, errorMsg);
+    broadcast(record.project_id, {
+      type: "email:status",
       emailId: record.id,
+      status: "failed",
       error: errorMsg,
     });
 
     // Notify sender if they're a workspace member
-    const senderNormalized = fromAddress.replace(/<|>/g, "").trim().toLowerCase();
-    const memberEmails = await getProjectMemberEmails(project.id);
+    const senderNormalized = record.from_address
+      .replace(/<|>/g, "")
+      .trim()
+      .toLowerCase();
+    const memberEmails = await getProjectMemberEmails(record.project_id);
     if (memberEmails.includes(senderNormalized)) {
       sendEmail({
         to: senderNormalized,
-        subject: `Re: ${subject}`,
-        body: `There was an error processing your email "${subject}" in workspace "${project.name}":\n\n${errorMsg}\n\nPlease check your workspace for details.`,
-      }).catch((e) => console.error("[inbound] Failed to send error notification:", e));
+        subject: `Re: ${record.subject}`,
+        body: `There was an error processing your email "${record.subject}" in workspace "${record.project_name}":\n\n${errorMsg}\n\nPlease check your workspace for details.`,
+      }).catch((e) =>
+        console.error("[inbound] Failed to send error notification:", e)
+      );
     }
   }
 }
@@ -178,7 +239,10 @@ You also have a send_email tool that can send emails to workspace members.
 The following email addresses are workspace members: ${memberEmails.join(", ") || "(none)"}
 
 ## Reply Policy
-${replyInstructions}`;
+${replyInstructions}
+
+## Forwarded Emails
+If the email contains a forwarded message (indicated by markers like "---------- Forwarded message ----------", "Begin forwarded message", or similar), pay special attention to any text the sender wrote ABOVE the forwarded content. That text contains the sender's personal instructions or context for what they want you to do with the forwarded message. Treat it as the primary intent.`;
 
   if (instructions) {
     return `${base}

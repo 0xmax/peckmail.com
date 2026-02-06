@@ -228,7 +228,7 @@ export async function insertIncomingEmail(record: {
 }): Promise<{ id: string } | null> {
   const { data, error } = await supabaseAdmin
     .from("incoming_emails")
-    .insert(record)
+    .insert({ ...record, status: "received" })
     .select("id")
     .single();
   if (error) {
@@ -239,14 +239,15 @@ export async function insertIncomingEmail(record: {
   return data;
 }
 
-export async function markEmailProcessed(
+export async function updateEmailStatus(
   emailId: string,
-  sessionId: string | null,
+  status: "received" | "processing" | "processed" | "failed",
+  sessionId?: string | null,
   error?: string
 ): Promise<void> {
-  const update: Record<string, any> = { processed: true };
-  if (sessionId) update.agent_session_id = sessionId;
-  if (error) update.error = error;
+  const update: Record<string, any> = { status };
+  if (sessionId !== undefined) update.agent_session_id = sessionId;
+  if (error !== undefined) update.error = error;
   await supabaseAdmin
     .from("incoming_emails")
     .update(update)

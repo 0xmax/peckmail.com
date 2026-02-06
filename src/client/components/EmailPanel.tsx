@@ -125,12 +125,16 @@ export function EmailPanel({ projectId }: { projectId: string }) {
                 >
                   {/* Status dot */}
                   <div className="mt-1 shrink-0" title={
-                    e.error ? `Error: ${e.error}` :
-                    e.processed ? "Processed" : "Processing..."
+                    e.status === "failed" ? `Error: ${e.error}` :
+                    e.status === "processed" ? "Processed" :
+                    e.status === "processing" ? "Processing..." :
+                    "Received"
                   }>
-                    {!e.processed ? (
+                    {e.status === "received" ? (
+                      <span className="block w-2 h-2 rounded-full bg-blue-400" />
+                    ) : e.status === "processing" ? (
                       <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                    ) : e.error ? (
+                    ) : e.status === "failed" ? (
                       <span className="block w-2 h-2 rounded-full bg-red-400" />
                     ) : (
                       <span className="block w-2 h-2 rounded-full bg-green-400" />
