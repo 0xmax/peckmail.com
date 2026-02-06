@@ -66,6 +66,15 @@ export async function receiveInboundEmail(
   if (resend && resendEmailId && !resendEmailId.startsWith("test-")) {
     try {
       const { data: fetched } = await resend.emails.receiving.get(resendEmailId);
+      console.log("[inbound] Resend API response:", JSON.stringify({
+        id: fetched?.id,
+        from: fetched?.from,
+        subject: fetched?.subject,
+        hasText: !!fetched?.text,
+        textLength: fetched?.text?.length ?? 0,
+        hasHtml: !!fetched?.html,
+        htmlLength: fetched?.html?.length ?? 0,
+      }));
       if (fetched) fullEmail = fetched;
     } catch (err) {
       console.warn("[inbound] Failed to fetch email content from Resend API, using webhook data:", err);
@@ -77,8 +86,29 @@ export async function receiveInboundEmail(
     ? fullEmail.from[0]
     : fullEmail.from;
   const subject: string = fullEmail.subject ?? "(no subject)";
-  const bodyText: string = fullEmail.text ?? "";
   const bodyHtml: string = fullEmail.html ?? "";
+  // Many forwarded emails only have HTML — extract plain text from it as fallback
+  let bodyText: string = fullEmail.text ?? "";
+  if (!bodyText && bodyHtml) {
+    bodyText = bodyHtml
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n\n")
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<\/tr>/gi, "\n")
+      .replace(/<\/li>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+  console.log(`[inbound] Email ${resendEmailId}: text=${bodyText.length} chars, html=${bodyHtml.length} chars`);
   const headers = fullEmail.headers ?? {};
   const attachments = fullEmail.attachments ?? [];
   const cc: string[] = Array.isArray(fullEmail.cc) ? fullEmail.cc : fullEmail.cc ? [fullEmail.cc] : [];
