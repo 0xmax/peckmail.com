@@ -21,7 +21,9 @@ import { AudioBar } from "./ReadAloud.js";
 import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
+import { PresenceAvatars } from "./PresenceAvatars.js";
 import { useAuth } from "../context/AuthContext.js";
+import { usePresence } from "../hooks/usePresence.js";
 import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope } from "@phosphor-icons/react";
 
 function fileExistsInTree(tree: FileNode[], path: string): boolean {
@@ -52,6 +54,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, signOut, handle } = useAuth();
+  const { onlineUsers } = usePresence(projectId, user, openFilePath);
   const editorViewRef = useRef<EditorView | null>(null);
   const modeStorageKey = useMemo(
     () => `perchpad:view-mode:${projectId}`,
@@ -267,6 +270,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
           >
             <Users size={16} />
           </button>
+          <PresenceAvatars users={onlineUsers} />
           {/* Panel toggle pill */}
           <div className="flex items-center gap-px bg-surface-alt/50 rounded-xl p-0.5">
             <button
@@ -354,7 +358,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
             className="bg-surface border-r border-border flex flex-col shrink-0 relative"
             style={{ width: sidebarWidth }}
           >
-            <FileTree />
+            <FileTree presenceUsers={onlineUsers} />
             <div className="border-t border-border px-3 py-2 shrink-0">
               <button
                 onClick={() => setShowShare(true)}
@@ -429,6 +433,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
         <SettingsModal
           projectId={projectId}
           onClose={() => setShowShare(false)}
+          onLeave={() => { setShowShare(false); onBack(); }}
         />
       )}
     </div>

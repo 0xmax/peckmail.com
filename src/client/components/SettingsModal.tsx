@@ -5,9 +5,11 @@ import { InviteForm } from "./InviteModal.js";
 export function SettingsModal({
   projectId,
   onClose,
+  onLeave,
 }: {
   projectId: string;
   onClose: () => void;
+  onLeave?: () => void;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,7 +44,7 @@ export function SettingsModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <InviteForm projectId={projectId} />
-          <MembersPanel projectId={projectId} />
+          <MembersPanel projectId={projectId} onLeave={onLeave} />
         </div>
       </div>
     </div>

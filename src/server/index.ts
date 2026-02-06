@@ -396,6 +396,26 @@ api.delete("/projects/:id/members/:userId", async (c) => {
   return c.json({ ok: true });
 });
 
+// Leave project (non-owner self-removal)
+api.post("/projects/:id/leave", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) {
+    return c.json({ error: "Not a member" }, 404);
+  }
+  if (membership.role === "owner") {
+    return c.json({ error: "Owners cannot leave. Transfer ownership first." }, 400);
+  }
+  const { error } = await supabaseAdmin
+    .from("project_members")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("user_id", user.id);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
 // Invitations
 api.post("/projects/:id/invite", async (c) => {
   const user = getUser(c);

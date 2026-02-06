@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SkeletonLine, SkeletonCircle } from "./Skeleton.js";
+import { SignOut } from "@phosphor-icons/react";
 
 interface Member {
   user_id: string;
@@ -16,7 +17,7 @@ const ROLE_OPTIONS = [
   { value: "owner", label: "Admin" },
 ];
 
-export function MembersPanel({ projectId }: { projectId: string }) {
+export function MembersPanel({ projectId, onLeave }: { projectId: string; onLeave?: () => void }) {
   const { session, user } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,15 @@ export function MembersPanel({ projectId }: { projectId: string }) {
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
     } catch (err: any) {
       console.error("Failed to remove member:", err.message);
+    }
+  }
+
+  async function leaveProject() {
+    try {
+      await api.post(`/api/projects/${projectId}/leave`);
+      onLeave?.();
+    } catch (err: any) {
+      console.error("Failed to leave project:", err.message);
     }
   }
 
@@ -139,6 +149,17 @@ export function MembersPanel({ projectId }: { projectId: string }) {
           })
         )}
       </div>
+      {!loading && !isOwner && currentUserId && (
+        <div className="px-4 py-3 border-t border-border">
+          <button
+            onClick={leaveProject}
+            className="flex items-center gap-2 text-sm text-danger hover:text-red-400 transition-colors"
+          >
+            <SignOut size={15} />
+            Leave project
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useTree, useOpenFile, useStoreDispatch, useLoadFileContent } from "../store/StoreContext.js";
 import type { FileNode } from "../store/types.js";
+import type { PresenceUser } from "../hooks/usePresence.js";
 import { File, Folder, FolderPlus, Plus, CaretRight, Play, ChatCircle } from "@phosphor-icons/react";
 
 function FileIcon({ type }: { type: "file" | "directory" }) {
@@ -16,12 +17,14 @@ function TreeItem({
   onSelect,
   selectedPath,
   onContextMenu,
+  presencesByFile,
 }: {
   node: FileNode;
   depth: number;
   onSelect: (path: string) => void;
   selectedPath: string | null;
   onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
+  presencesByFile: Map<string, PresenceUser[]>;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isSelected = node.path === selectedPath;
@@ -37,6 +40,8 @@ function TreeItem({
   // Display name without extension for files
   const displayName =
     node.type === "file" ? node.name.replace(/\.[^.]+$/, "") : node.name;
+
+  const filePresence = node.type === "file" ? presencesByFile.get(node.path) : undefined;
 
   return (
     <div>
@@ -60,7 +65,21 @@ function TreeItem({
           />
         )}
         <FileIcon type={node.type} />
-        <span className="truncate">{displayName}</span>
+        <span className="truncate flex-1">{displayName}</span>
+        {filePresence && filePresence.length > 0 && (
+          <span className="flex items-center -space-x-1 shrink-0 ml-auto">
+            {filePresence.slice(0, 3).map((u) => (
+              <span
+                key={u.userId}
+                title={u.displayName}
+                className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-surface"
+                style={{ backgroundColor: u.color }}
+              >
+                {u.displayName[0]?.toUpperCase()}
+              </span>
+            ))}
+          </span>
+        )}
       </button>
       {node.type === "directory" && expanded && node.children && (
         <div>
@@ -72,6 +91,7 @@ function TreeItem({
               onSelect={onSelect}
               selectedPath={selectedPath}
               onContextMenu={onContextMenu}
+              presencesByFile={presencesByFile}
             />
           ))}
         </div>
@@ -80,11 +100,22 @@ function TreeItem({
   );
 }
 
-export function FileTree() {
+export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[] }) {
   const { tree, loading: treeLoading } = useTree();
   const { path: openFilePath } = useOpenFile();
   const dispatch = useStoreDispatch();
   const loadFileContent = useLoadFileContent();
+
+  const presencesByFile = useMemo(() => {
+    const map = new Map<string, PresenceUser[]>();
+    for (const u of presenceUsers) {
+      if (!u.openFilePath) continue;
+      const list = map.get(u.openFilePath);
+      if (list) list.push(u);
+      else map.set(u.openFilePath, [u]);
+    }
+    return map;
+  }, [presenceUsers]);
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -248,6 +279,7 @@ export function FileTree() {
               onSelect={openFile}
               selectedPath={openFilePath}
               onContextMenu={handleContextMenu}
+              presencesByFile={presencesByFile}
             />
           ))
         )}
