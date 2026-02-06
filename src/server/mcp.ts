@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { authMiddleware, getUser } from "./auth.js";
 import { getUserProjects, getProjectMembership, getProjectMemberEmails, createProject, renameProject, deleteProject, createInvitation, supabaseAdmin } from "./db.js";
+import { seedTemplate } from "./files.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
 import * as fileOps from "./fileOps.js";
 import { getHistory, getUncommittedStatus, initRepo, stopGitManager } from "./git.js";
@@ -80,6 +81,7 @@ Perchpad is a web-based workspace where users organize their work into **project
     async ({ name }) => {
       try {
         const project = await createProject(name.trim(), userId);
+        await seedTemplate(project.id);
         await initRepo(project.id);
         return { content: [{ type: "text", text: JSON.stringify(project, null, 2) }] };
       } catch (e: any) {

@@ -44,7 +44,13 @@ export async function initRepo(projectId: string) {
     // No commits yet — create initial commit
   }
 
-  await git.add({ fs, dir, filepath: ".gitignore" });
+  // Stage all files (template + .gitignore)
+  const allFiles = await git.statusMatrix({ fs, dir });
+  for (const [filepath, , worktreeStatus] of allFiles) {
+    if (worktreeStatus > 0) {
+      await git.add({ fs, dir, filepath });
+    }
+  }
   await git.commit({
     fs,
     dir,

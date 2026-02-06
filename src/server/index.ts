@@ -3,7 +3,7 @@ import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { authMiddleware, getUser } from "./auth.js";
-import { filesRouter, PROJECTS_DIR } from "./files.js";
+import { filesRouter, PROJECTS_DIR, seedTemplate } from "./files.js";
 import { addClient } from "./ws.js";
 import {
   listSessions,
@@ -274,7 +274,8 @@ api.post("/projects", async (c) => {
   if (!name?.trim()) return c.json({ error: "Name required" }, 400);
 
   const project = await createProject(name.trim(), user.id);
-  // Initialize git repo for the project
+  // Seed template files and initialize git repo
+  await seedTemplate(project.id);
   await initRepo(project.id);
   return c.json({ project });
 });
@@ -872,7 +873,7 @@ function landingPageHtml(): string {
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">How does the email integration work?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Each workspace gets a unique email address. Send content there and the AI processes it into your project — creating files, updating documents, or organizing things based on what you sent. Configure it with an <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">AGENTS.md</code> file.</p>
+      <p class="text-[0.95rem] text-text leading-relaxed">Each workspace gets a unique email address. Send content there and it gets folded into your project — creating files, updating documents, or organizing things based on what you sent. Configure it with an <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">AGENTS.md</code> file.</p>
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">Can I connect Claude Desktop or Cursor?</h3>
@@ -907,7 +908,7 @@ function landingPageHtml(): string {
         </div>
         <div>
           <h4 class="text-xs uppercase tracking-wider text-footer-muted mb-3 font-semibold">Features</h4>
-          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">AI Assistant</a>
+          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Writing Assistant</a>
           <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Collaboration</a>
           <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Version Control</a>
         </div>

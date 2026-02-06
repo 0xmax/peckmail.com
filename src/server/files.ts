@@ -216,5 +216,35 @@ filesRouter.post("/:projectId/rename", async (c) => {
   }
 });
 
+// Copy template-project/ into a new project directory
+const TEMPLATE_DIR = resolve(
+  process.env.TEMPLATE_DIR || join(dirname(new URL(import.meta.url).pathname), "..", "..", "template-project")
+);
+
+async function copyDirRecursive(src: string, dest: string) {
+  await fs.mkdir(dest, { recursive: true });
+  const entries = await fs.readdir(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirRecursive(srcPath, destPath);
+    } else {
+      await fs.copyFile(srcPath, destPath);
+    }
+  }
+}
+
+export async function seedTemplate(projectId: string): Promise<void> {
+  try {
+    await fs.access(TEMPLATE_DIR);
+  } catch {
+    console.warn("[files] Template directory not found:", TEMPLATE_DIR);
+    return;
+  }
+  const dest = join(PROJECTS_DIR, projectId);
+  await copyDirRecursive(TEMPLATE_DIR, dest);
+}
+
 // Helper for external use (chat tools, etc.)
 export { safePath, projectDir, listTree, PROJECTS_DIR };
