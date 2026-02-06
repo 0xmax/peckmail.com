@@ -77,7 +77,7 @@ export function App() {
   }
 
   if (route.page === "settings") {
-    return <AccountSettings onBack={() => navigate({ page: "projects" })} />;
+    return <AccountSettings onBack={() => navigate({ page: "projects" })} onOpenProject={(id) => navigate({ page: "workspace", projectId: id })} />;
   }
 
   if (route.page === "workspace") {

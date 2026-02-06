@@ -46,7 +46,7 @@ const DEFAULT_V2: V2Settings = {
   speed: 1.0,
 };
 
-export function AccountSettings({ onBack }: { onBack: () => void }) {
+export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void; onOpenProject?: (id: string) => void }) {
   const { user, preferences, updatePreferences } = useAuth();
   const [voiceId, setVoiceId] = useState(preferences.tts?.voiceId || VOICES[0].id);
   const [model, setModel] = useState<TtsModel>(preferences.tts?.model || "v3");
@@ -65,6 +65,7 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
   const [urlCopied, setUrlCopied] = useState(false);
   const [cliCopied, setCliCopied] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
+  const [creatingStarter, setCreatingStarter] = useState(false);
 
   useEffect(() => {
     api.get<{ keys: ApiKey[] }>("/api/keys").then((r) => setApiKeys(r.keys)).catch(() => {});
@@ -506,6 +507,33 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
             <span className="text-sm text-success">Saved!</span>
           )}
         </div>
+
+        {/* Starter project */}
+        <section className="pt-4 border-t border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-text-muted">Starter project</h3>
+              <p className="text-xs text-text-muted/70 mt-0.5">
+                Create a new workspace with sample files, recipes, and guides.
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                setCreatingStarter(true);
+                try {
+                  const res = await api.post<{ project: { id: string } }>("/api/projects", { name: "Starter Project" });
+                  if (onOpenProject) onOpenProject(res.project.id);
+                } finally {
+                  setCreatingStarter(false);
+                }
+              }}
+              disabled={creatingStarter}
+              className="shrink-0 px-3 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg text-xs hover:text-text hover:border-text-muted transition-colors disabled:opacity-50"
+            >
+              {creatingStarter ? "Creating..." : "Create"}
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );
