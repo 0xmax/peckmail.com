@@ -33,25 +33,25 @@ export async function sendInvitationEmail({
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#faf5ff;font-family:system-ui,-apple-system,sans-serif;">
+<body style="margin:0;padding:0;background:#faf6f1;font-family:system-ui,-apple-system,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
     <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e8dff0;padding:40px;">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e8ddd0;padding:40px;">
         <tr><td style="text-align:center;padding-bottom:24px;">
-          <h1 style="margin:0;font-size:24px;color:#4a4458;font-weight:600;">You're invited!</h1>
+          <h1 style="margin:0;font-size:24px;color:#3d3229;font-weight:600;">You're invited!</h1>
         </td></tr>
-        <tr><td style="text-align:center;padding-bottom:32px;color:#6b6480;font-size:16px;line-height:1.6;">
-          <strong style="color:#4a4458;">${escapeHtml(inviterName)}</strong> invited you to collaborate on
-          <strong style="color:#4a4458;">"${escapeHtml(projectName)}"</strong> on Perchpad.
+        <tr><td style="text-align:center;padding-bottom:32px;color:#9a8b7a;font-size:16px;line-height:1.6;">
+          <strong style="color:#3d3229;">${escapeHtml(inviterName)}</strong> invited you to collaborate on
+          <strong style="color:#3d3229;">"${escapeHtml(projectName)}"</strong> on Perchpad.
         </td></tr>
         <tr><td style="text-align:center;padding-bottom:32px;">
-          <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:#8b5cf6;color:#fff;text-decoration:none;border-radius:12px;font-weight:500;font-size:16px;">
+          <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:#c4956a;color:#fff;text-decoration:none;border-radius:12px;font-weight:500;font-size:16px;">
             Accept Invitation
           </a>
         </td></tr>
-        <tr><td style="text-align:center;color:#8e849b;font-size:13px;line-height:1.5;">
+        <tr><td style="text-align:center;color:#9a8b7a;font-size:13px;line-height:1.5;">
           Or copy this link: ${inviteUrl}<br><br>
-          <span style="color:#a89fb5;">Perchpad — Your friendly writing workspace</span>
+          <span style="color:#9a8b7a;">Perchpad — Your friendly writing workspace</span>
         </td></tr>
       </table>
     </td></tr>
@@ -85,12 +85,12 @@ export async function sendEmail(params: {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#faf5ff;font-family:system-ui,-apple-system,sans-serif;">
+<body style="margin:0;padding:0;background:#faf6f1;font-family:system-ui,-apple-system,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
     <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e8dff0;padding:40px;">
-        <tr><td style="color:#4a4458;font-size:16px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(body)}</td></tr>
-        <tr><td style="text-align:center;padding-top:32px;color:#a89fb5;font-size:13px;line-height:1.5;">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e8ddd0;padding:40px;">
+        <tr><td style="color:#3d3229;font-size:16px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(body)}</td></tr>
+        <tr><td style="text-align:center;padding-top:32px;color:#9a8b7a;font-size:13px;line-height:1.5;">
           <span>Perchpad — Your friendly writing workspace</span>
         </td></tr>
       </table>
