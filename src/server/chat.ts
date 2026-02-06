@@ -6,7 +6,7 @@ import type { WebSocket } from "ws";
 import { PROJECTS_DIR, safePath } from "./files.js";
 import { broadcast, sendTo } from "./ws.js";
 import * as fileOps from "./fileOps.js";
-import { getProjectMemberEmails } from "./db.js";
+import { getProjectMemberEmails, supabaseAdmin } from "./db.js";
 import { sendEmail } from "./email.js";
 
 const anthropic = new Anthropic();
@@ -1092,6 +1092,23 @@ export async function handleChatMessage(
 
     let continueLoop = true;
     while (continueLoop) {
+      // Look up user profile for personalization
+      const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(userId);
+      const userName = authUser?.user_metadata?.display_name
+        || authUser?.user_metadata?.full_name
+        || null;
+      const userEmail = authUser?.email || null;
+
+      let userSection = "";
+      if (userName || userEmail) {
+        userSection = `\n\nThe user you are speaking with is`;
+        if (userName) userSection += ` ${userName}`;
+        if (userName && userEmail) userSection += ` (${userEmail})`;
+        else if (userEmail) userSection += ` ${userEmail}`;
+        userSection += `. Use their name occasionally for a personal, friendly touch — but don't overdo it.`;
+        if (userEmail) userSection += ` You can send them emails at ${userEmail} using the send_email tool if they ask.`;
+      }
+
       // Build context-aware system prompt with caching
       const systemBlocks: Anthropic.TextBlockParam[] = [
         {
@@ -1102,7 +1119,7 @@ Perchpad primarily works with two file formats:
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose.
 - **CSV (.csv)** — structured tabular data such as lists, trackers, logs, and datasets.
 
-When working with CSV files, be especially careful to preserve the structure (consistent column counts, proper quoting of fields that contain commas or newlines). When users ask you to add, remove, or modify rows/columns, always read the file first to understand the existing structure before making edits.`,
+When working with CSV files, be especially careful to preserve the structure (consistent column counts, proper quoting of fields that contain commas or newlines). When users ask you to add, remove, or modify rows/columns, always read the file first to understand the existing structure before making edits.${userSection}`,
           cache_control: { type: "ephemeral" },
         },
       ];
