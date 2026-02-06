@@ -732,6 +732,8 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+const isDev = !process.env.FLY_IMAGE_REF;
+
 function landingPageHtml(): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -759,10 +761,10 @@ function landingPageHtml(): string {
     .hero-heading { flex: 1.2; }
     .hero h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 3.5rem; font-weight: 800; line-height: 1.1; color: #3d3229; letter-spacing: -0.02em; }
     .hero-desc { flex: 1; }
-    .hero p { font-size: 1.1rem; color: #6b5d50; line-height: 1.7; }
+    .hero p { font-size: 1.1rem; color: #544840; line-height: 1.7; }
     .cta { display: inline-block; background: #2a211a; color: #fff; padding: 0.8rem 2.25rem; border-radius: 0.5rem; font-size: 1.05rem; font-weight: 600; transition: opacity 0.15s; }
     .cta:hover { opacity: 0.85; text-decoration: none; }
-    .nav-signin { font-size: 0.95rem; color: #9a8b7a; font-weight: 500; transition: color 0.15s; }
+    .nav-signin { font-size: 0.95rem; color: #6b5d50; font-weight: 500; transition: color 0.15s; }
     .nav-signin:hover { color: #3d3229; text-decoration: none; }
     .hero-img { width: 100%; }
     .hero-img img { width: 100%; border-radius: 1.25rem; display: block; }
@@ -774,16 +776,16 @@ function landingPageHtml(): string {
     .feature-card { background: #fff; border: 1px solid #e8ddd0; border-radius: 1rem; padding: 1.75rem; box-shadow: 0 2px 8px rgb(0 0 0 / 0.04); }
     .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
     .feature-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: #3d3229; }
-    .feature-card p { font-size: 0.95rem; color: #9a8b7a; line-height: 1.65; }
+    .feature-card p { font-size: 0.95rem; color: #6b5d50; line-height: 1.65; }
 
     /* Sub-features */
     .sub-features { max-width: 1100px; margin: 0 auto; padding: 0 2rem 3rem; }
-    .sub-features h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; text-align: center; margin-bottom: 1.5rem; color: #9a8b7a; font-weight: 600; }
+    .sub-features h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.35rem; text-align: center; margin-bottom: 1.5rem; color: #544840; font-weight: 600; }
     .sub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
     .sub-item { text-align: center; padding: 1.25rem 1rem; }
-    .sub-item svg { width: 1.25rem; height: 1.25rem; stroke: #9a8b7a; margin-bottom: 0.5rem; }
+    .sub-item svg { width: 1.25rem; height: 1.25rem; stroke: #6b5d50; margin-bottom: 0.5rem; }
     .sub-item h3 { font-size: 0.95rem; color: #3d3229; margin-bottom: 0.35rem; font-weight: 600; }
-    .sub-item p { font-size: 0.85rem; color: #9a8b7a; line-height: 1.55; }
+    .sub-item p { font-size: 0.85rem; color: #6b5d50; line-height: 1.55; }
 
     /* FAQ */
     .faq { max-width: 800px; margin: 0 auto; padding: 2rem 2rem 3rem; }
@@ -794,7 +796,15 @@ function landingPageHtml(): string {
     .faq-item code { background: #f5ebe0; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
 
     /* Footer */
-    .footer { text-align: center; padding: 2rem; color: #9a8b7a; font-size: 0.9rem; border-top: 1px solid #e8ddd0; }
+    .footer { background: #1a1510; color: #a89a8c; padding: 4rem 2rem 2.5rem; }
+    .footer-inner { max-width: 1100px; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 4rem; }
+    .footer-brand { font-family: 'Playfair Display', Georgia, serif; font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem; }
+    .footer-tagline { font-size: 0.85rem; color: #7a6e62; max-width: 280px; line-height: 1.5; }
+    .footer-links { display: flex; gap: 4rem; }
+    .footer-col h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6e62; margin-bottom: 0.75rem; font-weight: 600; }
+    .footer-col a { display: block; font-size: 0.9rem; color: #a89a8c; margin-bottom: 0.5rem; transition: color 0.15s; }
+    .footer-col a:hover { color: #fff; text-decoration: none; }
+    .footer-bottom { max-width: 1100px; margin: 2.5rem auto 0; padding-top: 1.5rem; border-top: 1px solid #2a211a; font-size: 0.8rem; color: #5a4e42; }
 
     @media (max-width: 640px) {
       .hero { padding: 2rem 1.5rem 0; }
@@ -804,6 +814,8 @@ function landingPageHtml(): string {
       .sub-grid { grid-template-columns: repeat(2, 1fr); }
       .nav { padding: 1rem 1.5rem; }
       .faq { padding: 2rem 1.5rem; }
+      .footer-inner { flex-direction: column; gap: 2rem; }
+      .footer-links { gap: 2rem; }
     }
   </style>
   <script>
@@ -913,38 +925,65 @@ function landingPageHtml(): string {
   <section class="faq" id="faq">
     <h2>Under the Hood</h2>
     <div class="faq-item">
-      <h3>What is Perchpad, technically?</h3>
-      <p>A real-time collaborative writing platform. Each project is a git repository on the server. The editor is CodeMirror 6 with markdown support, and files sync over WebSockets. The AI assistant is powered by Claude (Anthropic) with tool-use access to your project files.</p>
+      <h3>What is Perchpad?</h3>
+      <p>A collaborative writing workspace where every project is a git repository. You write in markdown, manage data in CSV tables, and get help from a built-in AI assistant powered by Claude. Everything syncs in real time.</p>
     </div>
     <div class="faq-item">
       <h3>What file formats are supported?</h3>
-      <p>Markdown (<code>.md</code>) with live preview, and CSV (<code>.csv</code>) rendered as editable tables with sticky headers and sorting. The editor supports syntax highlighting for fenced code blocks via CodeMirror language data.</p>
+      <p>Markdown (<code>.md</code>) with live preview, and CSV (<code>.csv</code>) rendered as editable tables with sticky headers. Markdown supports syntax highlighting for code blocks.</p>
     </div>
     <div class="faq-item">
       <h3>How does version control work?</h3>
-      <p>Every project is backed by a real git repository. Perchpad auto-commits every 60 seconds and exposes Git Smart HTTP endpoints — you can <code>git clone</code>, <code>git push</code>, and <code>git pull</code> with standard tools. API keys authenticate via HTTP Basic Auth.</p>
+      <p>Every project is a real git repository. Changes auto-commit every 60 seconds. You can <code>git clone</code>, <code>git push</code>, and <code>git pull</code> with standard tools — your work is never locked in.</p>
     </div>
     <div class="faq-item">
       <h3>How does the email integration work?</h3>
-      <p>Each workspace gets a unique inbound address (e.g. <code>robin-willow-42@in.perchpad.co</code>). Incoming emails are processed by an AI agent that can create, update, or organize files based on the content. Configure behavior with an <code>AGENTS.md</code> file in your project root.</p>
+      <p>Each workspace gets a unique email address. Send content there and the AI processes it into your project — creating files, updating documents, or organizing things based on what you sent. Configure it with an <code>AGENTS.md</code> file.</p>
     </div>
     <div class="faq-item">
-      <h3>Can I connect external AI tools?</h3>
-      <p>Yes. Perchpad exposes a Model Context Protocol (MCP) server. Connect from Claude Desktop, Cursor, or any MCP-compatible client to read files, manage projects, browse git history, and more — all through a standardized interface.</p>
+      <h3>Can I connect Claude Desktop or Cursor?</h3>
+      <p>Yes. Perchpad includes a Model Context Protocol (MCP) server, so you can connect from Claude Desktop, Cursor, or any MCP-compatible client to manage your projects directly.</p>
     </div>
     <div class="faq-item">
-      <h3>How does collaboration and sharing work?</h3>
-      <p>Invite collaborators by email with role-based access: owners, editors (read/write), or viewers (read-only). Share individual files via public links. All changes sync in real time over WebSockets — no polling, no refresh needed.</p>
+      <h3>How does sharing work?</h3>
+      <p>Invite people by email with role-based access — owners, editors, or viewers. You can also share individual files via public links. All changes sync instantly for everyone.</p>
     </div>
     <div class="faq-item">
-      <h3>Where is my data stored?</h3>
-      <p>Projects live as git repositories on the server with persistent volume storage. Auth and metadata are managed by Supabase (Postgres with row-level security). Files are never shared across projects or users unless explicitly invited.</p>
+      <h3>Can I use it for reading and research?</h3>
+      <p>Absolutely. Create playlists of documents — reading lists, paper collections, study notes — and work through them at your own pace. The bird can summarize, annotate, and help you make sense of what you're reading.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Is my data private?</h3>
+      <p>Yes. Projects are isolated per user and never shared unless you explicitly invite someone. Your files are stored as git repositories and are fully yours — clone them anytime.</p>
     </div>
   </section>
 
   <footer class="footer">
-    <a href="/login">Sign in to Perchpad</a>
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">Perchpad</div>
+        <div class="footer-tagline">A calm writing workspace with a smart little bird.</div>
+      </div>
+      <div class="footer-links">
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="/login">Sign In</a>
+          <a href="/login">Get Started</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <div class="footer-col">
+          <h4>Features</h4>
+          <a href="#faq">AI Assistant</a>
+          <a href="#faq">Collaboration</a>
+          <a href="#faq">Version Control</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">&copy; 2026 Perchpad</div>
   </footer>
+${isDev ? `<script>
+(function(){var t;function c(){var ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=function(){if(t){location.reload()}};ws.onclose=function(){t=true;setTimeout(c,500)}}c()})();
+</script>` : ''}
 </body>
 </html>`;
 }
