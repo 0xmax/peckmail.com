@@ -38,6 +38,10 @@ export interface InboundEmailRecord {
   subject: string;
   body_text: string;
   resend_email_id: string;
+  date: string;
+  cc: string[];
+  reply_to: string;
+  headers: Record<string, any>;
 }
 
 /**
@@ -60,6 +64,9 @@ export async function receiveInboundEmail(
     data.email_id ?? data.id ?? `unknown-${Date.now()}`;
   const headers = data.headers ?? {};
   const attachments = data.attachments ?? [];
+  const cc: string[] = Array.isArray(data.cc) ? data.cc : data.cc ? [data.cc] : [];
+  const replyTo: string = data.reply_to ?? data.replyTo ?? "";
+  const date: string = data.date ?? data.created_at ?? new Date().toISOString();
 
   // Find matching project for any of the to addresses
   let project: { id: string; name: string } | null = null;
@@ -118,6 +125,10 @@ export async function receiveInboundEmail(
     subject,
     body_text: bodyText,
     resend_email_id: resendEmailId,
+    date,
+    cc,
+    reply_to: replyTo,
+    headers,
   };
 }
 
@@ -145,11 +156,7 @@ export async function processInboundEmail(
   );
 
   // Format user message
-  const userMessage = formatEmailAsMessage(
-    record.from_address,
-    record.subject,
-    record.body_text
-  );
+  const userMessage = formatEmailAsMessage(record);
 
   try {
     const { sessionId } = await runAgentHeadless(
@@ -270,17 +277,23 @@ No custom instructions (AGENTS.md) were found in this workspace. Apply the defau
 If the sender wrote instructions above a forwarded message, follow those instructions instead of this default.`;
 }
 
-function formatEmailAsMessage(
-  from: string,
-  subject: string,
-  body: string
-): string {
+function formatEmailAsMessage(record: InboundEmailRecord): string {
+  let meta = `**From:** ${record.from_address}
+**To:** ${record.to_address}`;
+  if (record.cc.length > 0) {
+    meta += `\n**CC:** ${record.cc.join(", ")}`;
+  }
+  if (record.reply_to) {
+    meta += `\n**Reply-To:** ${record.reply_to}`;
+  }
+  meta += `\n**Date:** ${record.date}`;
+  meta += `\n**Subject:** ${record.subject}`;
+
   return `New inbound email received:
 
-**From:** ${from}
-**Subject:** ${subject}
+${meta}
 
 ---
 
-${body}`;
+${record.body_text}`;
 }
