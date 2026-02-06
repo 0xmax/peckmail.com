@@ -31,6 +31,7 @@ import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
 import { gitRouter } from "./gitHttp.js";
+import { getAvailableBalance, getTransactions, releaseStaleHolds } from "./credits.js";
 import { createHash, randomBytes } from "crypto";
 import { promises as fs } from "fs";
 import { join } from "path";
@@ -591,6 +592,21 @@ api.get("/projects/:id/email", async (c) => {
   return c.json({ email });
 });
 
+// Credits
+api.get("/credits/balance", async (c) => {
+  const user = getUser(c);
+  const result = await getAvailableBalance(user.id);
+  return c.json(result);
+});
+
+api.get("/credits/transactions", async (c) => {
+  const user = getUser(c);
+  const limit = parseInt(c.req.query("limit") || "50");
+  const offset = parseInt(c.req.query("offset") || "0");
+  const transactions = await getTransactions(user.id, limit, offset);
+  return c.json({ transactions });
+});
+
 // Git history (revisions)
 api.get("/projects/:id/revisions", async (c) => {
   const user = getUser(c);
@@ -704,6 +720,13 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 
 injectWebSocket(server);
 
+// Cleanup stale credit holds every 5 minutes
+setInterval(() => {
+  releaseStaleHolds().then((count) => {
+    if (count > 0) console.log(`[credits] Released ${count} stale hold(s)`);
+  }).catch((err) => console.error("[credits] Stale hold cleanup error:", err));
+}, 5 * 60 * 1000);
+
 // Share page HTML
 function sharePageHtml(
   filePath: string,
@@ -775,21 +798,6 @@ function landingPageHtml(): string {
   <meta name="theme-color" content="#faf6f1">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
-  <script>
-    try {
-      var sb = JSON.parse(localStorage.getItem('sb-' + location.hostname + '-auth-token') || '{}');
-      if (!sb.access_token) {
-        var keys = Object.keys(localStorage);
-        for (var i = 0; i < keys.length; i++) {
-          if (keys[i].indexOf('auth-token') !== -1) {
-            sb = JSON.parse(localStorage.getItem(keys[i]) || '{}');
-            break;
-          }
-        }
-      }
-      if (sb.access_token) { location.replace('/projects'); }
-    } catch(e) {}
-  </script>
 </head>
 <body class="bg-bg text-text">
 
@@ -797,10 +805,25 @@ function landingPageHtml(): string {
     <a href="/" class="flex items-center gap-2 font-heading text-[1.35rem] font-bold text-text">
       <img src="/assets/logo.png" alt="" class="h-7 w-auto">Perchpad
     </a>
-    <div class="flex items-center gap-5">
+    <div id="nav-actions" class="flex items-center gap-5">
       <a href="/login" class="text-[0.95rem] text-text-secondary font-medium hover:text-text transition-colors">Sign In</a>
       <a href="/login" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Get Started</a>
     </div>
+    <script>
+      try {
+        var sb = JSON.parse(localStorage.getItem('sb-' + location.hostname + '-auth-token') || '{}');
+        if (!sb.access_token) {
+          var keys = Object.keys(localStorage);
+          for (var i = 0; i < keys.length; i++) {
+            if (keys[i].indexOf('auth-token') !== -1) { sb = JSON.parse(localStorage.getItem(keys[i]) || '{}'); break; }
+          }
+        }
+        if (sb.access_token) {
+          document.getElementById('nav-actions').innerHTML =
+            '<a href="/projects" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Go to Projects</a>';
+        }
+      } catch(e) {}
+    </script>
   </nav>
 
   <section class="max-w-[1100px] mx-auto px-6 pt-8 sm:px-8 sm:pt-16">
@@ -839,7 +862,7 @@ function landingPageHtml(): string {
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
         <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M80,88v80H32a8,8,0,0,1-8-8V96a8,8,0,0,1,8-8Z" opacity="0.2"/><path d="M155.51,24.81a8,8,0,0,0-8.42.88L77.25,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H77.25l69.84,54.31A8,8,0,0,0,160,224V32A8,8,0,0,0,155.51,24.81ZM32,96H72v64H32ZM144,207.64,88,164.09V91.91l56-43.55Zm54-106.08a40,40,0,0,1,0,52.88,8,8,0,0,1-12-10.58,24,24,0,0,0,0-31.72,8,8,0,0,1,12-10.58ZM248,128a79.9,79.9,0,0,1-20.37,53.34,8,8,0,0,1-11.92-10.67,64,64,0,0,0,0-85.33,8,8,0,1,1,11.92-10.67A79.83,79.83,0,0,1,248,128Z"/></svg>
         <h3 class="text-[1.1rem] mb-2 text-text">It Reads to You</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Select any page and hit play. The built-in reader turns your writing into natural speech with expressive voices — so you can listen back, catch mistakes, or just lean back and hear your words come alive.</p>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Perchpad can read your documents aloud. Select any page and hit play — the built-in reader turns your writing into natural speech with expressive voices, so you can listen back, catch mistakes, or just lean back and hear your words come alive.</p>
       </div>
     </div>
   </section>
@@ -876,6 +899,11 @@ function landingPageHtml(): string {
         <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64a24,24,0,1,1-24-24A24,24,0,0,1,224,64Z" opacity="0.2"/><path d="M232,64a32,32,0,1,0-40,31v17a8,8,0,0,1-8,8H96a23.84,23.84,0,0,0-8,1.38V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V144a8,8,0,0,1,8-8h88a24,24,0,0,0,24-24V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64ZM96,192a16,16,0,1,1-16-16A16,16,0,0,1,96,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Change Tracking</h3>
         <p class="text-[0.85rem] text-text-secondary leading-relaxed">Browse diffs, see who changed what, and review the full history of any file at any time.</p>
+      </div>
+      <div class="text-center px-4 py-5 opacity-40 select-none">
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,104v8a48,48,0,0,1-48,48H96a48,48,0,0,1-48-48v-8a49.28,49.28,0,0,1,8.51-27.3A51.92,51.92,0,0,1,76,32a52,52,0,0,1,43.83,24h16.34A52,52,0,0,1,180,32a51.92,51.92,0,0,1,19.49,44.7A49.28,49.28,0,0,1,208,104Z" opacity="0.2"/><path d="M208.3,75.68A51.71,51.71,0,0,0,180.36,32a52,52,0,0,0-43.08,24H118.72A52,52,0,0,0,75.64,32a51.71,51.71,0,0,0-27.94,43.68A56.09,56.09,0,0,0,40,104v8a56.06,56.06,0,0,0,48,55.43V192a8,8,0,0,0,16,0V167.43a55.94,55.94,0,0,0,24-10.54,55.94,55.94,0,0,0,24,10.54V192a8,8,0,0,0,16,0V167.43A56.06,56.06,0,0,0,216,112v-8A56.09,56.09,0,0,0,208.3,75.68ZM200,112a40,40,0,0,1-40,40H136a8,8,0,0,0-8,8,8,8,0,0,0-8-8H96a40,40,0,0,1-40-40v-8a40,40,0,0,1,40-40h64a40,40,0,0,1,40,40Zm-16-60a36,36,0,0,1,0,4H72a36,36,0,0,1,0-4Z"/></svg>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">GitHub Sync</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Automatically sync your workspaces to private GitHub repos. <span class="italic">Coming soon.</span></p>
       </div>
     </div>
   </section>

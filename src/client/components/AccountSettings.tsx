@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { supabase } from "../lib/supabase.js";
 import type { UserPreferences } from "../store/types.js";
-import { Monitor, Terminal, Play, Stop } from "@phosphor-icons/react";
+import { Monitor, Terminal, Play, Stop, CurrencyDollar } from "@phosphor-icons/react";
 
 interface ApiKey {
   id: string;
@@ -46,8 +46,19 @@ const DEFAULT_V2: V2Settings = {
   speed: 1.0,
 };
 
+interface CreditTransaction {
+  id: string;
+  amount: number;
+  balance_after: number;
+  type: string;
+  service: string | null;
+  project_id: string | null;
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
 export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void; onOpenProject?: (id: string) => void }) {
-  const { user, preferences, updatePreferences } = useAuth();
+  const { user, preferences, updatePreferences, credits, refreshCredits } = useAuth();
   const [voiceId, setVoiceId] = useState(preferences.tts?.voiceId || VOICES[0].id);
   const [model, setModel] = useState<TtsModel>(preferences.tts?.model || "v3");
   const [v2Settings, setV2Settings] = useState<V2Settings>(preferences.tts?.v2 || DEFAULT_V2);
@@ -66,10 +77,14 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   const [cliCopied, setCliCopied] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [creatingStarter, setCreatingStarter] = useState(false);
+  const [showTransactions, setShowTransactions] = useState(false);
+  const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
+  const [loadingTx, setLoadingTx] = useState(false);
 
   useEffect(() => {
     api.get<{ keys: ApiKey[] }>("/api/keys").then((r) => setApiKeys(r.keys)).catch(() => {});
-  }, []);
+    refreshCredits();
+  }, [refreshCredits]);
 
   const handleCreateKey = async () => {
     if (!newKeyName.trim()) return;
@@ -223,6 +238,87 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
               <div className="text-sm text-text">
                 {user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Not set"}
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Credits section */}
+        <section>
+          <h2 className="text-base font-semibold text-text mb-4">Credits</h2>
+          <div className="bg-surface rounded-xl border border-border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-text tabular-nums">
+                  {credits ? credits.available.toLocaleString() : "—"}
+                </div>
+                <div className="text-xs text-text-muted mt-0.5">
+                  available credits
+                  {credits && credits.held > 0 && (
+                    <span className="ml-1">({credits.held.toLocaleString()} held)</span>
+                  )}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+                <CurrencyDollar size={20} className="text-accent" />
+              </div>
+            </div>
+
+            {credits && credits.available < 500 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="text-xs text-amber-800">
+                  Your credits are running low. Contact us to add more.
+                </p>
+              </div>
+            )}
+
+            <div>
+              <button
+                onClick={async () => {
+                  if (!showTransactions && transactions.length === 0) {
+                    setLoadingTx(true);
+                    try {
+                      const r = await api.get<{ transactions: CreditTransaction[] }>("/api/credits/transactions?limit=20");
+                      setTransactions(r.transactions);
+                    } catch { /* ignore */ }
+                    setLoadingTx(false);
+                  }
+                  setShowTransactions(!showTransactions);
+                }}
+                className="text-xs font-medium text-text-muted hover:text-text transition-colors flex items-center gap-1"
+              >
+                <span className={`transition-transform ${showTransactions ? "rotate-90" : ""}`}>&rsaquo;</span>
+                Usage history
+              </button>
+              {showTransactions && (
+                <div className="mt-2 space-y-1">
+                  {loadingTx ? (
+                    <div className="text-xs text-text-muted py-2">Loading...</div>
+                  ) : transactions.length === 0 ? (
+                    <div className="text-xs text-text-muted py-2">No transactions yet</div>
+                  ) : (
+                    transactions.map((tx) => (
+                      <div key={tx.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="text-sm text-text">
+                            <span className={`font-medium ${tx.amount > 0 ? "text-green-600" : "text-text"}`}>
+                              {tx.amount > 0 ? "+" : ""}{tx.amount.toLocaleString()}
+                            </span>
+                            {tx.service && (
+                              <span className="ml-1.5 text-xs text-text-muted">{tx.service}</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-text-muted">
+                            {tx.type} · {new Date(tx.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="text-xs text-text-muted tabular-nums shrink-0 ml-3">
+                          {tx.balance_after.toLocaleString()}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </section>

@@ -8,6 +8,7 @@ import { broadcast, sendTo } from "./ws.js";
 import * as fileOps from "./fileOps.js";
 import { getProjectMemberEmails, getProjectMembers, getProjectEmail, getProjectMembership, createInvitation, supabaseAdmin } from "./db.js";
 import { sendEmail, sendInvitationEmail } from "./email.js";
+import { placeHold, settleHold, releaseHold, calculateChatCost } from "./credits.js";
 
 const anthropic = new Anthropic();
 
@@ -1092,56 +1093,98 @@ export async function runAgentHeadless(
   const model = opts?.model ?? "claude-opus-4-6";
   const maxTokens = opts?.maxTokens ?? 16384;
 
+  // Place credit hold if we have a userId
+  let holdId: string | null = null;
+  if (opts?.userId) {
+    const estimatedCredits = 500; // conservative estimate for headless agent
+    const holdResult = await placeHold({
+      userId: opts.userId,
+      amount: estimatedCredits,
+      service: "chat",
+      projectId,
+    });
+    if (!holdResult.success) {
+      throw new Error("Insufficient credits");
+    }
+    holdId = holdResult.holdId;
+  }
+
+  let totalUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
+
   let messages: Anthropic.MessageParam[] = session.messages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
 
-  let continueLoop = true;
-  while (continueLoop) {
-    const response = await anthropic.messages.create({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      tools,
-      messages,
-    });
+  try {
+    let continueLoop = true;
+    while (continueLoop) {
+      const response = await anthropic.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        tools,
+        messages,
+      });
 
-    const fullContent: any[] = [];
-    const toolResults: Anthropic.MessageParam[] = [];
-    continueLoop = false;
+      // Accumulate usage
+      totalUsage.input_tokens += response.usage?.input_tokens ?? 0;
+      totalUsage.output_tokens += response.usage?.output_tokens ?? 0;
+      totalUsage.cache_read_input_tokens += (response.usage as any)?.cache_read_input_tokens ?? 0;
 
-    for (const block of response.content) {
-      if (block.type === "text" || block.type === "tool_use") {
-        fullContent.push(block);
+      const fullContent: any[] = [];
+      const toolResults: Anthropic.MessageParam[] = [];
+      continueLoop = false;
+
+      for (const block of response.content) {
+        if (block.type === "text" || block.type === "tool_use") {
+          fullContent.push(block);
+        }
+        if (block.type === "tool_use") {
+          const result = await executeTool(projectId, block.name, block.input, noopWs, opts?.userId);
+          toolResults.push({
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: block.id,
+                content: result,
+              },
+            ],
+          });
+        }
       }
-      if (block.type === "tool_use") {
-        const result = await executeTool(projectId, block.name, block.input, noopWs, opts?.userId);
-        toolResults.push({
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: block.id,
-              content: result,
-            },
-          ],
-        });
+
+      session.messages.push({ role: "assistant", content: fullContent });
+
+      if (toolResults.length > 0) {
+        for (const tr of toolResults) {
+          session.messages.push({ role: "user", content: tr.content as any });
+        }
+        messages = session.messages.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }));
+        continueLoop = true;
       }
     }
 
-    session.messages.push({ role: "assistant", content: fullContent });
-
-    if (toolResults.length > 0) {
-      for (const tr of toolResults) {
-        session.messages.push({ role: "user", content: tr.content as any });
-      }
-      messages = session.messages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
-      continueLoop = true;
+    // Settle hold with actual usage
+    if (holdId) {
+      const actualCredits = calculateChatCost(totalUsage);
+      await settleHold(holdId, actualCredits, { usage: totalUsage });
     }
+  } catch (err) {
+    // Release or settle hold on error
+    if (holdId) {
+      const partialCredits = calculateChatCost(totalUsage);
+      if (partialCredits > 0) {
+        await settleHold(holdId, partialCredits, { usage: totalUsage, error: true });
+      } else {
+        await releaseHold(holdId);
+      }
+    }
+    throw err;
   }
 
   session.updatedAt = new Date().toISOString();
@@ -1190,6 +1233,31 @@ export async function handleChatMessage(
         ? msg.message.slice(0, 50) + "..."
         : msg.message;
   }
+
+  // Place credit hold before calling Anthropic
+  let holdId: string | null = null;
+  const estimatedCredits = 300; // conservative estimate for a chat turn
+  try {
+    const holdResult = await placeHold({
+      userId,
+      amount: estimatedCredits,
+      service: "chat",
+      projectId,
+    });
+    if (!holdResult.success) {
+      sendTo(ws, {
+        type: "chat:error",
+        sessionId: session.id,
+        error: "Insufficient credits",
+      });
+      return;
+    }
+    holdId = holdResult.holdId;
+  } catch (holdErr) {
+    console.error("[chat] Hold placement error:", holdErr);
+  }
+
+  let totalUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
 
   // Call Anthropic with tools in a loop
   try {
@@ -1292,6 +1360,11 @@ When working with CSV files, be especially careful to preserve the structure (co
 
       const finalMessage = await stream.finalMessage();
 
+      // Accumulate usage for credit metering
+      totalUsage.input_tokens += finalMessage.usage?.input_tokens ?? 0;
+      totalUsage.output_tokens += finalMessage.usage?.output_tokens ?? 0;
+      totalUsage.cache_read_input_tokens += (finalMessage.usage as any)?.cache_read_input_tokens ?? 0;
+
       // Process the response
       continueLoop = false;
       const toolResults: Anthropic.MessageParam[] = [];
@@ -1351,6 +1424,12 @@ When working with CSV files, be especially careful to preserve the structure (co
       }
     }
 
+    // Settle credit hold with actual usage
+    if (holdId) {
+      const actualCredits = calculateChatCost(totalUsage);
+      await settleHold(holdId, actualCredits, { usage: totalUsage });
+    }
+
     // Save session
     session.updatedAt = new Date().toISOString();
     await saveSession(projectId, session);
@@ -1369,6 +1448,17 @@ When working with CSV files, be especially careful to preserve the structure (co
     });
   } catch (err: any) {
     console.error("[chat] Error:", err);
+
+    // Release or settle credit hold on error
+    if (holdId) {
+      const partialCredits = calculateChatCost(totalUsage);
+      if (partialCredits > 0) {
+        await settleHold(holdId, partialCredits, { usage: totalUsage, error: true }).catch(() => {});
+      } else {
+        await releaseHold(holdId).catch(() => {});
+      }
+    }
+
     sendTo(ws, {
       type: "chat:error",
       sessionId: session.id,

@@ -11,6 +11,12 @@ import { api } from "../lib/api.js";
 import type { User, Session } from "@supabase/supabase-js";
 import type { UserPreferences } from "../store/types.js";
 
+interface CreditBalance {
+  balance: number;
+  held: number;
+  available: number;
+}
+
 interface AuthState {
   user: User | null;
   session: Session | null;
@@ -18,6 +24,8 @@ interface AuthState {
   preferences: UserPreferences;
   defaultApiKey: string | null;
   handle: string | null;
+  credits: CreditBalance | null;
+  refreshCredits: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
@@ -38,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState<UserPreferences>({});
   const [defaultApiKey, setDefaultApiKey] = useState<string | null>(null);
   const [handle, setHandle] = useState<string | null>(null);
+  const [credits, setCredits] = useState<CreditBalance | null>(null);
 
   useEffect(() => {
     const handleSession = (session: Session | null) => {
@@ -55,9 +64,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .get<{ handle: string | null }>("/api/user/profile")
           .then((r) => setHandle(r.handle))
           .catch(() => {});
+        // Fetch credit balance
+        api
+          .get<CreditBalance>("/api/credits/balance")
+          .then((r) => setCredits(r))
+          .catch(() => {});
       } else {
         setDefaultApiKey(null);
         setHandle(null);
+        setCredits(null);
       }
       setLoading(false);
     };
@@ -117,6 +132,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPreferences(prefs);
   }, []);
 
+  const refreshCredits = useCallback(async () => {
+    try {
+      const r = await api.get<CreditBalance>("/api/credits/balance");
+      setCredits(r);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -126,6 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         preferences,
         defaultApiKey,
         handle,
+        credits,
+        refreshCredits,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,

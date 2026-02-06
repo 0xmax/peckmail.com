@@ -6,6 +6,7 @@ import { join } from "path";
 import { authMiddleware, getUser } from "./auth.js";
 import { getProjectMembership } from "./db.js";
 import { PROJECTS_DIR } from "./files.js";
+import { deductCredits, calculateTtsCost, calculateChatCost, calculateWhisperCost } from "./credits.js";
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -119,7 +120,7 @@ function makeCacheFilename(
   return `${hash}.mp3`;
 }
 
-async function enhanceWithAudioTags(text: string): Promise<string> {
+async function enhanceWithAudioTags(text: string): Promise<{ text: string; usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number } }> {
   const res = await anthropic.messages.create({
     model: "claude-opus-4-6",
     max_tokens: 4096,
@@ -141,9 +142,15 @@ Guidelines:
     ],
   });
 
+  const usage = {
+    input_tokens: res.usage?.input_tokens ?? 0,
+    output_tokens: res.usage?.output_tokens ?? 0,
+    cache_read_input_tokens: (res.usage as any)?.cache_read_input_tokens ?? 0,
+  };
+
   const block = res.content[0];
-  if (block.type === "text") return block.text;
-  return text;
+  if (block.type === "text") return { text: block.text, usage };
+  return { text, usage };
 }
 
 async function transcribeWithWhisper(
@@ -369,11 +376,38 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
     // Cache miss — continue to streaming
   }
 
+  // Deduct credits for TTS generation (cache miss only)
+  const ttsCost = calculateTtsCost(originalText.length);
+  const deductResult = await deductCredits({
+    userId: user.id,
+    amount: ttsCost,
+    service: "tts",
+    projectId,
+    metadata: { chars: originalText.length, model, voiceId: voice },
+  });
+  if (!deductResult.success) {
+    return c.json({ error: "Insufficient credits" }, 402);
+  }
+
   // Enhance text for v3
   let ttsText = originalText;
   if (model === "v3") {
     try {
-      ttsText = await enhanceWithAudioTags(ttsText);
+      const enhanceRes = await enhanceWithAudioTags(ttsText);
+      ttsText = enhanceRes.text;
+      // Meter the Claude call for enhancement separately
+      if (enhanceRes.usage) {
+        const enhanceCost = calculateChatCost(enhanceRes.usage);
+        if (enhanceCost > 0) {
+          deductCredits({
+            userId: user.id,
+            amount: enhanceCost,
+            service: "tts_enhance",
+            projectId,
+            metadata: { usage: enhanceRes.usage },
+          }).catch((err) => console.error("[tts] Enhance credit deduction error:", err));
+        }
+      }
     } catch (err) {
       console.error("[tts] Audio tag enhancement failed:", err);
     }
@@ -460,6 +494,23 @@ ttsRouter.get("/tts/:projectId/stream/:streamId", authMiddleware, async (c) => {
               // Cache timestamps to disk
               const tsPath = job.cacheFile.replace(/\.mp3$/, ".ts.json");
               fs.writeFile(tsPath, JSON.stringify(timestamps), "utf-8").catch(() => {});
+
+              // Deduct credits for Whisper transcription
+              // Estimate duration: ~16kbps MP3 ≈ 2000 bytes/sec
+              if (segments.length > 0) {
+                const lastSeg = segments[segments.length - 1];
+                const durationSec = lastSeg?.end ?? fullBuffer.length / 2000;
+                const whisperCost = calculateWhisperCost(durationSec);
+                if (whisperCost > 0) {
+                  deductCredits({
+                    userId: job.userId,
+                    amount: whisperCost,
+                    service: "whisper",
+                    projectId: job.projectId,
+                    metadata: { durationSec },
+                  }).catch((err) => console.error("[tts] Whisper credit deduction error:", err));
+                }
+              }
             })
             .catch((err) => {
               console.error("[tts] Whisper background error:", err);

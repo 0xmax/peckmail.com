@@ -12,6 +12,7 @@ import { sendEmail } from "./email.js";
 import { PROJECTS_DIR } from "./files.js";
 import { promises as fs } from "fs";
 import { join } from "path";
+import { getProjectOwner } from "./credits.js";
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -224,11 +225,15 @@ export async function processInboundEmail(
   // Format user message
   const userMessage = formatEmailAsMessage(record);
 
+  // Look up project owner for billing
+  const ownerId = await getProjectOwner(record.project_id);
+
   try {
     const { sessionId } = await runAgentHeadless(
       record.project_id,
       systemPrompt,
-      userMessage
+      userMessage,
+      { userId: ownerId ?? undefined }
     );
     await updateEmailStatus(record.id, "processed", sessionId);
     broadcast(record.project_id, {
@@ -241,7 +246,9 @@ export async function processInboundEmail(
       `[inbound] Processed email ${record.resend_email_id} for project ${record.project_id}, session ${sessionId}`
     );
   } catch (err: any) {
-    const errorMsg = err.message || "Unknown error";
+    const errorMsg = err.message === "Insufficient credits"
+      ? "Insufficient credits to process this email. Please add credits to your account."
+      : err.message || "Unknown error";
     console.error("[inbound] Agent error:", err);
     await updateEmailStatus(record.id, "failed", null, errorMsg);
     broadcast(record.project_id, {
