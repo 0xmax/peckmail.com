@@ -1,7 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.js";
+import { api } from "../lib/api.js";
 import { supabase } from "../lib/supabase.js";
 import type { UserPreferences } from "../store/types.js";
+
+interface ApiKey {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
 
 const VOICES = [
   { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", desc: "Warm, calm narrator" },
@@ -46,6 +54,85 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
   const [saved, setSaved] = useState(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // API Keys / Connect state
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
+  const [cliCopied, setCliCopied] = useState(false);
+  const [showApiKeys, setShowApiKeys] = useState(false);
+
+  useEffect(() => {
+    api.get<{ keys: ApiKey[] }>("/api/keys").then((r) => setApiKeys(r.keys)).catch(() => {});
+  }, []);
+
+  const handleCreateKey = async () => {
+    if (!newKeyName.trim()) return;
+    setCreatingKey(true);
+    try {
+      const res = await api.post<{ key: string; id: string; name: string; created_at: string }>(
+        "/api/keys",
+        { name: newKeyName.trim() }
+      );
+      setCreatedKey(res.key);
+      setApiKeys((prev) => [{ id: res.id, name: res.name, created_at: res.created_at, last_used_at: null }, ...prev]);
+      setNewKeyName("");
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const handleDeleteKey = async (id: string) => {
+    await api.del(`/api/keys/${id}`);
+    setApiKeys((prev) => prev.filter((k) => k.id !== id));
+  };
+
+  const handleCopyKey = () => {
+    if (createdKey) {
+      navigator.clipboard.writeText(createdKey);
+      setKeyCopied(true);
+      setTimeout(() => setKeyCopied(false), 2000);
+    }
+  };
+
+  const MCP_URL = "https://perchpad.co/mcp";
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(MCP_URL);
+    setUrlCopied(true);
+    setTimeout(() => setUrlCopied(false), 2000);
+  };
+
+  const handleCopyCliCommand = (key: string) => {
+    const cmd = `claude mcp add perchpad --url ${MCP_URL} --header "Authorization: Bearer ${key}"`;
+    navigator.clipboard.writeText(cmd);
+    setCliCopied(true);
+    setTimeout(() => setCliCopied(false), 2000);
+  };
+
+  const handleDownloadConfig = () => {
+    if (!createdKey) return;
+    const config = {
+      mcpServers: {
+        perchpad: {
+          url: "https://perchpad.co/mcp",
+          headers: {
+            Authorization: `Bearer ${createdKey}`,
+          },
+        },
+      },
+    };
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "claude_code_config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Cleanup preview audio on unmount
   useEffect(() => {
@@ -135,6 +222,170 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
                 {user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Not set"}
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Connect to Claude section */}
+        <section>
+          <h2 className="text-base font-semibold text-text mb-4">Connect to Claude</h2>
+          <div className="bg-surface rounded-xl border border-border p-5 space-y-5">
+            <p className="text-xs text-text-muted">
+              Connect Claude to your Perchpad projects so it can read, write, and manage your files directly.
+            </p>
+
+            {/* MCP URL */}
+            <div>
+              <label className="text-xs font-medium text-text-muted block mb-1.5">MCP Server URL</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-sm bg-surface-alt border border-border rounded-lg px-3 py-2 font-mono text-text select-all">
+                  {MCP_URL}
+                </code>
+                <button
+                  onClick={handleCopyUrl}
+                  className="shrink-0 px-3 py-2 bg-surface-alt border border-border text-text-muted rounded-lg text-xs hover:text-text hover:border-text-muted transition-colors"
+                >
+                  {urlCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+
+            {/* Claude Desktop */}
+            <div className="bg-surface-alt rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <path d="M8 21h8M12 17v4" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-text">Claude Desktop</span>
+              </div>
+              <p className="text-xs text-text-muted">
+                Add a remote MCP server in Claude Desktop with the URL above. OAuth sign-in handles authentication automatically — no API key needed.
+              </p>
+            </div>
+
+            {/* Claude Code */}
+            <div className="bg-surface-alt rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent">
+                    <polyline points="4 17 10 11 4 5" />
+                    <line x1="12" y1="19" x2="20" y2="19" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-text">Claude Code</span>
+              </div>
+              <p className="text-xs text-text-muted">
+                Create an API key, then use the one-liner below or download the config file.
+              </p>
+
+              {/* Created key display */}
+              {createdKey && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-3">
+                  <p className="text-xs font-medium text-green-800">
+                    Key created! Copy it now — you won't see it again.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-white border border-green-200 rounded px-2 py-1.5 font-mono text-green-900 break-all select-all">
+                      {createdKey}
+                    </code>
+                    <button
+                      onClick={handleCopyKey}
+                      className="shrink-0 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition-colors"
+                    >
+                      {keyCopied ? "Copied!" : "Copy key"}
+                    </button>
+                  </div>
+
+                  {/* CLI one-liner */}
+                  <div>
+                    <label className="text-xs font-medium text-green-800 block mb-1">Run in terminal:</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs bg-white border border-green-200 rounded px-2 py-1.5 font-mono text-green-900 break-all select-all">
+                        claude mcp add perchpad --url {MCP_URL} --header &quot;Authorization: Bearer {createdKey}&quot;
+                      </code>
+                      <button
+                        onClick={() => handleCopyCliCommand(createdKey)}
+                        className="shrink-0 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition-colors"
+                      >
+                        {cliCopied ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      onClick={handleDownloadConfig}
+                      className="text-xs font-medium text-green-700 hover:text-green-900 transition-colors underline"
+                    >
+                      Download config file instead
+                    </button>
+                    <button
+                      onClick={() => { setCreatedKey(null); setKeyCopied(false); }}
+                      className="text-xs text-green-600 hover:text-green-800 transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Create new key */}
+              {!createdKey && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Key name (e.g. My Laptop)"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateKey()}
+                    className="flex-1 text-sm bg-white border border-border rounded-lg px-3 py-2 text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                  <button
+                    onClick={handleCreateKey}
+                    disabled={creatingKey || !newKeyName.trim()}
+                    className="shrink-0 px-4 py-2 bg-accent text-white rounded-lg text-sm hover:bg-accent-hover transition-colors disabled:opacity-50"
+                  >
+                    {creatingKey ? "Creating..." : "Create key"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Existing keys */}
+            {apiKeys.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowApiKeys(!showApiKeys)}
+                  className="text-xs font-medium text-text-muted hover:text-text transition-colors flex items-center gap-1"
+                >
+                  <span className={`transition-transform ${showApiKeys ? "rotate-90" : ""}`}>&rsaquo;</span>
+                  {apiKeys.length} API key{apiKeys.length !== 1 ? "s" : ""}
+                </button>
+                {showApiKeys && (
+                  <div className="space-y-2 mt-2">
+                    {apiKeys.map((k) => (
+                      <div key={k.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-text truncate">{k.name}</div>
+                          <div className="text-xs text-text-muted">
+                            Created {new Date(k.created_at).toLocaleDateString()}
+                            {k.last_used_at && ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteKey(k.id)}
+                          className="shrink-0 text-xs text-red-500 hover:text-red-700 transition-colors ml-3"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 

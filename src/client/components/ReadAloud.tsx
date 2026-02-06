@@ -171,6 +171,16 @@ function isValidTimestamp(x: any): x is LineTimestamp {
   );
 }
 
+function getTimestampDuration(timestamps: LineTimestamp[]): number {
+  let maxEnd = 0;
+  for (const ts of timestamps) {
+    if (Number.isFinite(ts.end) && ts.end > maxEnd) {
+      maxEnd = ts.end;
+    }
+  }
+  return maxEnd;
+}
+
 /** Find 1-indexed line numbers where new chunks (paragraphs / headings) start */
 function getChunkStartLines(content: string): number[] {
   const lines = content.split("\n");
@@ -197,7 +207,8 @@ export function AudioBar() {
   const activeStreamId = useRef<string | null>(null);
   const [state, setState] = useState<PlayState>("idle");
   const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState(0);
+  const [timingDuration, setTimingDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
   const [model, setModel] = useState<TtsModel>("v2");
@@ -323,6 +334,8 @@ export function AudioBar() {
     cleanup();
     setState("idle");
     setProgress(0);
+    setMediaDuration(0);
+    setTimingDuration(0);
     setCurrentTime(0);
     setActivity(null);
     dispatch({ type: "tts:clear" });
@@ -364,9 +377,11 @@ export function AudioBar() {
             const ts = tsRaw.filter(isValidTimestamp) as LineTimestamp[];
             if (ts.length > 0) {
               timestampsRef.current = ts;
+              setTimingDuration(getTimestampDuration(ts));
               missingTimingLoggedRef.current = false;
             } else {
               timestampsRef.current = [];
+              setTimingDuration(0);
               console.error(
                 "[AudioBar] Timestamp refinement returned no valid segments; cursor animation disabled",
                 { streamId, count: tsRaw.length }
@@ -390,6 +405,7 @@ export function AudioBar() {
           { streamId }
         );
         timestampsRef.current = [];
+        setTimingDuration(0);
         setActivity(null);
       }
     },
@@ -473,6 +489,10 @@ export function AudioBar() {
       setError(null);
       setActivity(model === "v3" ? "Enhancing text with AI..." : "Preparing audio...");
       dispatch({ type: "tts:clear" });
+      setProgress(0);
+      setCurrentTime(0);
+      setMediaDuration(0);
+      setTimingDuration(0);
 
       // Stop existing playback
       if (audioRef.current) {
@@ -542,6 +562,7 @@ export function AudioBar() {
           const tsRaw = Array.isArray(data.timestamps) ? data.timestamps : [];
           const ts = tsRaw.filter(isValidTimestamp) as LineTimestamp[];
           timestampsRef.current = ts;
+          setTimingDuration(getTimestampDuration(ts));
           if (ts.length === 0) {
             console.error(
               "[AudioBar] Cached audio has no valid timestamps; cursor animation disabled",
@@ -566,26 +587,41 @@ export function AudioBar() {
         audio.volume = volume;
         audioRef.current = audio;
 
-        audio.addEventListener("loadedmetadata", () =>
-          setDuration(audio.duration)
-        );
+        const updateMediaDuration = () => {
+          if (Number.isFinite(audio.duration) && audio.duration > 0) {
+            setMediaDuration(audio.duration);
+          }
+        };
+
+        const updateProgress = () => {
+          const total =
+            Number.isFinite(audio.duration) && audio.duration > 0
+              ? audio.duration
+              : getTimestampDuration(timestampsRef.current);
+          if (total > 0) {
+            setProgress(Math.max(0, Math.min(1, audio.currentTime / total)));
+          } else {
+            setProgress(0);
+          }
+        };
+
+        audio.addEventListener("loadedmetadata", updateMediaDuration);
         // Duration may update as more data streams in
         audio.addEventListener("durationchange", () => {
-          if (Number.isFinite(audio.duration)) {
-            setDuration(audio.duration);
-          }
+          updateMediaDuration();
+          updateProgress();
           dispatchPlaybackFromCurrentTime(audio);
         });
         audio.addEventListener("timeupdate", () => {
           setCurrentTime(audio.currentTime);
-          if (Number.isFinite(audio.duration) && audio.duration > 0) {
-            setProgress(audio.currentTime / audio.duration);
-          }
+          updateProgress();
           dispatchPlaybackFromCurrentTime(audio);
         });
         audio.addEventListener("ended", () => {
           setState("idle");
           setProgress(0);
+          setMediaDuration(0);
+          setTimingDuration(0);
           setCurrentTime(0);
           setActivity(null);
           cleanup();
@@ -634,6 +670,8 @@ export function AudioBar() {
     setState("paused");
   }, [dispatchPlaybackFromCurrentTime]);
 
+  const effectiveDuration = mediaDuration > 0 ? mediaDuration : timingDuration;
+
   const skipBack15 = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -662,16 +700,16 @@ export function AudioBar() {
   const seek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const audio = audioRef.current;
-      if (!audio || !Number.isFinite(duration) || !duration) return;
+      if (!audio || !Number.isFinite(effectiveDuration) || !effectiveDuration) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const ratio = Math.max(
         0,
         Math.min(1, (e.clientX - rect.left) / rect.width)
       );
-      audio.currentTime = ratio * duration;
+      audio.currentTime = ratio * effectiveDuration;
       dispatchPlaybackFromCurrentTime(audio);
     },
-    [duration, dispatchPlaybackFromCurrentTime]
+    [effectiveDuration, dispatchPlaybackFromCurrentTime]
   );
 
   const fmt = (s: number) => {
@@ -707,7 +745,7 @@ export function AudioBar() {
 
   const hasContent = !!content?.trim();
   const isActive = state !== "idle";
-  const hasDuration = Number.isFinite(duration) && duration > 0;
+  const hasDuration = Number.isFinite(effectiveDuration) && effectiveDuration > 0;
   const hasAudio = !!audioRef.current?.src;
   const fileName = openFilePath?.split("/").pop() ?? "No file";
   const currentVoice = VOICES.find((v) => v.id === voiceId);
@@ -851,7 +889,7 @@ export function AudioBar() {
             )}
           </div>
           <span className="text-[10px] text-text-muted tabular-nums w-8 shrink-0">
-            {hasDuration ? fmt(duration) : "0:00"}
+            {hasDuration ? fmt(effectiveDuration) : "0:00"}
           </span>
         </div>
       </div>

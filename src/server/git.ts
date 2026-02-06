@@ -13,16 +13,28 @@ export async function initRepo(projectId: string) {
   const dir = join(PROJECTS_DIR, projectId);
   await fs.mkdir(dir, { recursive: true });
 
-  // Initialize git repo
+  // Always run git.init — it's idempotent and recreates missing HEAD/config/refs
   await git.init({ fs, dir });
-
-  // Create initial .gitignore
-  await fs.writeFile(join(dir, ".gitignore"), ".perchpad/\n.tts/\n", "utf-8");
 
   // Create .perchpad/chats directory
   await fs.mkdir(join(dir, ".perchpad", "chats"), { recursive: true });
 
-  // Initial commit
+  // Create .gitignore if missing
+  const gitignorePath = join(dir, ".gitignore");
+  try {
+    await fs.access(gitignorePath);
+  } catch {
+    await fs.writeFile(gitignorePath, ".perchpad/\n.tts/\n", "utf-8");
+  }
+
+  // Check if repo already has commits
+  try {
+    await git.log({ fs, dir, depth: 1 });
+    return; // Already has commits, nothing to do
+  } catch {
+    // No commits yet — create initial commit
+  }
+
   await git.add({ fs, dir, filepath: ".gitignore" });
   await git.commit({
     fs,
@@ -32,8 +44,11 @@ export async function initRepo(projectId: string) {
   });
 }
 
-export function startGitManager(projectId: string) {
+export async function startGitManager(projectId: string) {
   if (gitManagers.has(projectId)) return;
+
+  // Ensure repo is valid before starting
+  await initRepo(projectId);
 
   const interval = setInterval(async () => {
     try {
@@ -56,6 +71,13 @@ export function stopGitManager(projectId: string) {
 
 async function autoCommit(projectId: string) {
   const dir = join(PROJECTS_DIR, projectId);
+
+  // Ensure repo is healthy (recreates HEAD/config if missing)
+  try {
+    await fs.access(join(dir, ".git", "HEAD"));
+  } catch {
+    await git.init({ fs, dir });
+  }
 
   // Get status matrix
   const matrix = await git.statusMatrix({ fs, dir });

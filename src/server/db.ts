@@ -126,12 +126,27 @@ export async function deleteProject(projectId: string) {
 }
 
 export async function getProjectMembers(projectId: string) {
-  const { data, error } = await supabaseAdmin
+  const { data: members, error } = await supabaseAdmin
     .from("project_members")
-    .select("user_id, role, profiles(display_name, avatar_url)")
+    .select("user_id, role")
     .eq("project_id", projectId);
   if (error) throw error;
-  return data;
+
+  // Fetch profiles separately since there's no direct FK
+  const userIds = (members ?? []).map((m) => m.user_id);
+  const { data: profiles } = userIds.length
+    ? await supabaseAdmin
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .in("id", userIds)
+    : { data: [] };
+
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  return (members ?? []).map((m) => ({
+    user_id: m.user_id,
+    role: m.role,
+    profiles: profileMap.get(m.user_id) ?? null,
+  }));
 }
 
 export async function createShareLink(

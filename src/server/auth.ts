@@ -1,4 +1,5 @@
 import type { Context, Next } from "hono";
+import { createHash } from "crypto";
 import { supabaseAdmin } from "./db.js";
 
 export interface AuthUser {
@@ -19,6 +20,34 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   try {
+    // API key auth (pp_ prefix)
+    if (token.startsWith("pp_")) {
+      const keyHash = createHash("sha256").update(token).digest("hex");
+      const { data: apiKey, error: keyErr } = await supabaseAdmin
+        .from("api_keys")
+        .select("id, user_id")
+        .eq("key_hash", keyHash)
+        .single();
+      if (keyErr || !apiKey) {
+        return c.json({ error: "Invalid API key" }, 401);
+      }
+      const { data: { user }, error: userErr } = await supabaseAdmin.auth.admin.getUserById(apiKey.user_id);
+      if (userErr || !user) {
+        return c.json({ error: "API key user not found" }, 401);
+      }
+      c.set("user", { id: user.id, email: user.email } as AuthUser);
+      c.set("token", token);
+      // Fire-and-forget: update last_used_at
+      supabaseAdmin
+        .from("api_keys")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("id", apiKey.id)
+        .then(() => {});
+      await next();
+      return;
+    }
+
+    // Supabase JWT auth
     const {
       data: { user },
       error,

@@ -203,6 +203,55 @@ api.get("/projects/:id/members", async (c) => {
   return c.json({ members });
 });
 
+// Update member role
+api.put("/projects/:id/members/:userId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const targetUserId = c.req.param("userId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || membership.role !== "owner") {
+    return c.json({ error: "Only owners can change roles" }, 403);
+  }
+  // Prevent changing your own role
+  if (targetUserId === user.id) {
+    return c.json({ error: "Cannot change your own role" }, 400);
+  }
+  const { role } = await c.req.json<{ role: string }>();
+  const validRoles = ["owner", "editor", "viewer"];
+  if (!validRoles.includes(role)) {
+    return c.json({ error: "Invalid role" }, 400);
+  }
+  const { error } = await supabaseAdmin
+    .from("project_members")
+    .update({ role })
+    .eq("project_id", projectId)
+    .eq("user_id", targetUserId);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
+// Remove member
+api.delete("/projects/:id/members/:userId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const targetUserId = c.req.param("userId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || membership.role !== "owner") {
+    return c.json({ error: "Only owners can remove members" }, 403);
+  }
+  // Prevent removing yourself
+  if (targetUserId === user.id) {
+    return c.json({ error: "Cannot remove yourself" }, 400);
+  }
+  const { error } = await supabaseAdmin
+    .from("project_members")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("user_id", targetUserId);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
 // Invitations
 api.post("/projects/:id/invite", async (c) => {
   const user = getUser(c);
