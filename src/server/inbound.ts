@@ -241,8 +241,8 @@ The following email addresses are workspace members: ${memberEmails.join(", ") |
 ## Reply Policy
 ${replyInstructions}
 
-## Forwarded Emails
-If the email contains a forwarded message (indicated by markers like "---------- Forwarded message ----------", "Begin forwarded message", or similar), pay special attention to any text the sender wrote ABOVE the forwarded content. That text contains the sender's personal instructions or context for what they want you to do with the forwarded message. Treat it as the primary intent.`;
+## IMPORTANT: Forwarded Emails
+If the email contains a forwarded message (indicated by markers like "---------- Forwarded message ----------", "Begin forwarded message", "-------- Original Message --------", or similar), the sender's own text ABOVE the forwarded content is their instruction to you. That text tells you what to DO with the forwarded content — follow it as your primary task. The forwarded message below the marker is just reference material. Do NOT simply save the entire email as-is. Instead, carry out whatever the sender asked for (e.g. summarize it, extract data, add it to a specific file, reply, etc.). If there is no text above the forwarded marker, fall back to the default behavior below.`;
 
   if (instructions) {
     return `${base}
@@ -260,12 +260,14 @@ Follow these instructions carefully when processing the email.`;
 
 ## Default Behavior
 
-No custom instructions (AGENTS.md) were found in this workspace. Apply the default behavior:
+No custom instructions (AGENTS.md) were found in this workspace. Apply the default behavior ONLY if the sender did not include personal instructions (see "Forwarded Emails" above):
 
 1. Create a file at \`inbox/YYYY-MM-DD-subject-slug.md\` with the email content formatted as markdown.
 2. Use today's date for the filename.
 3. Convert the subject to a URL-friendly slug (lowercase, hyphens, no special characters).
-4. Format the file with a YAML frontmatter block containing from, subject, and date, followed by the email body.`;
+4. Format the file with a YAML frontmatter block containing from, subject, and date, followed by the email body.
+
+If the sender wrote instructions above a forwarded message, follow those instructions instead of this default.`;
 }
 
 function formatEmailAsMessage(
