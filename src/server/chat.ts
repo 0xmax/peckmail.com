@@ -6,8 +6,8 @@ import type { WebSocket } from "ws";
 import { PROJECTS_DIR, safePath } from "./files.js";
 import { broadcast, sendTo } from "./ws.js";
 import * as fileOps from "./fileOps.js";
-import { getProjectMemberEmails, getProjectMembers, getProjectEmail, supabaseAdmin } from "./db.js";
-import { sendEmail } from "./email.js";
+import { getProjectMemberEmails, getProjectMembers, getProjectEmail, getProjectMembership, createInvitation, supabaseAdmin } from "./db.js";
+import { sendEmail, sendInvitationEmail } from "./email.js";
 
 const anthropic = new Anthropic();
 
@@ -569,6 +569,26 @@ const tools: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "invite_member",
+    description:
+      "Invite someone to join this workspace by email. They will receive an invitation email with a link to accept. You can specify their role (editor by default).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        email: {
+          type: "string",
+          description: "Email address of the person to invite",
+        },
+        role: {
+          type: "string",
+          enum: ["editor", "viewer"],
+          description: "Role to assign. Defaults to editor.",
+        },
+      },
+      required: ["email"],
+    },
+  },
 ] as Anthropic.Tool[];
 
 // Recursively collect all file paths under a directory (excluding hidden dirs)
@@ -601,7 +621,8 @@ async function executeTool(
   projectId: string,
   toolName: string,
   input: any,
-  ws: WebSocket
+  ws: WebSocket,
+  userId?: string
 ): Promise<string> {
   const dir = join(PROJECTS_DIR, projectId);
 
@@ -992,6 +1013,63 @@ async function executeTool(
       }
     }
 
+    case "invite_member": {
+      try {
+        if (!userId) return "Error: Cannot invite without user context.";
+        const email = input.email?.trim().toLowerCase();
+        if (!email) return "Error: Email address is required.";
+        const role = (input.role === "viewer" ? "viewer" : "editor") as "editor" | "viewer";
+
+        // Check that the requesting user is an owner
+        const membership = await getProjectMembership(projectId, userId);
+        if (!membership || membership.role !== "owner") {
+          return "Error: Only workspace owners can invite new members.";
+        }
+
+        // Check for duplicate pending invitation
+        const { data: existing } = await supabaseAdmin
+          .from("invitations")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("email", email)
+          .eq("status", "pending")
+          .maybeSingle();
+        if (existing) return `An invitation is already pending for ${email}.`;
+
+        // Check if already a member
+        const memberEmails = await getProjectMemberEmails(projectId);
+        if (memberEmails.includes(email)) {
+          return `${email} is already a member of this workspace.`;
+        }
+
+        const invitation = await createInvitation(projectId, email, userId, role);
+
+        // Look up project name + inviter name for the email
+        const { data: project } = await supabaseAdmin
+          .from("projects")
+          .select("name")
+          .eq("id", projectId)
+          .single();
+        const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(userId);
+        const inviterName = authUser?.user_metadata?.display_name
+          || authUser?.user_metadata?.full_name
+          || authUser?.email
+          || "Someone";
+
+        // Send invitation email
+        sendInvitationEmail({
+          to: email,
+          invitationId: invitation.id,
+          projectName: project?.name ?? "Untitled",
+          inviterName,
+        }).catch((err) => console.error("[chat] Failed to send invitation email:", err));
+
+        return `Invitation sent to ${email} as ${role}. They'll receive an email with a link to join.`;
+      } catch (err: any) {
+        return `Error: Could not send invitation — ${err.message || "unknown error"}`;
+      }
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }
@@ -1002,7 +1080,7 @@ export async function runAgentHeadless(
   projectId: string,
   systemPrompt: string,
   userMessage: string,
-  opts?: { model?: string; maxTokens?: number }
+  opts?: { model?: string; maxTokens?: number; userId?: string }
 ): Promise<{ sessionId: string; messages: ChatMessage[] }> {
   const session = await createSession(projectId);
   session.messages.push({ role: "user", content: userMessage });
@@ -1038,7 +1116,7 @@ export async function runAgentHeadless(
         fullContent.push(block);
       }
       if (block.type === "tool_use") {
-        const result = await executeTool(projectId, block.name, block.input, noopWs);
+        const result = await executeTool(projectId, block.name, block.input, noopWs, opts?.userId);
         toolResults.push({
           role: "user",
           content: [
@@ -1235,7 +1313,8 @@ When working with CSV files, be especially careful to preserve the structure (co
             projectId,
             block.name,
             block.input,
-            ws
+            ws,
+            userId
           );
 
           toolResults.push({
