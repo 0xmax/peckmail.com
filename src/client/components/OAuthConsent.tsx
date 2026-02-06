@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase.js";
 import { useAuth } from "../context/AuthContext.js";
+import { SpinnerGap } from "@phosphor-icons/react";
 
 interface AuthorizationDetails {
   client: { name: string; description?: string };
@@ -68,7 +69,7 @@ export function OAuthConsent() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="text-text-muted text-lg">Loading...</div>
+        <SpinnerGap size={28} className="text-text-muted animate-spin" />
       </div>
     );
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api.js";
 import { ClockCounterClockwise } from "@phosphor-icons/react";
+import { SkeletonLine } from "./Skeleton.js";
 
 interface Revision {
   hash: string;
@@ -78,8 +79,13 @@ export function Revisions({ projectId }: { projectId: string }) {
 
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="text-center text-text-muted text-sm py-8">
-            Loading...
+          <div className="py-2 space-y-4 px-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="space-y-1.5">
+                <SkeletonLine className="w-3/4" />
+                <SkeletonLine className="w-1/4" />
+              </div>
+            ))}
           </div>
         ) : revisions.length === 0 ? (
           <div className="text-center py-8">

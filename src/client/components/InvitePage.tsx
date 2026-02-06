@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { LoginPage } from "./LoginPage.js";
 import { api } from "../lib/api.js";
+import { SpinnerGap } from "@phosphor-icons/react";
 
 interface InviteInfo {
   id: string;
@@ -73,8 +74,11 @@ export function InvitePage({
   if (state.step === "loading" || state.step === "accepting") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="text-text-muted text-lg">
-          {state.step === "accepting" ? "Joining project..." : "Loading..."}
+        <div className="flex flex-col items-center gap-3">
+          <SpinnerGap size={28} className="text-text-muted animate-spin" />
+          {state.step === "accepting" && (
+            <div className="text-text-muted text-sm">Joining project...</div>
+          )}
         </div>
       </div>
     );

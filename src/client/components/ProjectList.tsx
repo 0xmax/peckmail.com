@@ -4,6 +4,7 @@ import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
 import { GearSix, Notebook, SignOut } from "@phosphor-icons/react";
+import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
 
 interface ProjectMember {
@@ -191,7 +192,24 @@ export function ProjectList({
         </div>
 
         {loading ? (
-          <div className="text-center text-text-muted py-12">Loading...</div>
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-full flex items-center gap-4 bg-surface rounded-xl px-5 py-4 border border-border"
+              >
+                <SkeletonCircle size={40} />
+                <div className="flex-1 space-y-2">
+                  <SkeletonLine className="w-1/3" />
+                  <SkeletonLine className="w-1/2" />
+                </div>
+                <div className="flex -space-x-1.5">
+                  <SkeletonCircle size={24} />
+                  <SkeletonCircle size={24} />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : projects.length === 0 ? (
           <div className="text-center py-16">
             <Notebook size={48} weight="duotone" className="mx-auto mb-4 text-text-muted" />

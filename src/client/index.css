@@ -313,6 +313,24 @@ body {
   animation: activity-pulse 1.5s ease-in-out infinite;
 }
 
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-alt) 0%,
+    var(--color-surface) 40%,
+    var(--color-surface-alt) 80%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
 /* Transitions */
 .transition-fade {
   transition: opacity 0.15s ease, transform 0.15s ease;

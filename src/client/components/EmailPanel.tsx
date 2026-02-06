@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { useIncomingEmails, useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
+import { Skeleton, SkeletonLine } from "./Skeleton.js";
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -67,7 +68,10 @@ export function EmailPanel({ projectId }: { projectId: string }) {
         </p>
 
         {loading ? (
-          <p className="text-text-muted">Loading...</p>
+          <div className="space-y-2">
+            <SkeletonLine className="w-1/3" />
+            <Skeleton className="h-9 w-full" />
+          </div>
         ) : email ? (
           <div>
             <label className="font-medium text-text-muted block mb-1">

@@ -7,6 +7,7 @@ import { OAuthConsent } from "./components/OAuthConsent.js";
 import { InvitePage } from "./components/InvitePage.js";
 import { Workspace } from "./components/Workspace.js";
 import { StoreProvider } from "./store/StoreContext.js";
+import { SpinnerGap } from "@phosphor-icons/react";
 
 type Route = { page: "login" } | { page: "projects" } | { page: "settings" } | { page: "oauth-consent" } | { page: "invite"; invitationId: string } | { page: "workspace"; projectId: string };
 
@@ -43,7 +44,7 @@ export function App() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="text-text-muted text-lg">Loading...</div>
+        <SpinnerGap size={28} className="text-text-muted animate-spin" />
       </div>
     );
   }
