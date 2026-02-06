@@ -28,15 +28,60 @@ export async function getProfile(userId: string) {
 export async function getUserProjects(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("project_members")
-    .select("project_id, role, projects(id, name, email, created_at, deleted_at)")
+    .select("project_id, role, projects(id, name, email, description, created_at, deleted_at)")
     .eq("user_id", userId);
   if (error) throw error;
-  return (data ?? [])
+  const projects = (data ?? [])
     .filter((pm: any) => !pm.projects?.deleted_at)
     .map((pm: any) => ({
       ...pm.projects,
       role: pm.role,
     }));
+
+  // Fetch members for all projects in one batch
+  const projectIds = projects.map((p: any) => p.id);
+  if (projectIds.length === 0) return projects;
+
+  const { data: allMembers } = await supabaseAdmin
+    .from("project_members")
+    .select("project_id, user_id, role")
+    .in("project_id", projectIds);
+
+  const memberUserIds = [...new Set((allMembers ?? []).map((m) => m.user_id))];
+  const { data: profiles } = memberUserIds.length
+    ? await supabaseAdmin
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .in("id", memberUserIds)
+    : { data: [] };
+
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const membersByProject = new Map<string, any[]>();
+  for (const m of allMembers ?? []) {
+    const arr = membersByProject.get(m.project_id) ?? [];
+    const profile = profileMap.get(m.user_id);
+    arr.push({
+      user_id: m.user_id,
+      role: m.role,
+      display_name: profile?.display_name ?? null,
+      avatar_url: profile?.avatar_url ?? null,
+    });
+    membersByProject.set(m.project_id, arr);
+  }
+
+  return projects.map((p: any) => ({
+    ...p,
+    members: membersByProject.get(p.id) ?? [],
+  }));
+}
+
+export async function getUserHandle(userId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("handle")
+    .eq("id", userId)
+    .single();
+  return data?.handle ?? null;
 }
 
 export async function getProjectMembership(
@@ -273,6 +318,16 @@ export async function getProjectMemberEmails(
     }
   }
   return emails;
+}
+
+export async function updateProjectDescription(
+  projectId: string,
+  description: string
+): Promise<void> {
+  await supabaseAdmin
+    .from("projects")
+    .update({ description })
+    .eq("id", projectId);
 }
 
 export async function getProjectEmail(

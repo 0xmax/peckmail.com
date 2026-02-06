@@ -22,6 +22,7 @@ import {
   getShareLink,
   getProjectEmail,
   assignProjectEmail,
+  getUserHandle,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, processInboundEmail } from "./inbound.js";
@@ -157,6 +158,13 @@ app.post("/api/webhooks/resend", async (c) => {
 // --- API: Auth required ---
 const api = new Hono();
 api.use("/*", authMiddleware);
+
+// User profile (handle)
+api.get("/user/profile", async (c) => {
+  const user = getUser(c);
+  const handle = await getUserHandle(user.id);
+  return c.json({ handle });
+});
 
 // User preferences
 api.get("/user/preferences", async (c) => {
@@ -777,7 +785,7 @@ function landingPageHtml(): string {
         <h1 class="font-heading text-4xl sm:text-[3.5rem] font-extrabold leading-[1.1] text-text tracking-tight">A writing workspace that thinks with you</h1>
       </div>
       <div class="sm:flex-1">
-        <p class="text-lg text-text-body leading-relaxed">Organize projects, write in markdown, manage data in tables, and collaborate in real time — with a built-in AI assistant that understands your files.</p>
+        <p class="text-lg text-text-body leading-relaxed">Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.</p>
       </div>
     </div>
     <picture>
@@ -790,24 +798,24 @@ function landingPageHtml(): string {
     <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">A calm place to get things done</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <div class="text-2xl mb-2">&#128038;</div>
+        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M232,80,208,96v24a96,96,0,0,1-96,96H24a8,8,0,0,1-6.25-13L104,99.52V76.89c0-28.77,23-52.75,51.74-52.89a52,52,0,0,1,50.59,38.89Z" opacity="0.2"/><path d="M176,68a12,12,0,1,1-12-12A12,12,0,0,1,176,68Zm64,12a8,8,0,0,1-3.56,6.66L216,100.28V120A104.11,104.11,0,0,1,112,224H24a16,16,0,0,1-12.49-26l.1-.12L96,96.63V76.89C96,43.47,122.79,16.16,155.71,16H156a60,60,0,0,1,57.21,41.86l23.23,15.48A8,8,0,0,1,240,80Zm-22.42,0L201.9,69.54a8,8,0,0,1-3.31-4.64A44,44,0,0,0,156,32h-.22C131.64,32.12,112,52.25,112,76.89V99.52a8,8,0,0,1-1.85,5.13L24,208h26.9l70.94-85.12a8,8,0,1,1,12.29,10.24L71.75,208H112a88.1,88.1,0,0,0,88-88V96a8,8,0,0,1,3.56-6.66Z"/></svg>
         <h3 class="text-[1.1rem] mb-2 text-text">A Smart Little Bird</h3>
         <p class="text-[0.95rem] text-text-secondary leading-relaxed">A friendly assistant that lives in your workspace. It can read your files, help you draft, organize your thoughts, and answer questions — like a companion that quietly knows the whole project.</p>
       </div>
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <div class="text-2xl mb-2">&#9998;</div>
+        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M168,144a40,40,0,1,1-40-40A40,40,0,0,1,168,144ZM64,56A32,32,0,1,0,96,88,32,32,0,0,0,64,56Zm128,0a32,32,0,1,0,32,32A32,32,0,0,0,192,56Z" opacity="0.2"/><path d="M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1,0-16,24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.85,8,57,57,0,0,0-98.15,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z"/></svg>
         <h3 class="text-[1.1rem] mb-2 text-text">Write Together</h3>
         <p class="text-[0.95rem] text-text-secondary leading-relaxed">Invite your family, your team, or a friend. Everyone sees changes as they happen — no emailing files back and forth, no version confusion. Just open the same project and go.</p>
       </div>
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <div class="text-2xl mb-2">&#128220;</div>
+        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,56l-96,88L32,56Z" opacity="0.2"/><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"/></svg>
         <h3 class="text-[1.1rem] mb-2 text-text">Hear the Chirps</h3>
         <p class="text-[0.95rem] text-text-secondary leading-relaxed">Send an email to your workspace and the bird takes care of it — reading what you sent, updating your documents, filing things where they belong. You stay focused while it works in the background.</p>
       </div>
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <div class="text-2xl mb-2">&#128066;</div>
-        <h3 class="text-[1.1rem] mb-2 text-text">It Listens to Your Docs</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">The bird watches your files as you write. It knows what changed, what you're working on, and what you might need next. Ask it anything about your project — it's already paying attention.</p>
+        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M80,88v80H32a8,8,0,0,1-8-8V96a8,8,0,0,1,8-8Z" opacity="0.2"/><path d="M155.51,24.81a8,8,0,0,0-8.42.88L77.25,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H77.25l69.84,54.31A8,8,0,0,0,160,224V32A8,8,0,0,0,155.51,24.81ZM32,96H72v64H32ZM144,207.64,88,164.09V91.91l56-43.55Zm54-106.08a40,40,0,0,1,0,52.88,8,8,0,0,1-12-10.58,24,24,0,0,0,0-31.72,8,8,0,0,1,12-10.58ZM248,128a79.9,79.9,0,0,1-20.37,53.34,8,8,0,0,1-11.92-10.67,64,64,0,0,0,0-85.33,8,8,0,1,1,11.92-10.67A79.83,79.83,0,0,1,248,128Z"/></svg>
+        <h3 class="text-[1.1rem] mb-2 text-text">It Reads to You</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Select any page and hit play. The built-in reader turns your writing into natural speech with expressive voices — so you can listen back, catch mistakes, or just lean back and hear your words come alive.</p>
       </div>
     </div>
   </section>
@@ -816,32 +824,32 @@ function landingPageHtml(): string {
     <h2 class="font-heading text-[1.35rem] text-center mb-6 text-text-body font-semibold">And a few more things you might like</h2>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
       <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,88H152V32Z" opacity="0.2"/><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-32-80a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,136Zm0,32a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,168Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Markdown-Based</h3>
         <p class="text-[0.85rem] text-text-secondary leading-relaxed">Write in plain markdown with live preview. No proprietary formats — your files are always yours.</p>
       </div>
       <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,128a88,88,0,1,1-88-88A88,88,0,0,1,216,128Z" opacity="0.2"/><path d="M136,80v43.47l36.12,21.67a8,8,0,0,1-8.24,13.72l-40-24A8,8,0,0,1,120,128V80a8,8,0,0,1,16,0Zm-8-48A95.44,95.44,0,0,0,60.08,60.15C52.81,67.51,46.35,74.59,40,82V64a8,8,0,0,0-16,0v40a8,8,0,0,0,8,8H72a8,8,0,0,0,0-16H49c7.15-8.42,14.27-16.35,22.39-24.57a80,80,0,1,1,1.66,114.75,8,8,0,1,0-11,11.64A96,96,0,1,0,128,32Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Never Lose a Thing</h3>
         <p class="text-[0.85rem] text-text-secondary leading-relaxed">Auto-saves every minute with full version history. Go back to any point, no manual saving needed.</p>
       </div>
       <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,48H56a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H200a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48ZM152,152H104V104h48Z" opacity="0.2"/><path d="M152,96H104a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V104A8,8,0,0,0,152,96Zm-8,48H112V112h32Zm88,0H216V112h16a8,8,0,0,0,0-16H216V56a16,16,0,0,0-16-16H160V24a8,8,0,0,0-16,0V40H112V24a8,8,0,0,0-16,0V40H56A16,16,0,0,0,40,56V96H24a8,8,0,0,0,0,16H40v32H24a8,8,0,0,0,0,16H40v40a16,16,0,0,0,16,16H96v16a8,8,0,0,0,16,0V216h32v16a8,8,0,0,0,16,0V216h40a16,16,0,0,0,16-16V160h16a8,8,0,0,0,0-16Zm-32,56H56V56H200v95.87s0,.09,0,.13,0,.09,0,.13V200Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Claude Integration</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Connect via MCP from Claude Desktop or Cursor. Manage your projects from any compatible AI tool.</p>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Connect via MCP from Claude Desktop or Cursor. Manage your projects from any compatible tool.</p>
       </div>
       <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M136,108A52,52,0,1,1,84,56,52,52,0,0,1,136,108Z" opacity="0.2"/><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Teams</h3>
         <p class="text-[0.85rem] text-text-secondary leading-relaxed">Invite collaborators with roles — owners, editors, or viewers. Everyone gets the right level of access.</p>
       </div>
       <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,192H48a8,8,0,0,1-6.88-12C47.71,168.6,56,139.81,56,104a72,72,0,0,1,144,0c0,35.82,8.3,64.6,14.9,76A8,8,0,0,1,208,192Z" opacity="0.2"/><path d="M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Notifications</h3>
         <p class="text-[0.85rem] text-text-secondary leading-relaxed">Know when something changes. File updates, new collaborators, and incoming emails — all surfaced quietly.</p>
       </div>
       <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 stroke-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64a24,24,0,1,1-24-24A24,24,0,0,1,224,64Z" opacity="0.2"/><path d="M232,64a32,32,0,1,0-40,31v17a8,8,0,0,1-8,8H96a23.84,23.84,0,0,0-8,1.38V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V144a8,8,0,0,1,8-8h88a24,24,0,0,0,24-24V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64ZM96,192a16,16,0,1,1-16-16A16,16,0,0,1,96,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Change Tracking</h3>
         <p class="text-[0.85rem] text-text-secondary leading-relaxed">Browse diffs, see who changed what, and review the full history of any file at any time.</p>
       </div>
@@ -852,7 +860,7 @@ function landingPageHtml(): string {
     <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">Under the Hood</h2>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">What is Perchpad?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">A collaborative writing workspace where every project is a git repository. You write in markdown, manage data in CSV tables, and get help from a built-in AI assistant powered by Claude. Everything syncs in real time.</p>
+      <p class="text-[0.95rem] text-text leading-relaxed">A collaborative writing workspace where every project is a git repository. You write in markdown, get help from a friendly little bird that lives in your workspace, and everything syncs in real time.</p>
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">What file formats are supported?</h3>

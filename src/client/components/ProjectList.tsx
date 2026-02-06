@@ -1,16 +1,40 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
-import { GearSix, Notebook } from "@phosphor-icons/react";
+import { GearSix, Notebook, SignOut } from "@phosphor-icons/react";
 import { UserAvatar } from "./UserAvatar.js";
+
+interface ProjectMember {
+  user_id: string;
+  role: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
 
 interface Project {
   id: string;
   name: string;
   role: string;
+  description: string | null;
   created_at: string;
+  members?: ProjectMember[];
+}
+
+const PASTEL_COLORS = [
+  "#f5d0c5", "#e8d5b7", "#d4e4c1", "#c5dde8", "#d8c5e8",
+  "#f5c5d0", "#c5e8d5", "#e8e4c5", "#c5d8e8", "#e8cfc5",
+];
+
+function projectColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return PASTEL_COLORS[Math.abs(h) % PASTEL_COLORS.length];
+}
+
+function projectInitial(name: string): string {
+  return (name[0] || "?").toUpperCase();
 }
 
 interface Invitation {
@@ -26,11 +50,25 @@ export function ProjectList({
   onOpenProject: (id: string) => void;
   onOpenSettings?: () => void;
 }) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, handle } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   const loadData = useCallback(async () => {
     try {
@@ -66,34 +104,47 @@ export function ProjectList({
       <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src="/assets/logo.png" alt="Perchpad" className="h-7 w-auto" />
-          <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</h1>
+          <h1 className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</h1>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="flex items-center gap-2 rounded-full hover:opacity-80 transition-opacity"
+          >
             <UserAvatar
               src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
               name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-              size={26}
+              size={32}
             />
-            <span className="text-sm text-text-muted">
-              {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-            </span>
-          </div>
-          {onOpenSettings && (
-            <button
-              onClick={onOpenSettings}
-              className="text-text-muted hover:text-text transition-colors"
-              title="Settings"
-            >
-              <GearSix size={18} />
-            </button>
-          )}
-          <button
-            onClick={signOut}
-            className="text-sm text-text-muted hover:text-text transition-colors"
-          >
-            Sign out
           </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-56 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50">
+              <div className="px-4 py-3 border-b border-border">
+                <div className="text-sm font-medium text-text truncate">
+                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+                </div>
+                {handle && (
+                  <div className="text-xs text-text-muted truncate mt-0.5">@{handle}</div>
+                )}
+              </div>
+              {onOpenSettings && (
+                <button
+                  onClick={() => { setMenuOpen(false); onOpenSettings(); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                >
+                  <GearSix size={16} className="text-text-muted" />
+                  Settings
+                </button>
+              )}
+              <button
+                onClick={() => { setMenuOpen(false); signOut(); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors border-t border-border"
+              >
+                <SignOut size={16} className="text-text-muted" />
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -152,22 +203,54 @@ export function ProjectList({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-2">
             {projects.map((project) => (
               <button
                 key={project.id}
                 onClick={() => onOpenProject(project.id)}
-                className="text-left bg-surface rounded-xl p-5 border border-border hover:border-accent hover:shadow-md transition-all group"
+                className="w-full flex items-center gap-4 bg-surface rounded-xl px-5 py-4 border border-border hover:border-accent/50 hover:shadow-sm transition-all group text-left"
               >
-                <h3 className="font-semibold text-text group-hover:text-accent transition-colors mb-1">
-                  {project.name}
-                </h3>
-                <p className="text-xs text-text-muted">
-                  {project.role === "owner" ? "Owner" : project.role === "editor" ? "Editor" : "Viewer"}
-                  {" · "}
-                  Created{" "}
-                  {new Date(project.created_at).toLocaleDateString()}
-                </p>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg font-semibold"
+                  style={{ background: projectColor(project.name), color: "#5a4a3a" }}
+                >
+                  {projectInitial(project.name)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-text group-hover:text-accent transition-colors">
+                    {project.name}
+                  </h3>
+                  {project.description ? (
+                    <p className="text-sm text-text-muted truncate">{project.description}</p>
+                  ) : (
+                    <p className="text-xs text-text-muted">
+                      {project.role === "owner" ? "Owner" : project.role === "editor" ? "Editor" : "Viewer"}
+                      {" · "}
+                      Created{" "}
+                      {new Date(project.created_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+                {project.members && project.members.length > 1 && (
+                  <div className="flex items-center shrink-0 -space-x-1.5">
+                    {project.members.slice(0, 4).map((m) => (
+                      <UserAvatar
+                        key={m.user_id}
+                        src={m.avatar_url}
+                        name={m.display_name}
+                        size={24}
+                        className="ring-2 ring-surface"
+                      />
+                    ))}
+                    {project.members.length > 4 && (
+                      <div
+                        className="w-6 h-6 rounded-full bg-surface-alt text-text-muted flex items-center justify-center text-[10px] font-medium ring-2 ring-surface shrink-0"
+                      >
+                        +{project.members.length - 4}
+                      </div>
+                    )}
+                  </div>
+                )}
               </button>
             ))}
           </div>

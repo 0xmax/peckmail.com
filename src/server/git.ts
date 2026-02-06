@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { PROJECTS_DIR } from "./files.js";
+import { updateProjectDescription } from "./db.js";
 
 const anthropic = new Anthropic();
 
@@ -166,6 +167,46 @@ Description:`,
   });
 
   console.log(`[git] ${projectId}: ${commitMessage}`);
+
+  // Refresh project summary (fire-and-forget)
+  refreshProjectSummary(projectId).catch(() => {});
+}
+
+// Generate a tweet-length project summary from all files
+async function refreshProjectSummary(projectId: string) {
+  const dir = join(PROJECTS_DIR, projectId);
+  try {
+    const files = await git.listFiles({ fs, dir, ref: "HEAD" });
+    const relevant = files.filter(
+      (f) => !f.startsWith(".") && !f.startsWith(".perchpad/")
+    );
+    if (relevant.length === 0) return;
+
+    const previews: string[] = [];
+    for (const f of relevant.slice(0, 12)) {
+      try {
+        const content = await fs.readFile(join(dir, f), "utf-8");
+        previews.push(`${f}: ${content.slice(0, 300)}`);
+      } catch {}
+    }
+
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 100,
+      messages: [
+        {
+          role: "user",
+          content: `Summarize this project in one short sentence (max 120 chars). Be warm and descriptive, like a tagline. No quotes or technical jargon.\n\nFiles:\n${previews.join("\n\n")}\n\nSummary:`,
+        },
+      ],
+    });
+    const block = response.content[0];
+    if (block.type === "text") {
+      await updateProjectDescription(projectId, block.text.trim());
+    }
+  } catch (err) {
+    console.error(`[git] Summary generation failed for ${projectId}:`, err);
+  }
 }
 
 // Check for uncommitted changes and generate a commit message
@@ -253,6 +294,10 @@ export async function manualCommit(projectId: string, message?: string): Promise
   });
 
   console.log(`[git] ${projectId}: ${commitMessage}`);
+
+  // Refresh project summary (fire-and-forget)
+  refreshProjectSummary(projectId).catch(() => {});
+
   return { hash, message: commitMessage };
 }
 

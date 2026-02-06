@@ -17,6 +17,7 @@ interface AuthState {
   loading: boolean;
   preferences: UserPreferences;
   defaultApiKey: string | null;
+  handle: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState<UserPreferences>({});
   const [defaultApiKey, setDefaultApiKey] = useState<string | null>(null);
+  const [handle, setHandle] = useState<string | null>(null);
 
   useEffect(() => {
     const handleSession = (session: Session | null) => {
@@ -48,8 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .post<{ key: string; created: boolean }>("/api/keys/ensure-default")
           .then((r) => setDefaultApiKey(r.key))
           .catch(() => {});
+        // Fetch user handle
+        api
+          .get<{ handle: string | null }>("/api/user/profile")
+          .then((r) => setHandle(r.handle))
+          .catch(() => {});
       } else {
         setDefaultApiKey(null);
+        setHandle(null);
       }
       setLoading(false);
     };
@@ -117,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         preferences,
         defaultApiKey,
+        handle,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
