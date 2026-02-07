@@ -3,9 +3,37 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
-import { Envelope, File, GearSix, MagnifyingGlass, Notebook, PencilSimple, SignOut, SortAscending, SpinnerGap } from "@phosphor-icons/react";
+import { DotsThree, Envelope, File, GearSix, MagnifyingGlass, Notebook, PencilSimple, SignOut, SortAscending, SpinnerGap, Trash, UserPlus, X } from "@phosphor-icons/react";
 import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
+import { SettingsModal } from "./SettingsModal.js";
+import type { ItemColor } from "../store/types.js";
+
+const WORKSPACE_COLOR_HEX: Record<ItemColor, string> = {
+  red: "#E8A8A0",
+  orange: "#E8C0A0",
+  yellow: "#E0CCA0",
+  green: "#A8CCA8",
+  blue: "#A0B8D0",
+  purple: "#C0A8D0",
+  gray: "#B8AEA4",
+};
+
+const WORKSPACE_COLORS: ItemColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "gray"];
+
+const WS_COLORS_KEY = "perchpad:workspace-colors";
+
+function loadWorkspaceColors(): Record<string, ItemColor> {
+  try {
+    return JSON.parse(localStorage.getItem(WS_COLORS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveWorkspaceColors(colors: Record<string, ItemColor>) {
+  localStorage.setItem(WS_COLORS_KEY, JSON.stringify(colors));
+}
 
 interface ProjectMember {
   user_id: string;
@@ -125,6 +153,13 @@ export function ProjectList({
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [wsColors, setWsColors] = useState<Record<string, ItemColor>>(loadWorkspaceColors);
+  const [colorMenu, setColorMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [shareProjectId, setShareProjectId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   const { matches: fileMatches, searching: fileSearching } = useFileSearch(search);
   const matchesByProject = useMemo(() => {
@@ -148,6 +183,26 @@ export function ProjectList({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
+
+  // Close color menu on outside click
+  useEffect(() => {
+    if (!colorMenu) return;
+    const handler = () => setColorMenu(null);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [colorMenu]);
+
+  // Close action menu on outside click
+  useEffect(() => {
+    if (!actionMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+        setActionMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [actionMenuId]);
 
   const loadData = useCallback(async () => {
     try {
@@ -201,6 +256,19 @@ export function ProjectList({
       }
     }
     setRenamingId(null);
+  };
+
+  const handleDelete = async (projectId: string) => {
+    setDeleting(true);
+    try {
+      await api.del(`/api/projects/${projectId}`);
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    } catch {
+      // Ignore
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmId(null);
+    }
   };
 
   const filteredProjects = useMemo(() => {
@@ -417,11 +485,18 @@ export function ProjectList({
                 <div key={project.id}>
                   <div
                     onClick={() => { if (renamingId !== project.id) onOpenProject(project.id); }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setColorMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
+                    }}
                     className="w-full flex items-center gap-4 bg-surface rounded-xl px-5 py-4 border border-border hover:border-accent/50 hover:shadow-sm transition-all group text-left cursor-pointer"
                   >
                     <div
                       className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg font-semibold"
-                      style={{ background: projectColor(project.name), color: "#5a4a3a" }}
+                      style={{
+                        background: wsColors[project.id] ? WORKSPACE_COLOR_HEX[wsColors[project.id]] : projectColor(project.name),
+                        color: "#5a4a3a",
+                      }}
                     >
                       {projectInitial(project.name)}
                     </div>
@@ -494,6 +569,64 @@ export function ProjectList({
                         )}
                       </div>
                     )}
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActionMenuId(actionMenuId === project.id ? null : project.id);
+                        }}
+                        className="p-1 rounded-lg text-text-muted opacity-0 group-hover:opacity-100 hover:bg-surface-alt hover:text-text transition-all"
+                      >
+                        <DotsThree size={20} weight="bold" />
+                      </button>
+                      {actionMenuId === project.id && (
+                        <div
+                          ref={actionMenuRef}
+                          className="absolute right-0 top-full mt-1 w-44 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50"
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActionMenuId(null);
+                              setShareProjectId(project.id);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                          >
+                            <UserPlus size={15} className="text-text-muted" />
+                            Share
+                          </button>
+                          {project.role === "owner" && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  setRenamingId(project.id);
+                                  setRenameValue(project.name);
+                                  setTimeout(() => renameInputRef.current?.select(), 0);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                              >
+                                <PencilSimple size={15} className="text-text-muted" />
+                                Rename
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(null);
+                                  setDeleteConfirmId(project.id);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-danger hover:bg-surface-alt transition-colors border-t border-border"
+                              >
+                                <Trash size={15} />
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {hits && hits.length > 0 && (
                     <div className="ml-14 mt-1 mb-1 space-y-0.5">
@@ -523,6 +656,56 @@ export function ProjectList({
         )}
       </div>
 
+      {/* Workspace color picker */}
+      {colorMenu && (
+        <div
+          className="fixed bg-surface border border-border rounded-xl shadow-lg py-2 px-3 z-50 flex items-center gap-1.5"
+          style={{ left: colorMenu.x, top: colorMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {WORKSPACE_COLORS.map((c) => {
+            const isActive = wsColors[colorMenu.projectId] === c;
+            return (
+              <button
+                key={c}
+                title={c}
+                onClick={() => {
+                  const next = { ...wsColors };
+                  if (isActive) {
+                    delete next[colorMenu.projectId];
+                  } else {
+                    next[colorMenu.projectId] = c;
+                  }
+                  setWsColors(next);
+                  saveWorkspaceColors(next);
+                  setColorMenu(null);
+                }}
+                className="item-color-swatch"
+                style={{
+                  backgroundColor: WORKSPACE_COLOR_HEX[c],
+                  boxShadow: isActive ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${WORKSPACE_COLOR_HEX[c]}` : undefined,
+                }}
+              />
+            );
+          })}
+          {wsColors[colorMenu.projectId] && (
+            <button
+              title="Clear color"
+              onClick={() => {
+                const next = { ...wsColors };
+                delete next[colorMenu.projectId];
+                setWsColors(next);
+                saveWorkspaceColors(next);
+                setColorMenu(null);
+              }}
+              className="w-5 h-5 rounded-full flex items-center justify-center text-text-muted hover:text-text transition-colors"
+            >
+              <X size={10} weight="bold" />
+            </button>
+          )}
+        </div>
+      )}
+
       {showCreate && (
         <CreateProjectModal
           onClose={() => setShowCreate(false)}
@@ -531,6 +714,46 @@ export function ProjectList({
             onOpenProject(project.id);
           }}
         />
+      )}
+
+      {shareProjectId && (
+        <SettingsModal
+          projectId={shareProjectId}
+          onClose={() => setShareProjectId(null)}
+          onLeave={() => {
+            setShareProjectId(null);
+            loadData();
+          }}
+        />
+      )}
+
+      {deleteConfirmId && (
+        <div
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setDeleteConfirmId(null); }}
+        >
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm border border-border shadow-xl">
+            <h2 className="text-lg font-semibold text-text mb-2">Delete workspace</h2>
+            <p className="text-sm text-text-muted mb-5">
+              Are you sure you want to delete <strong>{projects.find((p) => p.id === deleteConfirmId)?.name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-4 py-2 text-sm text-text-muted hover:text-text transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(deleteConfirmId)}
+                disabled={deleting}
+                className="px-4 py-2 bg-danger text-white rounded-xl hover:bg-danger-hover disabled:opacity-50 transition-colors text-sm font-medium"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

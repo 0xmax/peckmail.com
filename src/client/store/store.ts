@@ -62,6 +62,47 @@ export class WorkspaceStore {
     this.emit();
   }
 
+  // --- Item color helpers ---
+
+  private migrateItemColors(from: string, to: string) {
+    const ic = this.state.projectSettings.itemColors;
+    if (!ic) return;
+    let changed = false;
+    const updated: Record<string, (typeof ic)[string]> = {};
+    for (const [p, c] of Object.entries(ic)) {
+      if (p === from) {
+        updated[to] = c;
+        changed = true;
+      } else if (p.startsWith(from + "/")) {
+        updated[to + p.slice(from.length)] = c;
+        changed = true;
+      } else {
+        updated[p] = c;
+      }
+    }
+    if (changed) {
+      const settings = { ...this.state.projectSettings, itemColors: updated };
+      this.setState({ projectSettings: settings });
+      api.put(`/api/projects/${this.state.projectId}/settings`, settings).catch(() => {});
+    }
+  }
+
+  private removeItemColors(path: string) {
+    const ic = this.state.projectSettings.itemColors;
+    if (!ic) return;
+    const hasExact = ic[path] !== undefined;
+    const hasChild = !hasExact && Object.keys(ic).some((p) => p.startsWith(path + "/"));
+    if (!hasExact && !hasChild) return;
+    const updated = { ...ic };
+    delete updated[path];
+    for (const p of Object.keys(updated)) {
+      if (p.startsWith(path + "/")) delete updated[p];
+    }
+    const settings = { ...this.state.projectSettings, itemColors: updated };
+    this.setState({ projectSettings: settings });
+    api.put(`/api/projects/${this.state.projectId}/settings`, settings).catch(() => {});
+  }
+
   // --- WebSocket ---
 
   connect(accessToken: string) {
@@ -135,6 +176,7 @@ export class WorkspaceStore {
         if (this.state.openFilePath === msg.path) {
           this.setState({ openFilePath: null, fileContent: null });
         }
+        this.removeItemColors(msg.path);
         break;
 
       case "tree:rename":
@@ -145,6 +187,7 @@ export class WorkspaceStore {
         if (this.state.openFilePath === msg.from) {
           this.setState({ openFilePath: msg.to });
         }
+        this.migrateItemColors(msg.from, msg.to);
         break;
 
       case "file:live":
@@ -314,6 +357,7 @@ export class WorkspaceStore {
           this.setState({ openFilePath: null, fileContent: null });
         }
         this.send({ type: "file:delete", path: action.path });
+        this.removeItemColors(action.path);
         break;
       }
 
@@ -325,6 +369,7 @@ export class WorkspaceStore {
           this.setState({ openFilePath: action.to });
         }
         this.send({ type: "file:rename", from: action.from, to: action.to });
+        this.migrateItemColors(action.from, action.to);
         break;
       }
 
@@ -542,6 +587,20 @@ export class WorkspaceStore {
       case "settings:save": {
         this.setState({ projectSettings: action.settings });
         api.put(`/api/projects/${this.state.projectId}/settings`, action.settings).catch(() => {});
+        break;
+      }
+
+      case "settings:set-item-color": {
+        const prev = this.state.projectSettings.itemColors ?? {};
+        const next = { ...prev };
+        if (action.color === null) {
+          delete next[action.path];
+        } else {
+          next[action.path] = action.color;
+        }
+        const settings = { ...this.state.projectSettings, itemColors: next };
+        this.setState({ projectSettings: settings });
+        api.put(`/api/projects/${this.state.projectId}/settings`, settings).catch(() => {});
         break;
       }
 

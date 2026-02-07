@@ -16,7 +16,8 @@
   --color-chat-user: #e5eed8;
   --color-chat-ai: #f5ebe0;
   --color-success: #81c784;
-  --color-danger: #e57373;
+  --color-danger: #d45050;
+  --color-danger-hover: #c03a3a;
   --color-footer-bg: #1a1510;
   --color-footer-text: #a89a8c;
   --color-footer-muted: #7a6e62;
@@ -525,6 +526,21 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   transition: left 0.2s ease, width 0.2s ease;
   z-index: 0;
+}
+
+/* Item color swatches */
+.item-color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+  flex-shrink: 0;
+}
+
+.item-color-swatch:hover {
+  transform: scale(1.2);
 }
 
 /* Transitions */

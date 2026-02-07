@@ -1,8 +1,20 @@
 import { useState, useCallback, useMemo } from "react";
-import { useTree, useOpenFile, useStoreDispatch, useLoadFileContent } from "../store/StoreContext.js";
-import type { FileNode } from "../store/types.js";
+import { useTree, useOpenFile, useStoreDispatch, useLoadFileContent, useProjectSettings } from "../store/StoreContext.js";
+import type { FileNode, ItemColor } from "../store/types.js";
 import type { PresenceUser } from "../hooks/usePresence.js";
-import { File, Folder, FolderPlus, Plus, CaretRight, Play, ChatCircle } from "@phosphor-icons/react";
+import { File, Folder, FolderPlus, Plus, CaretRight, Play, ChatCircle, X } from "@phosphor-icons/react";
+
+const ITEM_COLOR_HEX: Record<ItemColor, string> = {
+  red: "#E8A8A0",
+  orange: "#E8C0A0",
+  yellow: "#E0CCA0",
+  green: "#A8CCA8",
+  blue: "#A0B8D0",
+  purple: "#C0A8D0",
+  gray: "#B8AEA4",
+};
+
+const ITEM_COLORS: ItemColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "gray"];
 
 function FileIcon({ type }: { type: "file" | "directory" }) {
   if (type === "directory") {
@@ -18,6 +30,7 @@ function TreeItem({
   selectedPath,
   onContextMenu,
   presencesByFile,
+  itemColors,
 }: {
   node: FileNode;
   depth: number;
@@ -25,9 +38,11 @@ function TreeItem({
   selectedPath: string | null;
   onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
   presencesByFile: Map<string, PresenceUser[]>;
+  itemColors: Record<string, ItemColor>;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isSelected = node.path === selectedPath;
+  const itemColor = itemColors[node.path];
 
   const handleClick = () => {
     if (node.type === "directory") {
@@ -55,7 +70,7 @@ function TreeItem({
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
-        {node.type === "directory" && (
+        {node.type === "directory" ? (
           <CaretRight
             size={12}
             weight="bold"
@@ -63,9 +78,17 @@ function TreeItem({
               expanded ? "rotate-90" : ""
             }`}
           />
+        ) : (
+          <span className="w-3 shrink-0" />
         )}
         <FileIcon type={node.type} />
         <span className="truncate flex-1">{displayName}</span>
+        {itemColor && (
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0 ml-auto"
+            style={{ backgroundColor: ITEM_COLOR_HEX[itemColor] }}
+          />
+        )}
         {filePresence && filePresence.length > 0 && (
           <span className="flex items-center -space-x-1 shrink-0 ml-auto">
             {filePresence.slice(0, 3).map((u) => (
@@ -92,6 +115,7 @@ function TreeItem({
               selectedPath={selectedPath}
               onContextMenu={onContextMenu}
               presencesByFile={presencesByFile}
+              itemColors={itemColors}
             />
           ))}
         </div>
@@ -105,6 +129,8 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
   const { path: openFilePath } = useOpenFile();
   const dispatch = useStoreDispatch();
   const loadFileContent = useLoadFileContent();
+  const projectSettings = useProjectSettings();
+  const itemColors = projectSettings.itemColors ?? {};
 
   const presencesByFile = useMemo(() => {
     const map = new Map<string, PresenceUser[]>();
@@ -280,6 +306,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               selectedPath={openFilePath}
               onContextMenu={handleContextMenu}
               presencesByFile={presencesByFile}
+              itemColors={itemColors}
             />
           ))
         )}
@@ -319,6 +346,46 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               </button>
             </>
           )}
+          <div className="px-3 py-2 flex items-center gap-1.5 border-b border-border">
+            {ITEM_COLORS.map((c) => {
+              const isActive = itemColors[contextMenu.node!.path] === c;
+              return (
+                <button
+                  key={c}
+                  title={c}
+                  onClick={() => {
+                    dispatch({
+                      type: "settings:set-item-color",
+                      path: contextMenu.node!.path,
+                      color: isActive ? null : c,
+                    });
+                    closeContextMenu();
+                  }}
+                  className="item-color-swatch"
+                  style={{
+                    backgroundColor: ITEM_COLOR_HEX[c],
+                    boxShadow: isActive ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${ITEM_COLOR_HEX[c]}` : undefined,
+                  }}
+                />
+              );
+            })}
+            {itemColors[contextMenu.node!.path] && (
+              <button
+                title="Clear color"
+                onClick={() => {
+                  dispatch({
+                    type: "settings:set-item-color",
+                    path: contextMenu.node!.path,
+                    color: null,
+                  });
+                  closeContextMenu();
+                }}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-text-muted hover:text-text transition-colors"
+              >
+                <X size={10} weight="bold" />
+              </button>
+            )}
+          </div>
           <button
             onClick={() => {
               setShowRename(contextMenu.node);

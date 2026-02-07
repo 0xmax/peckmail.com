@@ -37,6 +37,8 @@ export interface UserPreferences {
   };
 }
 
+export type ItemColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | "gray";
+
 export interface ProjectSettings {
   tts?: {
     voiceId?: string;
@@ -49,6 +51,7 @@ export interface ProjectSettings {
       speed: number;
     };
   };
+  itemColors?: Record<string, ItemColor>;
 }
 
 export interface TtsPlayback {
@@ -145,4 +148,5 @@ export type StoreAction =
   | { type: "tts:playback-stop" }
   // Settings
   | { type: "settings:set"; settings: ProjectSettings }
-  | { type: "settings:save"; settings: ProjectSettings };
+  | { type: "settings:save"; settings: ProjectSettings }
+  | { type: "settings:set-item-color"; path: string; color: ItemColor | null };

@@ -353,6 +353,20 @@ api.patch("/projects/:id", async (c) => {
   return c.json({ ok: true, name: body.name.trim() });
 });
 
+api.delete("/projects/:id", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || membership.role !== "owner") return c.json({ error: "Only owners can delete" }, 403);
+
+  // Delete related rows first, then the project
+  await supabaseAdmin.from("invitations").delete().eq("project_id", projectId);
+  await supabaseAdmin.from("project_members").delete().eq("project_id", projectId);
+  const { error } = await supabaseAdmin.from("projects").delete().eq("id", projectId);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
 api.get("/projects/:id/members", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
