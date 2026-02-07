@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, Decoration, type DecorationSet } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, Decoration, type DecorationSet, WidgetType } from "@codemirror/view";
 import { EditorState, StateField, StateEffect, Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
@@ -51,6 +51,37 @@ const highlightField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+// Dictation ghost text — shows partial transcript inline at cursor
+export const setDictationGhostEffect = StateEffect.define<{ pos: number; text: string } | null>();
+
+class DictationGhostWidget extends WidgetType {
+  constructor(readonly text: string) { super(); }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "dictation-ghost";
+    span.textContent = this.text;
+    return span;
+  }
+  eq(other: DictationGhostWidget) { return this.text === other.text; }
+}
+
+const dictationGhostField = StateField.define<DecorationSet>({
+  create() { return Decoration.none; },
+  update(decorations, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setDictationGhostEffect)) {
+        if (effect.value === null) return Decoration.none;
+        const { pos, text } = effect.value;
+        if (!text) return Decoration.none;
+        return Decoration.set([
+          Decoration.widget({ widget: new DictationGhostWidget(text), side: 1 }).range(pos),
+        ]);
+      }
+    }
+    return decorations.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 interface EditorProps {
   editorViewRef: RefObject<EditorView | null>;
@@ -99,6 +130,7 @@ export function Editor({ editorViewRef }: EditorProps) {
         syntaxHighlighting(defaultHighlightStyle),
         markdown({ codeLanguages: languages }),
         highlightField,
+        dictationGhostField,
         wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
         keymap.of([
           ...defaultKeymap,

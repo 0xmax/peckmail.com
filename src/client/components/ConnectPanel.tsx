@@ -12,7 +12,15 @@ interface ApiKey {
 
 const MCP_URL = "https://perchpad.co/mcp";
 
-export function ConnectPanel({ projectId }: { projectId: string }) {
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    || "project";
+}
+
+export function ConnectPanel({ projectId, projectName }: { projectId: string; projectName: string }) {
   const { defaultApiKey, session } = useAuth();
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -29,7 +37,9 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
   const host = window.location.host;
   const origin = window.location.origin;
   const keyDisplay = defaultApiKey || "pp_YOUR_KEY";
-  const cloneCmd = `git clone https://x-token:${keyDisplay}@${host}/git/${projectId}`;
+  const slug = slugify(projectName || "project");
+  const gitPath = `/git/${projectId}/${slug}`;
+  const cloneCmd = `git clone https://x-token:${keyDisplay}@${host}${gitPath}`;
 
   useEffect(() => {
     api.get<{ keys: ApiKey[] }>("/api/keys").then((r) => setApiKeys(r.keys)).catch(() => {});
@@ -119,10 +129,10 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
             <label className="font-medium text-text-muted block mb-1">Repository URL</label>
             <div className="flex items-center gap-1.5">
               <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text break-all select-all">
-                {origin}/git/{projectId}
+                {origin}{gitPath}
               </code>
               <button
-                onClick={() => copy(`${origin}/git/${projectId}`, "url")}
+                onClick={() => copy(`${origin}${gitPath}`, "url")}
                 className="shrink-0 px-2.5 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg hover:text-text hover:border-text-muted transition-colors"
               >
                 {copiedField === "url" ? "Copied!" : "Copy"}

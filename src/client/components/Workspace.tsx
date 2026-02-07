@@ -457,7 +457,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
             />
             {activePanel === "chat" && <ChatPanel />}
             {activePanel === "revisions" && <Revisions projectId={projectId} />}
-            {activePanel === "connect" && <ConnectPanel projectId={projectId} />}
+            {activePanel === "connect" && <ConnectPanel projectId={projectId} projectName={projectName} />}
           </div>
         )}
 

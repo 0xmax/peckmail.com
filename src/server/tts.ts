@@ -6,7 +6,7 @@ import { join } from "path";
 import { authMiddleware, getUser } from "./auth.js";
 import { getProjectMembership } from "./db.js";
 import { PROJECTS_DIR } from "./files.js";
-import { deductCredits, calculateTtsCost, calculateChatCost, calculateWhisperCost } from "./credits.js";
+import { deductCredits, calculateTtsCost, calculateChatCost, calculateOpusCost, calculateHaikuCost, calculateWhisperCost } from "./credits.js";
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -269,6 +269,154 @@ function clamp(value: number, min: number, max: number): number {
 
 // --- Routes ---
 
+// Generate single-use token for Scribe v2 realtime STT
+ttsRouter.post("/tts/scribe-token", authMiddleware, async (c) => {
+  if (!ELEVENLABS_API_KEY) {
+    return c.json({ error: "TTS not configured" }, 500);
+  }
+
+  const resp = await fetch(
+    "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+      },
+    }
+  );
+
+  if (!resp.ok) {
+    const err = await resp.text().catch(() => "Unknown error");
+    console.error("[tts] Scribe token error:", resp.status, err);
+    return c.json({ error: "Failed to generate scribe token" }, 502);
+  }
+
+  const data: any = await resp.json();
+  return c.json({ token: data.token });
+});
+
+// Format dictation transcript through LLM
+type DictationMode = "format" | "clean" | "editorial";
+
+function getDictationPrompt(mode: DictationMode): string {
+  if (mode === "format") {
+    return [
+      `You format raw speech-to-text into markdown. You receive a <dictation> block and optional <context> showing what's already in the document. Output ONLY the formatted text — nothing else.`,
+      ``,
+      `Be faithful to the speaker's words. Don't rephrase or add anything. Just format intelligently:`,
+      `- Add proper punctuation and capitalization`,
+      `- Convert spoken punctuation ("period", "comma", "question mark", etc.) to characters`,
+      `- Recognize structural intent — paragraph breaks, headings, lists — from natural phrasing (not rigid commands)`,
+      `- When someone signals a heading, figure out where the short heading text ends and body prose begins — they go on separate lines`,
+      `- Convert spoken formatting ("bold", "italic") to markdown`,
+      `- Fix obvious speech-to-text errors when the context makes the correction clear`,
+      `- Use the document context to understand what structure makes sense`,
+      `- Use real newline characters, never literal "\\n"`,
+      ``,
+      `Examples:`,
+      ``,
+      `Input (context: "# My Book"): So this is the first chapter and it's about cheese period The cheese was very good`,
+      `Output: So this is the first chapter and it's about cheese. The cheese was very good.`,
+      ``,
+      `Input: Chapter Two The Return headline Next we need to talk about the dog`,
+      `Output:`,
+      ``,
+      `## Chapter Two: The Return`,
+      ``,
+      `Next we need to talk about the dog.`,
+      ``,
+      `Input: Making a new headline This is cookie bar We've been living in the cookie bar for a long time`,
+      `Output:`,
+      ``,
+      `## This is Cookie Bar`,
+      ``,
+      `We've been living in the cookie bar for a long time.`,
+    ].join("\n");
+  }
+
+  if (mode === "clean") {
+    return [
+      `You clean up raw dictated speech into polished prose for a markdown document. You receive a <dictation> block and optional <context>. Output ONLY the cleaned text — nothing else.`,
+      ``,
+      `Do everything the basic formatter does (punctuation, structure, markdown), plus:`,
+      `- Remove filler words and false starts`,
+      `- Fix grammar and smooth out awkward phrasing`,
+      `- Tighten run-on sentences`,
+      ``,
+      `Keep the author's voice and meaning intact. Don't over-edit — just make it read like they meant to write it, not like they were talking out loud.`,
+      `Use the document context to match the existing tone. Use real newline characters, never literal "\\n".`,
+    ].join("\n");
+  }
+
+  // editorial
+  return [
+    `You are a skilled editor turning raw dictated speech into publication-ready prose for a markdown document. You receive a <dictation> block and optional <context>. Output ONLY the edited text — nothing else.`,
+    ``,
+    `Edit aggressively for clarity, concision, and flow. Tighten sentences, choose better words, improve rhythm. Elevate casual spoken language into polished writing. Restructure if it improves readability.`,
+    ``,
+    `Preserve the core ideas, arguments, and the author's personality — but make the execution dramatically better. Think ghostwriter, not copyeditor.`,
+    `Don't add new information. Match the tone of the existing document context. Use real newline characters, never literal "\\n".`,
+  ].join("\n");
+}
+
+ttsRouter.post("/tts/format-dictation", authMiddleware, async (c) => {
+  const { text, context, mode = "format" } = await c.req.json<{
+    text: string;
+    context?: string;
+    mode?: DictationMode;
+  }>();
+  if (!text?.trim()) return c.json({ formatted: "" });
+
+  // Validate mode
+  const validModes: DictationMode[] = ["format", "clean", "editorial"];
+  const safeMode = validModes.includes(mode) ? mode : "format";
+
+  // Use Sonnet for editorial (needs stronger writing ability), Haiku for format/clean
+  const model = safeMode === "editorial" ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5-20251001";
+  const maxTokens = safeMode === "editorial" ? 2048 : 1024;
+
+  try {
+    const res = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      system: getDictationPrompt(safeMode),
+      messages: [
+        {
+          role: "user",
+          content: context
+            ? `<context>${context}</context>\n<dictation>${text}</dictation>`
+            : `<dictation>${text}</dictation>`,
+        },
+      ],
+    });
+
+    const block = res.content[0];
+    const formatted = block.type === "text" ? block.text : text;
+
+    // Meter the LLM call
+    const usage = {
+      input_tokens: res.usage?.input_tokens ?? 0,
+      output_tokens: res.usage?.output_tokens ?? 0,
+      cache_read_input_tokens: (res.usage as any)?.cache_read_input_tokens ?? 0,
+    };
+    const cost = safeMode === "editorial" ? calculateChatCost(usage) : calculateHaikuCost(usage);
+    if (cost > 0) {
+      const user = getUser(c);
+      deductCredits({
+        userId: user.id,
+        amount: cost,
+        service: "dictation_format",
+        metadata: { usage, mode: safeMode },
+      }).catch((err) => console.error("[tts] Dictation format credit error:", err));
+    }
+
+    return c.json({ formatted });
+  } catch (err) {
+    console.error("[tts] Dictation format error:", err);
+    return c.json({ formatted: text });
+  }
+});
+
 // List voices
 ttsRouter.get("/tts/voices", authMiddleware, async (c) => {
   return c.json({ voices: VOICES });
@@ -397,7 +545,7 @@ ttsRouter.post("/tts/:projectId", authMiddleware, async (c) => {
       ttsText = enhanceRes.text;
       // Meter the Claude call for enhancement separately
       if (enhanceRes.usage) {
-        const enhanceCost = calculateChatCost(enhanceRes.usage);
+        const enhanceCost = calculateOpusCost(enhanceRes.usage);
         if (enhanceCost > 0) {
           deductCredits({
             userId: user.id,

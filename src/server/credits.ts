@@ -7,7 +7,7 @@ export function calculateTtsCost(charCount: number): number {
   return Math.ceil(charCount / 3);
 }
 
-/** Claude token costs with ~15% margin */
+/** Sonnet token costs — $3/$15 per MTok, ~15% margin */
 export function calculateChatCost(usage: {
   input_tokens: number;
   output_tokens: number;
@@ -16,6 +16,30 @@ export function calculateChatCost(usage: {
   const inputCredits = Math.ceil(usage.input_tokens / 60);
   const outputCredits = Math.ceil(usage.output_tokens / 12);
   const cacheCredits = Math.ceil((usage.cache_read_input_tokens ?? 0) / 600);
+  return inputCredits + outputCredits + cacheCredits;
+}
+
+/** Opus 4.5/4.6 token costs — $5/$25/$0.50 per MTok, 5/3x Sonnet */
+export function calculateOpusCost(usage: {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+}): number {
+  const inputCredits = Math.ceil(usage.input_tokens / 36);
+  const outputCredits = Math.ceil(usage.output_tokens / 7.2);
+  const cacheCredits = Math.ceil((usage.cache_read_input_tokens ?? 0) / 360);
+  return inputCredits + outputCredits + cacheCredits;
+}
+
+/** Haiku 4.5 token costs — $1/$5/$0.10 per MTok, 1/3x Sonnet */
+export function calculateHaikuCost(usage: {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+}): number {
+  const inputCredits = Math.ceil(usage.input_tokens / 180);
+  const outputCredits = Math.ceil(usage.output_tokens / 36);
+  const cacheCredits = Math.ceil((usage.cache_read_input_tokens ?? 0) / 1800);
   return inputCredits + outputCredits + cacheCredits;
 }
 

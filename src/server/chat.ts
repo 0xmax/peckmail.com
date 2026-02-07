@@ -8,7 +8,7 @@ import { broadcast, sendTo } from "./ws.js";
 import * as fileOps from "./fileOps.js";
 import { getProjectMemberEmails, getProjectMembers, getProjectEmail, getProjectMembership, createInvitation, supabaseAdmin } from "./db.js";
 import { sendEmail, sendInvitationEmail } from "./email.js";
-import { placeHold, settleHold, releaseHold, calculateChatCost } from "./credits.js";
+import { placeHold, settleHold, releaseHold, calculateOpusCost } from "./credits.js";
 
 const anthropic = new Anthropic();
 
@@ -1293,13 +1293,13 @@ export async function runAgentHeadless(
 
     // Settle hold with actual usage
     if (holdId) {
-      const actualCredits = calculateChatCost(totalUsage);
+      const actualCredits = calculateOpusCost(totalUsage);
       await settleHold(holdId, actualCredits, { usage: totalUsage });
     }
   } catch (err) {
     // Release or settle hold on error
     if (holdId) {
-      const partialCredits = calculateChatCost(totalUsage);
+      const partialCredits = calculateOpusCost(totalUsage);
       if (partialCredits > 0) {
         await settleHold(holdId, partialCredits, { usage: totalUsage, error: true });
       } else {
@@ -1550,7 +1550,7 @@ When working with CSV files, be especially careful to preserve the structure (co
 
     // Settle credit hold with actual usage
     if (holdId) {
-      const actualCredits = calculateChatCost(totalUsage);
+      const actualCredits = calculateOpusCost(totalUsage);
       await settleHold(holdId, actualCredits, { usage: totalUsage });
     }
 
@@ -1575,7 +1575,7 @@ When working with CSV files, be especially careful to preserve the structure (co
 
     // Release or settle credit hold on error
     if (holdId) {
-      const partialCredits = calculateChatCost(totalUsage);
+      const partialCredits = calculateOpusCost(totalUsage);
       if (partialCredits > 0) {
         await settleHold(holdId, partialCredits, { usage: totalUsage, error: true }).catch(() => {});
       } else {

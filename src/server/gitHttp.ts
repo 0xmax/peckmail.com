@@ -125,8 +125,16 @@ function canWrite(role: string): boolean {
   return ["owner", "editor"].includes(role);
 }
 
+// Slug routes: /:projectId/:slug/... → forward to /:projectId/... handlers
+// The slug is cosmetic (gives git clone a nice folder name) and ignored by the server.
+gitRouter.get("/:projectId/:slug/info/refs", async (c) => gitInfoRefs(c));
+gitRouter.post("/:projectId/:slug/git-upload-pack", async (c) => gitUploadPack(c));
+gitRouter.post("/:projectId/:slug/git-receive-pack", async (c) => gitReceivePack(c));
+
 // --- GET /:projectId/info/refs?service=... ---
-gitRouter.get("/:projectId/info/refs", async (c) => {
+gitRouter.get("/:projectId/info/refs", async (c) => gitInfoRefs(c));
+
+async function gitInfoRefs(c: any) {
   const service = c.req.query("service") as GitService | undefined;
   if (!service || !VALID_SERVICES.includes(service)) {
     return c.text("Invalid service", 400);
@@ -189,10 +197,12 @@ gitRouter.get("/:projectId/info/refs", async (c) => {
       "Cache-Control": "no-cache",
     },
   });
-});
+}
 
 // --- POST /:projectId/git-upload-pack ---
-gitRouter.post("/:projectId/git-upload-pack", async (c) => {
+gitRouter.post("/:projectId/git-upload-pack", async (c) => gitUploadPack(c));
+
+async function gitUploadPack(c: any) {
   const user = await authenticateGitRequest(c);
   if (!user) {
     c.header("WWW-Authenticate", 'Basic realm="Perchpad"');
@@ -228,10 +238,12 @@ gitRouter.post("/:projectId/git-upload-pack", async (c) => {
       "Cache-Control": "no-cache",
     },
   });
-});
+}
 
 // --- POST /:projectId/git-receive-pack ---
-gitRouter.post("/:projectId/git-receive-pack", async (c) => {
+gitRouter.post("/:projectId/git-receive-pack", async (c) => gitReceivePack(c));
+
+async function gitReceivePack(c: any) {
   const user = await authenticateGitRequest(c);
   if (!user) {
     c.header("WWW-Authenticate", 'Basic realm="Perchpad"');
@@ -275,4 +287,4 @@ gitRouter.post("/:projectId/git-receive-pack", async (c) => {
       "Cache-Control": "no-cache",
     },
   });
-});
+}
