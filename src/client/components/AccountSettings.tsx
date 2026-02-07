@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { supabase } from "../lib/supabase.js";
 import type { UserPreferences } from "../store/types.js";
-import { Monitor, Terminal, Play, Stop, CurrencyDollar, Envelope, SignOut, ArrowLeft } from "@phosphor-icons/react";
+import { Monitor, Terminal, Play, Stop, CurrencyDollar, Envelope, SignOut, ArrowLeft, XLogo } from "@phosphor-icons/react";
 import { UserAvatar } from "./UserAvatar.js";
 
 interface ApiKey {
@@ -281,6 +281,15 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
               >
                 <Envelope size={16} className="text-text-muted" />
                 Contact
+              </a>
+              <a
+                href="https://x.com/perchpad"
+                target="_blank"
+                rel="noopener"
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+              >
+                <XLogo size={16} className="text-text-muted" />
+                Follow on X
               </a>
               <button
                 onClick={() => { setMenuOpen(false); signOut(); }}

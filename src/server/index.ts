@@ -936,10 +936,10 @@ function landingPageHtml(): string {
   <section class="max-w-[1100px] mx-auto px-6 pt-8 sm:px-8 sm:pt-16">
     <div class="flex flex-col gap-5 mb-8 sm:flex-row sm:items-center sm:gap-12 sm:mb-12">
       <div class="sm:flex-[1.2]">
-        <h1 class="font-heading text-4xl sm:text-[3.5rem] font-extrabold leading-[1.1] text-text tracking-tight">A writing workspace that thinks with you</h1>
+        <h1 class="font-heading text-4xl sm:text-[3.5rem] font-extrabold leading-[1.1] text-dark tracking-tight">A writing workspace that thinks with you</h1>
       </div>
       <div class="sm:flex-1">
-        <p class="text-lg text-text leading-relaxed">Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.</p>
+        <p class="text-lg text-text-body leading-relaxed">Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.</p>
       </div>
     </div>
     <picture>
@@ -1092,6 +1092,10 @@ function landingPageHtml(): string {
       <div>
         <div class="font-heading text-xl font-bold text-white mb-2">Perchpad</div>
         <div class="text-[0.85rem] text-footer-muted max-w-[280px] leading-relaxed">A calm writing workspace with a smart little bird.</div>
+        <a href="https://x.com/perchpad" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-[0.85rem] text-footer-muted hover:text-white transition-colors mt-3">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Follow @perchpad
+        </a>
       </div>
       <div class="flex gap-8 sm:gap-16">
         <div>

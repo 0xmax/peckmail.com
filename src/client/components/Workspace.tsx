@@ -24,7 +24,7 @@ import { SettingsModal } from "./SettingsModal.js";
 import { PresenceAvatars } from "./PresenceAvatars.js";
 import { useAuth } from "../context/AuthContext.js";
 import { usePresence } from "../hooks/usePresence.js";
-import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope } from "@phosphor-icons/react";
+import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope, XLogo } from "@phosphor-icons/react";
 
 function fileExistsInTree(tree: FileNode[], path: string): boolean {
   for (const node of tree) {
@@ -336,6 +336,15 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
                 >
                   <Envelope size={16} className="text-text-muted" />
                   Contact
+                </a>
+                <a
+                  href="https://x.com/perchpad"
+                  target="_blank"
+                  rel="noopener"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                >
+                  <XLogo size={16} className="text-text-muted" />
+                  Follow on X
                 </a>
                 <button
                   onClick={() => { setUserMenuOpen(false); signOut(); }}
