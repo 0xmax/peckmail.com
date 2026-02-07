@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { promises as fs } from "fs";
 import { join, resolve, relative, extname, dirname } from "path";
 import { getUser, type AuthUser } from "./auth.js";
-import { getProjectMembership } from "./db.js";
+import { getProjectMembership, getUserProjects } from "./db.js";
 
 const PROJECTS_DIR = resolve(process.env.PROJECTS_DIR || "./projects");
 
@@ -249,6 +249,109 @@ export async function seedTemplate(projectId: string): Promise<void> {
   const files = await fs.readdir(dest);
   console.log("[files] seedTemplate: result files =", files);
 }
+
+// --- Full-text search across all user projects ---
+
+const TEXT_EXTENSIONS = new Set([
+  ".md", ".csv", ".txt", ".json", ".yaml", ".yml", ".toml",
+  ".html", ".css", ".js", ".ts", ".tsx", ".jsx", ".xml", ".svg",
+]);
+
+function collectFilePaths(
+  tree: Array<{ path: string; type: string; children?: any[] }>
+): string[] {
+  const paths: string[] = [];
+  for (const entry of tree) {
+    if (entry.type === "file") {
+      const ext = extname(entry.path).toLowerCase();
+      if (TEXT_EXTENSIONS.has(ext)) paths.push(entry.path);
+    } else if (entry.children) {
+      paths.push(...collectFilePaths(entry.children));
+    }
+  }
+  return paths;
+}
+
+interface FileMatch {
+  projectId: string;
+  path: string;
+  line: number;
+  context: string;
+}
+
+const MAX_MATCHES_PER_PROJECT = 5;
+const MAX_TOTAL_MATCHES = 50;
+const MAX_FILE_SIZE = 512 * 1024; // skip files > 512KB
+
+export async function searchFiles(
+  userId: string,
+  query: string
+): Promise<FileMatch[]> {
+  const projects = await getUserProjects(userId);
+  const q = query.toLowerCase();
+  const allMatches: FileMatch[] = [];
+
+  for (const project of projects) {
+    if (allMatches.length >= MAX_TOTAL_MATCHES) break;
+    const dir = projectDir(project.id);
+    let tree: any[];
+    try {
+      tree = await listTree(dir, dir);
+    } catch {
+      continue; // project dir might not exist
+    }
+
+    const filePaths = collectFilePaths(tree);
+    let projectMatches = 0;
+
+    for (const filePath of filePaths) {
+      if (projectMatches >= MAX_MATCHES_PER_PROJECT) break;
+      if (allMatches.length >= MAX_TOTAL_MATCHES) break;
+
+      const fullPath = join(dir, filePath);
+      try {
+        const stat = await fs.stat(fullPath);
+        if (stat.size > MAX_FILE_SIZE) continue;
+        const content = await fs.readFile(fullPath, "utf-8");
+        const lines = content.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          if (projectMatches >= MAX_MATCHES_PER_PROJECT) break;
+          if (allMatches.length >= MAX_TOTAL_MATCHES) break;
+          if (lines[i].toLowerCase().includes(q)) {
+            allMatches.push({
+              projectId: project.id,
+              path: filePath,
+              line: i + 1,
+              context: lines[i].slice(0, 200),
+            });
+            projectMatches++;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return allMatches;
+}
+
+export const fileSearchRouter = new Hono();
+
+fileSearchRouter.get("/search", async (c) => {
+  const user = getUser(c);
+  const query = c.req.query("q")?.trim();
+  if (!query || query.length < 2) {
+    return c.json({ matches: [] });
+  }
+  try {
+    const matches = await searchFiles(user.id, query);
+    return c.json({ matches });
+  } catch (err: any) {
+    console.error("[search] Error:", err.message);
+    return c.json({ error: "Search failed" }, 500);
+  }
+});
 
 // Helper for external use (chat tools, etc.)
 export { safePath, projectDir, listTree, PROJECTS_DIR };

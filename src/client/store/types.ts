@@ -78,6 +78,7 @@ export interface IncomingEmail {
 
 export interface StoreState {
   projectId: string;
+  projectName: string;
   connected: boolean;
   tree: FileNode[];
   treeLoading: boolean;

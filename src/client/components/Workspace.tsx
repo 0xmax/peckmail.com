@@ -4,6 +4,8 @@ import {
   useOpenFile,
   useConnected,
   useProjectId,
+  useProjectName,
+  useRenameProject,
   useLoadFileContent,
   useTree,
   useTtsFromLine,
@@ -45,7 +47,12 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
   const { tree, loading: treeLoading } = useTree();
   const connected = useConnected();
   const projectId = useProjectId();
+  const projectName = useProjectName();
+  const renameProject = useRenameProject();
   const loadFileContent = useLoadFileContent();
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [showShare, setShowShare] = useState(false);
   const [showAudioBar, setShowAudioBar] = useState(false);
@@ -251,11 +258,32 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
           </button>
           <SaveIndicator projectId={projectId} />
         </div>
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
-          <img src="/assets/logo.png" alt="Perchpad" className="h-6 w-auto" />
-          <span style={{ fontFamily: "'Playfair Display', serif" }} className="text-lg font-medium text-text -tracking-[0.01em]">
-            Perchpad
-          </span>
+        <div className="absolute left-1/2 -translate-x-1/2">
+          {editingName ? (
+            <input
+              ref={nameInputRef}
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onBlur={async () => {
+                const trimmed = draftName.trim();
+                if (trimmed && trimmed !== projectName) await renameProject(trimmed);
+                setEditingName(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setEditingName(false);
+              }}
+              className="text-sm font-medium text-text bg-transparent border-b border-accent/50 outline-none text-center px-1 py-0.5 min-w-[120px]"
+            />
+          ) : (
+            <button
+              onClick={() => { setDraftName(projectName); setEditingName(true); setTimeout(() => nameInputRef.current?.select(), 0); }}
+              className="text-sm font-medium text-text-muted hover:text-text transition-colors truncate max-w-[200px]"
+              title="Click to rename workspace"
+            >
+              {projectName || "Untitled"}
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!connected && (

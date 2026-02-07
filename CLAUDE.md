@@ -18,6 +18,7 @@ A collaborative markdown writing app with AI assistance and text-to-speech.
 - `npm run build` — one-shot production build (esbuild + tailwind minify)
 - `npx tsc --noEmit` — type-check server
 - `npx tsc --noEmit -p tsconfig.client.json` — type-check client
+- `fly deploy` — deploy to Fly.io (production)
 
 ## Key Files
 

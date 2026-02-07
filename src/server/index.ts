@@ -3,7 +3,7 @@ import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { authMiddleware, getUser } from "./auth.js";
-import { filesRouter, PROJECTS_DIR, seedTemplate } from "./files.js";
+import { filesRouter, fileSearchRouter, PROJECTS_DIR, seedTemplate } from "./files.js";
 import { seedFromTemplate, seedEmpty, seedFromFiles } from "./templates.js";
 import { generateWorkspaceFiles } from "./generateWorkspace.js";
 import { addClient } from "./ws.js";
@@ -338,6 +338,21 @@ api.post("/projects", async (c) => {
   return c.json({ project });
 });
 
+api.patch("/projects/:id", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || membership.role !== "owner") return c.json({ error: "Only owners can rename" }, 403);
+  const body = await c.req.json<{ name?: string }>();
+  if (!body.name?.trim()) return c.json({ error: "Name required" }, 400);
+  const { error } = await supabaseAdmin
+    .from("projects")
+    .update({ name: body.name.trim() })
+    .eq("id", projectId);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true, name: body.name.trim() });
+});
+
 api.get("/projects/:id/members", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
@@ -560,6 +575,7 @@ api.post("/projects/:id/share", async (c) => {
 });
 
 // Files
+api.route("/files", fileSearchRouter);
 api.route("/files", filesRouter);
 
 // Chat sessions (REST for listing/getting)

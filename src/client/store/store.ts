@@ -20,6 +20,7 @@ export class WorkspaceStore {
   constructor(projectId: string) {
     this.state = {
       projectId,
+      projectName: "",
       connected: false,
       tree: [],
       treeLoading: true,
@@ -606,6 +607,26 @@ export class WorkspaceStore {
       this.setState({ incomingEmails: data.emails });
     } catch {
       // Ignore
+    }
+  }
+
+  async loadProjectName() {
+    try {
+      const data = await api.get<{ projects: { id: string; name: string }[] }>("/api/projects");
+      const project = data.projects.find((p) => p.id === this.state.projectId);
+      if (project) this.setState({ projectName: project.name });
+    } catch {
+      // Ignore
+    }
+  }
+
+  async renameProject(name: string): Promise<boolean> {
+    try {
+      await api.patch(`/api/projects/${this.state.projectId}`, { name });
+      this.setState({ projectName: name });
+      return true;
+    } catch {
+      return false;
     }
   }
 

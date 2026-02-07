@@ -46,6 +46,7 @@ export function StoreProvider({
       store.connect(session.access_token);
     }
     store.loadTree();
+    store.loadProjectName();
     store.loadChatSessions();
     store.loadSettings();
     store.loadEmails();
@@ -133,6 +134,15 @@ export function useTtsFromLine(): number | null {
 
 export function useChatPrompt(): string | null {
   return useSelector((s) => s.chatPrompt);
+}
+
+export function useProjectName(): string {
+  return useSelector((s) => s.projectName);
+}
+
+export function useRenameProject(): (name: string) => Promise<boolean> {
+  const store = useStore();
+  return (name: string) => store.renameProject(name);
 }
 
 export function useProjectSettings(): ProjectSettings {
