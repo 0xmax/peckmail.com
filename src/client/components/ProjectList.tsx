@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
-import { Envelope, GearSix, Notebook, SignOut, SpinnerGap } from "@phosphor-icons/react";
+import { Envelope, File, GearSix, MagnifyingGlass, Notebook, PencilSimple, SignOut, SortAscending, SpinnerGap } from "@phosphor-icons/react";
 import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
 
@@ -44,6 +44,67 @@ interface Invitation {
   projects: { name: string };
 }
 
+interface FileMatch {
+  projectId: string;
+  path: string;
+  line: number;
+  context: string;
+}
+
+function useFileSearch(query: string) {
+  const [matches, setMatches] = useState<FileMatch[]>([]);
+  const [searching, setSearching] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setMatches([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    const timeout = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const data = await api.get<{ matches: FileMatch[] }>(
+          `/api/files/search?q=${encodeURIComponent(trimmed)}`
+        );
+        if (!controller.signal.aborted) {
+          setMatches(data.matches);
+        }
+      } catch {
+        if (!controller.signal.aborted) setMatches([]);
+      } finally {
+        if (!controller.signal.aborted) setSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timeout);
+      abortRef.current?.abort();
+    };
+  }, [query]);
+
+  return { matches, searching };
+}
+
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-accent/20 text-text rounded-sm px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
 export function ProjectList({
   onOpenProject,
   onOpenSettings,
@@ -58,7 +119,23 @@ export function ProjectList({
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [creatingSample, setCreatingSample] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"newest" | "oldest" | "a-z" | "z-a">("newest");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const { matches: fileMatches, searching: fileSearching } = useFileSearch(search);
+  const matchesByProject = useMemo(() => {
+    const map = new Map<string, FileMatch[]>();
+    for (const m of fileMatches) {
+      const list = map.get(m.projectId) || [];
+      list.push(m);
+      map.set(m.projectId, list);
+    }
+    return map;
+  }, [fileMatches]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -112,6 +189,39 @@ export function ProjectList({
       // Ignore
     }
   };
+
+  const handleRename = async (projectId: string) => {
+    const trimmed = renameValue.trim();
+    if (trimmed) {
+      try {
+        await api.patch(`/api/projects/${projectId}`, { name: trimmed });
+        setProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, name: trimmed } : p));
+      } catch {
+        // Ignore
+      }
+    }
+    setRenamingId(null);
+  };
+
+  const filteredProjects = useMemo(() => {
+    let list = projects;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (p) => p.name.toLowerCase().includes(q) || matchesByProject.has(p.id)
+      );
+    }
+    list = [...list].sort((a, b) => {
+      switch (sort) {
+        case "a-z": return a.name.localeCompare(b.name);
+        case "z-a": return b.name.localeCompare(a.name);
+        case "oldest": return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case "newest":
+        default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
+    return list;
+  }, [projects, search, sort, matchesByProject]);
 
   return (
     <div className="min-h-screen bg-bg">
@@ -200,7 +310,7 @@ export function ProjectList({
         )}
 
         {/* Projects */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-text">
             Your workspaces
           </h2>
@@ -211,6 +321,38 @@ export function ProjectList({
             + New workspace
           </button>
         </div>
+
+        {projects.length > 0 && (
+          <div className="flex items-center gap-2 mb-4">
+            <div className="relative flex-1">
+              <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                placeholder="Search workspaces and files..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 bg-surface border border-border rounded-xl text-sm text-text placeholder:text-text-muted/60 focus:outline-none focus:border-accent/50 transition-colors"
+              />
+              {fileSearching && (
+                <SpinnerGap size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" />
+              )}
+            </div>
+            <div className="relative">
+              <SortAscending size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as typeof sort)}
+                className="appearance-none pl-8 pr-7 py-2 bg-surface border border-border rounded-xl text-sm text-text focus:outline-none focus:border-accent/50 transition-colors cursor-pointer"
+              >
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="a-z">A — Z</option>
+                <option value="z-a">Z — A</option>
+              </select>
+              <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted pointer-events-none" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5l3 3 3-3" /></svg>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-2">
@@ -256,57 +398,128 @@ export function ProjectList({
             </button>
           </div>
         ) : (
+          filteredProjects.length === 0 && !fileSearching ? (
+            <div className="text-center py-12">
+              <p className="text-text-muted text-sm">No workspaces match "{search}"</p>
+            </div>
+          ) : (
+          <>
+          {fileSearching && (
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <SpinnerGap size={14} className="text-text-muted animate-spin" />
+              <span className="text-xs text-text-muted">Searching files across all workspaces…</span>
+            </div>
+          )}
           <div className="space-y-2">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => onOpenProject(project.id)}
-                className="w-full flex items-center gap-4 bg-surface rounded-xl px-5 py-4 border border-border hover:border-accent/50 hover:shadow-sm transition-all group text-left"
-              >
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg font-semibold"
-                  style={{ background: projectColor(project.name), color: "#5a4a3a" }}
-                >
-                  {projectInitial(project.name)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-text group-hover:text-accent transition-colors">
-                    {project.name}
-                  </h3>
-                  {project.description ? (
-                    <p className="text-sm text-text-muted truncate">{project.description}</p>
-                  ) : (
-                    <p className="text-xs text-text-muted">
-                      {project.role === "owner" ? "Owner" : project.role === "editor" ? "Editor" : "Viewer"}
-                      {" · "}
-                      Created{" "}
-                      {new Date(project.created_at).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-                {project.members && project.members.length > 1 && (
-                  <div className="flex items-center shrink-0 -space-x-1.5">
-                    {project.members.slice(0, 4).map((m) => (
-                      <UserAvatar
-                        key={m.user_id}
-                        src={m.avatar_url}
-                        name={m.display_name}
-                        size={24}
-                        className="ring-2 ring-surface"
-                      />
-                    ))}
-                    {project.members.length > 4 && (
-                      <div
-                        className="w-6 h-6 rounded-full bg-surface-alt text-text-muted flex items-center justify-center text-[10px] font-medium ring-2 ring-surface shrink-0"
-                      >
-                        +{project.members.length - 4}
+            {filteredProjects.map((project) => {
+              const hits = matchesByProject.get(project.id);
+              return (
+                <div key={project.id}>
+                  <div
+                    onClick={() => { if (renamingId !== project.id) onOpenProject(project.id); }}
+                    className="w-full flex items-center gap-4 bg-surface rounded-xl px-5 py-4 border border-border hover:border-accent/50 hover:shadow-sm transition-all group text-left cursor-pointer"
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg font-semibold"
+                      style={{ background: projectColor(project.name), color: "#5a4a3a" }}
+                    >
+                      {projectInitial(project.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        {renamingId === project.id ? (
+                          <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={() => handleRename(project.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-semibold text-text bg-transparent border-b border-accent/50 outline-none py-0 px-0 min-w-0 flex-1"
+                            autoFocus
+                          />
+                        ) : (
+                          <>
+                            <h3 className="font-semibold text-text group-hover:text-accent transition-colors">
+                              {project.name}
+                            </h3>
+                            {project.role === "owner" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenamingId(project.id);
+                                  setRenameValue(project.name);
+                                  setTimeout(() => renameInputRef.current?.select(), 0);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 text-text-muted hover:text-text transition-all"
+                                title="Rename"
+                              >
+                                <PencilSimple size={13} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {project.description ? (
+                        <p className="text-sm text-text-muted truncate">{project.description}</p>
+                      ) : (
+                        <p className="text-xs text-text-muted">
+                          {project.role === "owner" ? "Owner" : project.role === "editor" ? "Editor" : "Viewer"}
+                          {" · "}
+                          Created{" "}
+                          {new Date(project.created_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    {project.members && project.members.length > 1 && (
+                      <div className="flex items-center shrink-0 -space-x-1.5">
+                        {project.members.slice(0, 4).map((m) => (
+                          <UserAvatar
+                            key={m.user_id}
+                            src={m.avatar_url}
+                            name={m.display_name}
+                            size={24}
+                            className="ring-2 ring-surface"
+                          />
+                        ))}
+                        {project.members.length > 4 && (
+                          <div
+                            className="w-6 h-6 rounded-full bg-surface-alt text-text-muted flex items-center justify-center text-[10px] font-medium ring-2 ring-surface shrink-0"
+                          >
+                            +{project.members.length - 4}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </button>
-            ))}
+                  {hits && hits.length > 0 && (
+                    <div className="ml-14 mt-1 mb-1 space-y-0.5">
+                      {hits.map((hit, i) => (
+                        <button
+                          key={`${hit.path}:${hit.line}:${i}`}
+                          onClick={() => onOpenProject(project.id)}
+                          className="w-full flex items-start gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-surface-alt transition-colors"
+                        >
+                          <File size={13} className="text-text-muted shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs text-text-muted">{hit.path}:{hit.line}</span>
+                            <p className="text-xs text-text truncate">
+                              <HighlightMatch text={hit.context} query={search.trim()} />
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          </>
+          )
         )}
       </div>
 
