@@ -91,19 +91,6 @@ function ttsDir(projectId: string): string {
 async function ensureTtsDir(projectId: string): Promise<string> {
   const dir = ttsDir(projectId);
   await fs.mkdir(dir, { recursive: true });
-
-  // Ensure .tts/ is in the project's .gitignore (handles existing projects)
-  const gitignorePath = join(PROJECTS_DIR, projectId, ".gitignore");
-  try {
-    const content = await fs.readFile(gitignorePath, "utf-8");
-    if (!content.includes(".tts/")) {
-      await fs.writeFile(gitignorePath, content.trimEnd() + "\n.tts/\n", "utf-8");
-    }
-  } catch {
-    // No .gitignore yet — create one
-    await fs.writeFile(gitignorePath, ".tts/\n", "utf-8");
-  }
-
   return dir;
 }
 

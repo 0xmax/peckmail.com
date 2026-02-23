@@ -8,8 +8,7 @@ A collaborative markdown writing app with AI assistance and text-to-speech.
 - **Client**: React 19 SPA bundled with esbuild, styled with Tailwind CSS v4
 - **Editor**: CodeMirror 6 with markdown
 - **Auth/DB**: Supabase (Auth + Postgres with RLS)
-- **AI**: Anthropic SDK (Sonnet for chat, Haiku for git commit messages)
-- **Version Control**: isomorphic-git (auto-commits every 60s)
+- **AI**: Anthropic SDK (Sonnet/Haiku models for chat and text workflows)
 - **Icons**: Phosphor Icons (`@phosphor-icons/react`) — use `weight="duotone"` for decorative/empty-state icons, default weight for UI controls
 
 ## Commands
@@ -25,8 +24,6 @@ A collaborative markdown writing app with AI assistance and text-to-speech.
 - `src/server/index.ts` — Hono app, all API routes, WS upgrade, SPA fallback
 - `src/server/ws.ts` — WebSocket manager, fs.watch, broadcasting
 - `src/server/chat.ts` — AI chat with tool use (read/edit/create/list files)
-- `src/server/git.ts` — isomorphic-git init, auto-commit manager, history
-- `src/server/gitHttp.ts` — Smart HTTP git protocol (clone/push over HTTP)
 - `src/client/App.tsx` — Root component, URL-based routing (login/projects/workspace)
 - `src/client/components/Workspace.tsx` — Main workspace layout (header, sidebar, editor, panels)
 - `src/client/store/` — Zustand-like store with dispatch actions
@@ -38,5 +35,4 @@ A collaborative markdown writing app with AI assistance and text-to-speech.
 - Supabase config is injected into the HTML at serve time via string replacement in the SPA fallback route
 - No inline SVG icons — use Phosphor Icons components instead (only exception: Google brand logo in LoginPage)
 - Workspace settings button lives at the bottom of the pages sidebar, not in the header
-- Git clone URL format: `https://x-token:pp_KEY@host/git/projectId` (API key goes in password position)
 - Both `tsconfig.json` (server) and `tsconfig.client.json` (client) must pass `--noEmit` checks

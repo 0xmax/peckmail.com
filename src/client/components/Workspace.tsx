@@ -15,15 +15,13 @@ import { Editor } from "./Editor.js";
 import { Preview } from "./Preview.js";
 import { EditorToolbar } from "./EditorToolbar.js";
 import { ChatPanel } from "./ChatPanel.js";
-import { Revisions } from "./Revisions.js";
 import { ConnectPanel } from "./ConnectPanel.js";
-import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { PresenceAvatars } from "./PresenceAvatars.js";
 import { useAuth } from "../context/AuthContext.js";
 import { usePresence } from "../hooks/usePresence.js";
-import { ArrowLeft, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope, XLogo } from "@phosphor-icons/react";
+import { ArrowLeft, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope, XLogo } from "@phosphor-icons/react";
 
 function fileExistsInTree(tree: FileNode[], path: string): boolean {
   for (const node of tree) {
@@ -37,7 +35,7 @@ const MODE_PREVIEW = "preview";
 const MODE_EDIT = "edit";
 const FILE_PARAM = "file";
 
-type Panel = "connect" | "revisions" | "chat" | null;
+type Panel = "connect" | "chat" | null;
 
 export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOpenSettings: () => void }) {
   const { path: openFilePath, content: fileContent } = useOpenFile();
@@ -230,8 +228,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
           >
             <ArrowLeft size={14} weight="bold" className="inline" /> Back
           </button>
-          <div className="w-px h-5 bg-border" />
-          <SaveIndicator projectId={projectId} />
         </div>
         <div className="absolute left-1/2 -translate-x-1/2">
           {editingName ? (
@@ -282,13 +278,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
               className={panelBtnClass("connect")}
             >
               <Plugs size={16} />
-            </button>
-            <button
-              onClick={() => togglePanel("revisions")}
-              title="History"
-              className={panelBtnClass("revisions")}
-            >
-              <ClockCounterClockwise size={16} />
             </button>
             <button
               onClick={() => togglePanel("chat")}
@@ -407,8 +396,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
               onMouseDown={startResize(setPanelWidth, "peckmail:panel-w", 260, 600, "left")}
             />
             {activePanel === "chat" && <ChatPanel />}
-            {activePanel === "revisions" && <Revisions projectId={projectId} />}
-            {activePanel === "connect" && <ConnectPanel projectId={projectId} projectName={projectName} />}
+            {activePanel === "connect" && <ConnectPanel projectId={projectId} />}
           </div>
         )}
 

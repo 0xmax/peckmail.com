@@ -4,7 +4,6 @@ import type { WebSocket } from "ws";
 import { join, dirname } from "path";
 import { PROJECTS_DIR, safePath } from "./files.js";
 import { handleChatMessage } from "./chat.js";
-import { startGitManager, stopGitManager } from "./git.js";
 import { getProjectMembership } from "./db.js";
 
 interface ClientInfo {
@@ -30,7 +29,6 @@ export function addClient(projectId: string, ws: WebSocket, userId: string) {
   // Start file watcher if this is the first client
   if (clients.size === 1) {
     startWatcher(projectId);
-    startGitManager(projectId);
   }
 
   // Handle incoming messages
@@ -47,7 +45,6 @@ export function addClient(projectId: string, ws: WebSocket, userId: string) {
     clients.delete(client);
     if (clients.size === 0) {
       stopWatcher(projectId);
-      stopGitManager(projectId);
       projectClients.delete(projectId);
       suppressedPaths.delete(projectId);
     }

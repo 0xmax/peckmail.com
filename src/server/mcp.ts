@@ -8,7 +8,6 @@ import { getUserProjects, getProjectMembership, getProjectMemberEmails, createPr
 import { seedEmpty } from "./templates.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
 import * as fileOps from "./fileOps.js";
-import { getHistory, getUncommittedStatus, initRepo, stopGitManager } from "./git.js";
 
 interface McpSession {
   transport: WebStandardStreamableHTTPServerTransport;
@@ -33,14 +32,13 @@ function createMcpServer(userId: string): McpServer {
       instructions: `You are connected to Peckmail — a collaborative writing and data platform at https://peckmail.com.
 
 ## What is Peckmail?
-Peckmail is a web-based workspace where users organize their work into **projects**. Each project is a collection of files with built-in version control. Peckmail focuses on two primary file formats:
+Peckmail is a web-based workspace where users organize their work into **projects**. Each project is a collection of files for collaborative writing and data work. Peckmail focuses on two primary file formats:
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose.
 - **CSV (.csv)** — structured tabular data such as lists, trackers, logs, and datasets.
 
 ## Key concepts:
 - **Projects**: Top-level containers for files. Users can own or be invited to projects. Use list_projects to see available projects.
 - **Files**: Markdown and CSV files organized in directories. The editor supports rich markdown with a pastel theme and renders CSV as editable tables.
-- **Auto-versioning**: Peckmail automatically commits changes via git every 60 seconds. Use get_revisions to browse the edit history.
 - **Collaboration**: Projects can be shared with other users who get editor access.
 - **AI chat**: Peckmail has a built-in AI assistant (separate from this MCP connection) that can read and edit files within projects.
 
@@ -49,7 +47,6 @@ Peckmail is a web-based workspace where users organize their work into **project
 2. Use create_project to make a new project, or rename_project / delete_project to manage existing ones
 3. Use list_files to browse a project's file tree
 4. Use read_file / write_file to view and edit documents and data files
-5. Use get_revisions and get_status to understand the edit history
 
 ## Working with CSV files:
 - CSV files use the first row as a header row with column names
@@ -76,13 +73,12 @@ Peckmail is a web-based workspace where users organize their work into **project
 
   server.tool(
     "create_project",
-    "Create a new Peckmail project. Returns the new project's ID and name. The project starts empty with version control initialized.",
+    "Create a new Peckmail project. Returns the new project's ID and name. The project starts empty and ready for writing.",
     { name: z.string().describe("Name for the new project") },
     async ({ name }) => {
       try {
         const project = await createProject(name.trim(), userId);
         await seedEmpty(project.id);
-        await initRepo(project.id);
         return { content: [{ type: "text", text: JSON.stringify(project, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: e.message }], isError: true };
@@ -119,7 +115,6 @@ Peckmail is a web-based workspace where users organize their work into **project
         const membership = await getProjectMembership(projectId, userId);
         if (!membership) return { content: [{ type: "text", text: "Access denied" }], isError: true };
         if (membership.role !== "owner") return { content: [{ type: "text", text: "Only owners can delete projects" }], isError: true };
-        stopGitManager(projectId);
         await deleteProject(projectId);
         return { content: [{ type: "text", text: `Deleted project ${projectId}` }] };
       } catch (e: any) {
@@ -165,7 +160,7 @@ Peckmail is a web-based workspace where users organize their work into **project
 
   server.tool(
     "write_file",
-    "Write content to a file in a Peckmail project. Creates the file if it doesn't exist, or overwrites it. Parent directories are created automatically. Changes are auto-committed via git.",
+    "Write content to a file in a Peckmail project. Creates the file if it doesn't exist, or overwrites it. Parent directories are created automatically.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       path: z.string().describe("File path relative to project root (e.g. 'notes/ideas.md')"),
@@ -262,45 +257,6 @@ Peckmail is a web-based workspace where users organize their work into **project
   );
 
   server.tool(
-    "get_revisions",
-    "Get the git revision history for a Peckmail project. Peckmail auto-commits changes every 60 seconds, so revisions represent a timeline of edits.",
-    {
-      projectId: z.string().describe("The project ID (UUID from list_projects)"),
-      limit: z.number().optional().describe("Max revisions to return (default 20)"),
-      offset: z.number().optional().describe("Offset for pagination (default 0)"),
-    },
-    async ({ projectId, limit, offset }) => {
-      try {
-        if (!(await checkAccess(userId, projectId)))
-          return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const history = await getHistory(projectId, {
-          limit: limit ?? 20,
-          offset: offset ?? 0,
-        });
-        return { content: [{ type: "text", text: JSON.stringify(history, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: e.message }], isError: true };
-      }
-    }
-  );
-
-  server.tool(
-    "get_status",
-    "Get the current uncommitted changes in a Peckmail project. Shows files that have been modified since the last auto-commit.",
-    { projectId: z.string().describe("The project ID (UUID from list_projects)") },
-    async ({ projectId }) => {
-      try {
-        if (!(await checkAccess(userId, projectId)))
-          return { content: [{ type: "text", text: "Access denied" }], isError: true };
-        const status = await getUncommittedStatus(projectId);
-        return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: e.message }], isError: true };
-      }
-    }
-  );
-
-  server.tool(
     "invite_to_project",
     "Invite a user by email to collaborate on a Peckmail project. Only project owners can invite. Sends an invitation email to the recipient.",
     {
@@ -386,7 +342,7 @@ Peckmail is a web-based workspace where users organize their work into **project
     "faq",
     "peckmail://faq",
     {
-      description: "Peckmail FAQ and features guide — lists all capabilities including file editing, AI assistant, git integration, email processing, TTS, and collaboration features.",
+      description: "Peckmail FAQ and features guide — lists capabilities including file editing, AI assistant, email processing, TTS, and collaboration features.",
       mimeType: "text/plain",
     },
     async () => {
@@ -408,7 +364,7 @@ Peckmail is a web-based workspace where users organize their work into **project
 const FAQ_TEXT = `# Peckmail — Features & FAQ
 
 ## What is Peckmail?
-Peckmail is a web-based collaborative writing workspace. Organize your work into projects, write in markdown, manage structured data in CSV files, and let the built-in AI assistant help you along the way. Everything is version-controlled and synced in real time.
+Peckmail is a web-based collaborative writing workspace. Organize your work into projects, write in markdown, manage structured data in CSV files, and let the built-in AI assistant help you along the way.
 
 ## File Formats
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose. Rendered with live preview and line-level highlighting.
@@ -417,11 +373,8 @@ Peckmail is a web-based collaborative writing workspace. Organize your work into
 ## AI Assistant
 Built-in AI assistant powered by Claude with 21 tools for reading, editing, creating, and searching files within your project. Streams responses in real time and is aware of your currently open file and cursor position. Tools include file operations (read, edit, create, move, copy, delete), text utilities (grep, find, sort, diff, sed), editor highlighting, and email to workspace members.
 
-## Auto-Save & Version History
-Automatically saves and commits changes every 60 seconds using git. Browse the full revision history, view diffs for any commit, and see exactly what changed over time. Manual commits are also supported.
-
-## Git Integration
-Every project is a git repository. Git Smart HTTP endpoints let you clone, push, and pull using standard git commands. Auth uses API keys via HTTP Basic Auth (password is your pp_ API key, username is ignored).
+## Auto-Save
+Changes save directly to workspace files, so collaborators see updates in real time while they work.
 
 ## Real-Time Collaboration
 Multiple users can work on the same project simultaneously. File changes, cursor positions, and chat messages sync in real time over WebSockets.
@@ -433,13 +386,13 @@ Each workspace gets a unique email address (e.g. robin-willow-42@inbox.peckmail.
 Read documents aloud using ElevenLabs or OpenAI TTS. The current sentence is highlighted in the editor during playback. Choose your preferred provider and voice in account settings.
 
 ## MCP Server
-Model Context Protocol server with 14 tools for external AI integrations. Connect from Claude Desktop or any MCP-compatible client to manage projects, read/write files, browse revision history, invite collaborators, and send emails.
+Model Context Protocol server with 13 tools for external AI integrations. Connect from Claude Desktop or any MCP-compatible client to manage projects, read/write files, invite collaborators, and send emails.
 
 ## Sharing
 Share individual files via public links (no login needed). Invite collaborators by email with role-based access: owners (full control), editors (read+write), viewers (read-only).
 
 ## API Keys
-Generate API keys (pp_ prefix) for programmatic access. API keys authenticate Git operations, the MCP server, and the REST API. Manage keys from account settings.
+Generate API keys (pp_ prefix) for programmatic access. API keys authenticate the MCP server and the REST API. Manage keys from account settings.
 `;
 
 export const mcpRouter = new Hono();

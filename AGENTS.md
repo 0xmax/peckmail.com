@@ -1,6 +1,6 @@
 # Peckmail
 
-Peckmail is a collaborative writing workspace for markdown and CSV files. It features a built-in AI assistant, real-time sync, version history, text-to-speech, and an MCP server for external tool integrations.
+Peckmail is a collaborative writing workspace for markdown and CSV files. It features a built-in AI assistant, real-time sync, text-to-speech, and an MCP server for external tool integrations.
 
 ## Style & Design Language
 
@@ -40,8 +40,7 @@ Peckmail's visual identity is **warm, pastel, and calming** — a cozy writing e
 | Styling | Tailwind CSS v4 (`@import "tailwindcss"` + `@theme {}` — no tailwind.config) |
 | Editor | CodeMirror 6 with markdown + custom pastel theme |
 | Auth/DB | Supabase (Auth + Postgres with RLS) |
-| AI | Anthropic SDK (Claude for chat, Haiku for git commit messages) |
-| Version Control | isomorphic-git (auto-commits every 60s) + Git Smart HTTP (clone/push/pull) |
+| AI | Anthropic SDK (Claude for chat and workspace automations) |
 | Email | Resend (invitation emails + inbound email processing via webhook) |
 | TTS | ElevenLabs / OpenAI (text-to-speech with sentence highlighting) |
 | MCP | Model Context Protocol server for external tool integrations |
@@ -56,12 +55,10 @@ peckmail/
 │   │   ├── index.ts        # Hono app, all API routes, WS upgrade, SPA fallback
 │   │   ├── auth.ts         # Supabase auth middleware + API key auth
 │   │   ├── chat.ts         # AI assistant with 21 tools, streaming via WS
-│   │   ├── mcp.ts          # MCP server (14 tools) for external integrations
+│   │   ├── mcp.ts          # MCP server (13 tools) for external integrations
 │   │   ├── files.ts        # File router (REST endpoints)
 │   │   ├── fileOps.ts      # Shared file operations (used by chat.ts + mcp.ts)
 │   │   ├── ws.ts           # WebSocket manager, fs.watch, broadcasting
-│   │   ├── git.ts          # isomorphic-git init, auto-commit, history
-│   │   ├── gitHttp.ts      # Git Smart HTTP protocol (clone/push/pull via /git/:projectId)
 │   │   ├── db.ts           # Supabase database helpers
 │   │   ├── email.ts        # Resend email invitations
 │   │   ├── emailAddress.ts # Bird-themed email address generator
@@ -77,7 +74,7 @@ peckmail/
 │       └── lib/            # API client + Supabase client
 ├── supabase/
 │   └── migrations/         # SQL migrations (tables, RLS, FKs)
-├── projects/               # User project files on disk (gitignored)
+├── projects/               # User project files on disk
 ├── esbuild.config.ts       # Client bundler config
 ├── tsconfig.json           # Server TypeScript config
 ├── tsconfig.client.json    # Client TypeScript config
@@ -165,24 +162,11 @@ All `/api/*` routes require a valid Supabase JWT or API key (`pp_` prefix).
 - `POST /api/files/:projectId/copy` — copy
 - `POST /api/files/:projectId/mkdir` — create directory
 
-### Git Revisions
-- `GET /api/projects/:id/revisions` — commit history (paginated)
-- `GET /api/projects/:id/status` — uncommitted changes
-- `POST /api/projects/:id/commit` — manual commit
-- `GET /api/projects/:id/revisions/:hash` — commit diff
-
 ### Chat
 - `GET /api/chat/:projectId/sessions` — list sessions
 - `GET /api/chat/:projectId/sessions/:id` — get session + messages
 - `POST /api/chat/:projectId/sessions` — create session
 - `DELETE /api/chat/:projectId/sessions/:id` — delete session
-
-### Git Smart HTTP
-- `GET /git/:projectId/info/refs?service=...` — ref advertisement (clone/fetch/push discovery)
-- `POST /git/:projectId/git-upload-pack` — clone/fetch (streams pack data)
-- `POST /git/:projectId/git-receive-pack` — push (owner/editor only, broadcasts file:changed)
-
-Auth via HTTP Basic Auth: password is a `pp_` API key, username is ignored. Repos use `receive.denyCurrentBranch=updateInstead` so pushes auto-update the working tree.
 
 ### Inbound Email
 - `GET /api/projects/:id/email` — get workspace email address (lazy backfill)
@@ -222,9 +206,9 @@ Messages are streamed via WebSocket. The assistant has context about the current
 
 ## MCP Server (External)
 
-The MCP server (`src/server/mcp.ts`) exposes 14 tools for external integrations:
+The MCP server (`src/server/mcp.ts`) exposes 13 tools for external integrations:
 
-`list_projects`, `create_project`, `rename_project`, `delete_project`, `list_files`, `read_file`, `write_file`, `create_directory`, `delete_file`, `rename_file`, `copy_file`, `get_revisions`, `get_status`, `invite_to_project`, `send_email`
+`list_projects`, `create_project`, `rename_project`, `delete_project`, `list_files`, `read_file`, `write_file`, `create_directory`, `delete_file`, `rename_file`, `copy_file`, `invite_to_project`, `send_email`
 
 Both the internal assistant and MCP server share the same file operations layer (`src/server/fileOps.ts`) which handles path safety and WebSocket broadcasting.
 
@@ -232,22 +216,19 @@ Both the internal assistant and MCP server share the same file operations layer 
 
 | Component | Purpose |
 |-----------|---------|
-| `Workspace.tsx` | Main layout: sidebar, editor/preview, chat, revisions, members panels |
+| `Workspace.tsx` | Main layout: sidebar, editor/preview, chat, members panels |
 | `Editor.tsx` | CodeMirror 6 with markdown, pastel theme, auto-save via WS |
 | `Preview.tsx` | Markdown preview (line highlighting, TTS cursor) + CSV table view |
 | `FileTree.tsx` | Recursive file tree with expand/collapse |
 | `ChatPanel.tsx` | AI chat interface with session management |
 | `ReadAloud.tsx` | TTS audio bar with playback controls |
-| `Revisions.tsx` | Git commit history viewer with diffs |
 | `MembersPanel.tsx` | View/manage project members and roles |
 | `InviteModal.tsx` | Invite users by email |
 | `InvitePage.tsx` | Accept invitation landing page |
 | `ShareButton.tsx` | Generate public share links |
-| `SaveIndicator.tsx` | Save status + git auto-commit countdown |
 | `ProjectList.tsx` | Project list, create/delete, view invitations |
 | `LoginPage.tsx` | Email magic link authentication |
 | `AccountSettings.tsx` | Profile, TTS preferences, API key management |
-| `GitPanel.tsx` | Git clone URL, copy-to-clipboard, push/pull instructions |
 | `EmailPanel.tsx` | Workspace inbound email address with copy button |
 | `OAuthConsent.tsx` | OAuth consent flow for MCP |
 | `UserAvatar.tsx` | Avatar with fallback initials |
@@ -278,7 +259,7 @@ The server uses `fs.watch` to detect external changes and broadcasts them. File 
 
 - **Host**: Fly.io (app: `peckmail`, region: `iad`)
 - **Volume**: Persistent volume `peckmail_data` mounted at `/data`
-- **Projects dir**: `/data/projects` (each project is a git repo on the volume)
+- **Projects dir**: `/data/projects` (workspace files on persistent volume)
 - **Docker**: Multi-stage build — `node:20-alpine` builder compiles TS + bundles client, production image runs `node dist/server/index.js`
 - **Health check**: `GET /` every 30s
 - **Auto-scaling**: min 1 machine, auto-stop/start enabled

@@ -1,11 +1,11 @@
 # Getting Started
 
-Peckmail is a writing workspace that combines a clean markdown editor with AI assistance, version control, and real-time collaboration.
+Peckmail is a writing workspace that combines a clean markdown editor with AI assistance and real-time collaboration.
 
 ## The basics
 
 - **Files live in the sidebar** on the left. Click to open, right-click to rename or delete.
-- **Everything auto-saves.** Your changes are committed to git every 60 seconds. You'll never lose work.
+- **Everything auto-saves.** Your changes write directly to workspace files as you edit.
 - **Markdown and CSV** are the two supported file types. Markdown for prose, CSV for structured data like tables and lists.
 
 ## Creating files
@@ -20,10 +20,5 @@ For CSV files, Peckmail renders them as interactive tables with sticky headers. 
 
 ## Keyboard shortcuts
 
-- **Cmd+S** — Manual save and commit
 - **Cmd+B** — Bold
 - **Cmd+I** — Italic
-
-## Version history
-
-Click the clock icon to browse your revision history. You can see exactly what changed in each auto-commit and view diffs for any file.

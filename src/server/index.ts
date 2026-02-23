@@ -31,10 +31,8 @@ import {
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail } from "./inbound.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
-import { initRepo, getHistory, getCommitDiff, getUncommittedStatus, manualCommit } from "./git.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
-import { gitRouter } from "./gitHttp.js";
 import { getAvailableBalance, getTransactions, releaseStaleHolds } from "./credits.js";
 import { createHash, randomBytes } from "crypto";
 import { promises as fs } from "fs";
@@ -331,12 +329,10 @@ api.post("/projects", async (c) => {
     if (body.mode === "ai") {
       // Seed empty as fallback so the project isn't broken
       await seedEmpty(project.id);
-      await initRepo(project.id);
       return c.json({ project, warning: err.message }, 201);
     }
   }
 
-  await initRepo(project.id);
   return c.json({ project });
 });
 
@@ -793,56 +789,10 @@ api.get("/credits/transactions", async (c) => {
   return c.json({ transactions });
 });
 
-// Git history (revisions)
-api.get("/projects/:id/revisions", async (c) => {
-  const user = getUser(c);
-  const projectId = c.req.param("id");
-  const membership = await getProjectMembership(projectId, user.id);
-  if (!membership) return c.json({ error: "Access denied" }, 403);
-  const limit = parseInt(c.req.query("limit") || "20");
-  const offset = parseInt(c.req.query("offset") || "0");
-  const history = await getHistory(projectId, { limit, offset });
-  return c.json({ revisions: history });
-});
-
-api.get("/projects/:id/status", async (c) => {
-  const user = getUser(c);
-  const projectId = c.req.param("id");
-  const membership = await getProjectMembership(projectId, user.id);
-  if (!membership) return c.json({ error: "Access denied" }, 403);
-  const status = await getUncommittedStatus(projectId);
-  return c.json(status);
-});
-
-api.post("/projects/:id/commit", async (c) => {
-  const user = getUser(c);
-  const projectId = c.req.param("id");
-  const membership = await getProjectMembership(projectId, user.id);
-  if (!membership) return c.json({ error: "Access denied" }, 403);
-  const { message } = await c.req.json<{ message?: string }>();
-  try {
-    const result = await manualCommit(projectId, message);
-    return c.json(result);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
-  }
-});
-
-api.get("/projects/:id/revisions/:hash", async (c) => {
-  const user = getUser(c);
-  const projectId = c.req.param("id");
-  const hash = c.req.param("hash");
-  const membership = await getProjectMembership(projectId, user.id);
-  if (!membership) return c.json({ error: "Access denied" }, 403);
-  const changes = await getCommitDiff(projectId, hash);
-  return c.json({ changes });
-});
-
 // Mount API
 app.route("/api", api);
 app.route("/api", ttsRouter);
 app.route("/mcp", mcpRouter);
-app.route("/git", gitRouter);
 
 // --- WebSocket ---
 app.get(
@@ -1041,8 +991,8 @@ function landingPageHtml(): string {
       </div>
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
         <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64a24,24,0,1,1-24-24A24,24,0,0,1,224,64Z" opacity="0.2"/><path d="M232,64a32,32,0,1,0-40,31v17a8,8,0,0,1-8,8H96a23.84,23.84,0,0,0-8,1.38V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V144a8,8,0,0,1,8-8h88a24,24,0,0,0,24-24V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64ZM96,192a16,16,0,1,1-16-16A16,16,0,0,1,96,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">Git Built In</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Every workspace is a real git repo. Clone it, push to it, pull from it — standard commands just work. Use the web editor or your terminal, it's the same repo.</p>
+        <h3 class="text-[1.1rem] mb-2 text-text">Real-Time Sync</h3>
+        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Collaborate live with your team in the browser. File updates appear instantly for everyone in the workspace.</p>
       </div>
       <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
         <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A16,16,0,0,0,40,64V192a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V64A16,16,0,0,0,200,48Z" opacity="0.2"/><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A16,16,0,0,0,40,64V192a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V64A16,16,0,0,0,200,48Zm0,144H56V64H200V192ZM80,96a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,96Zm0,32a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,128Zm0,32a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H88A8,8,0,0,1,80,160Z"/></svg>
@@ -1068,7 +1018,7 @@ function landingPageHtml(): string {
       <div class="text-center px-4 py-5">
         <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,128a88,88,0,1,1-88-88A88,88,0,0,1,216,128Z" opacity="0.2"/><path d="M136,80v43.47l36.12,21.67a8,8,0,0,1-8.24,13.72l-40-24A8,8,0,0,1,120,128V80a8,8,0,0,1,16,0Zm-8-48A95.44,95.44,0,0,0,60.08,60.15C52.81,67.51,46.35,74.59,40,82V64a8,8,0,0,0-16,0v40a8,8,0,0,0,8,8H72a8,8,0,0,0,0-16H49c7.15-8.42,14.27-16.35,22.39-24.57a80,80,0,1,1,1.66,114.75,8,8,0,1,0-11,11.64A96,96,0,1,0,128,32Z"/></svg>
         <h3 class="text-[0.95rem] text-text font-semibold mb-1">Never Lose a Thing</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Auto-saves every minute with full version history. Go back to any point, no manual saving needed.</p>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Auto-saves your edits continuously so your latest work is always there without manual saving.</p>
       </div>
       <div class="text-center px-4 py-5">
         <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,48H56a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H200a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48ZM152,152H104V104h48Z" opacity="0.2"/><path d="M152,96H104a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V104A8,8,0,0,0,152,96Zm-8,48H112V112h32Zm88,0H216V112h16a8,8,0,0,0,0-16H216V56a16,16,0,0,0-16-16H160V24a8,8,0,0,0-16,0V40H112V24a8,8,0,0,0-16,0V40H56A16,16,0,0,0,40,56V96H24a8,8,0,0,0,0,16H40v32H24a8,8,0,0,0,0,16H40v40a16,16,0,0,0,16,16H96v16a8,8,0,0,0,16,0V216h32v16a8,8,0,0,0,16,0V216h40a16,16,0,0,0,16-16V160h16a8,8,0,0,0,0-16Zm-32,56H56V56H200v95.87s0,.09,0,.13,0,.09,0,.13V200Z"/></svg>
@@ -1087,8 +1037,8 @@ function landingPageHtml(): string {
       </div>
       <div class="text-center px-4 py-5">
         <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64a24,24,0,1,1-24-24A24,24,0,0,1,224,64Z" opacity="0.2"/><path d="M232,64a32,32,0,1,0-40,31v17a8,8,0,0,1-8,8H96a23.84,23.84,0,0,0-8,1.38V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V144a8,8,0,0,1,8-8h88a24,24,0,0,0,24-24V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64ZM96,192a16,16,0,1,1-16-16A16,16,0,0,1,96,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Change Tracking</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Browse diffs, see who changed what, and review the full history of any file at any time.</p>
+        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Live Collaboration</h3>
+        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Everyone sees updates as they happen, so teams can write together without sending files around.</p>
       </div>
       <div class="text-center px-4 py-5">
         <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M168,144a40,40,0,1,1-40-40A40,40,0,0,1,168,144ZM64,56A32,32,0,1,0,96,88,32,32,0,0,0,64,56Zm128,0a32,32,0,1,0,32,32A32,32,0,0,0,192,56Z" opacity="0.2"/><path d="M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1,0-16,24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.85,8,57,57,0,0,0-98.15,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z"/></svg>
@@ -1112,15 +1062,15 @@ function landingPageHtml(): string {
     <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">Under the Hood</h2>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">What is Peckmail?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">A collaborative writing workspace where every project is a git repository. You write in markdown, get help from a friendly little bird that lives in your workspace, and everything syncs in real time.</p>
+      <p class="text-[0.95rem] text-text leading-relaxed">A collaborative writing workspace for markdown and CSV files. You write with a friendly little bird assistant, and everything syncs in real time.</p>
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">What file formats are supported?</h3>
       <p class="text-[0.95rem] text-text leading-relaxed">Markdown (<code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">.md</code>) with live preview, and CSV (<code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">.csv</code>) rendered as editable tables with sticky headers. Markdown supports syntax highlighting for code blocks.</p>
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">How does version control work?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Every project is a real git repository. Changes auto-commit every 60 seconds. You can <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">git clone</code>, <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">git push</code>, and <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">git pull</code> with standard tools — your work is never locked in.</p>
+      <h3 class="text-[1.05rem] mb-2 text-accent">How does saving work?</h3>
+      <p class="text-[0.95rem] text-text leading-relaxed">Edits save directly to workspace files and sync to connected collaborators in real time. You can keep writing without manual save steps.</p>
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">How does the email integration work?</h3>
@@ -1140,7 +1090,7 @@ function landingPageHtml(): string {
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">Is my data private?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Projects are isolated per user and never shared unless you explicitly invite someone. Your files are stored as git repositories and are fully yours — clone them anytime.</p>
+      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Projects are isolated per user and never shared unless you explicitly invite someone. Your files stay in your workspace and are always under your control.</p>
     </div>
   </section>
 
@@ -1149,8 +1099,8 @@ function landingPageHtml(): string {
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <div class="text-center px-3 py-4 opacity-60">
         <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,104v8a48,48,0,0,1-48,48H96a48,48,0,0,1-48-48v-8a49.28,49.28,0,0,1,8.51-27.3A51.92,51.92,0,0,1,76,32a52,52,0,0,1,43.83,24h16.34A52,52,0,0,1,180,32a51.92,51.92,0,0,1,19.49,44.7A49.28,49.28,0,0,1,208,104Z" opacity="0.2"/><path d="M208.3,75.68A51.71,51.71,0,0,0,180.36,32a52,52,0,0,0-43.08,24H118.72A52,52,0,0,0,75.64,32a51.71,51.71,0,0,0-27.94,43.68A56.09,56.09,0,0,0,40,104v8a56.06,56.06,0,0,0,48,55.43V192a8,8,0,0,0,16,0V167.43a55.94,55.94,0,0,0,24-10.54,55.94,55.94,0,0,0,24,10.54V192a8,8,0,0,0,16,0V167.43A56.06,56.06,0,0,0,216,112v-8A56.09,56.09,0,0,0,208.3,75.68Z"/></svg>
-        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">GitHub Sync</h3>
-        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Auto-sync to private GitHub repos.</p>
+        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">Workspace Exports</h3>
+        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Scheduled exports and downloadable workspace bundles.</p>
       </div>
       <div class="text-center px-3 py-4 opacity-60">
         <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,104v8a88,88,0,0,1-88,88H40a8,8,0,0,1-8-8V104A88,88,0,0,1,216,104Z" opacity="0.2"/><path d="M200,176a8,8,0,0,1-8,8H152a8,8,0,0,1,0-16h40A8,8,0,0,1,200,176Zm-8-48H152a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm48-24v88a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V104A88.1,88.1,0,0,1,104,16h48A88.1,88.1,0,0,1,240,104Z"/></svg>
@@ -1192,7 +1142,7 @@ function landingPageHtml(): string {
           <h4 class="text-xs uppercase tracking-wider text-footer-muted mb-3 font-semibold">Features</h4>
           <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Writing Assistant</a>
           <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Collaboration</a>
-          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Version Control</a>
+          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Real-Time Sync</a>
         </div>
       </div>
     </div>

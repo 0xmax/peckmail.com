@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
-import { Monitor, Terminal, EnvelopeSimple } from "@phosphor-icons/react";
+import { Monitor, Terminal } from "@phosphor-icons/react";
 
 interface ApiKey {
   id: string;
@@ -12,16 +12,8 @@ interface ApiKey {
 
 const MCP_URL = "https://peckmail.com/mcp";
 
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    || "project";
-}
-
-export function ConnectPanel({ projectId, projectName }: { projectId: string; projectName: string }) {
-  const { defaultApiKey, session } = useAuth();
+export function ConnectPanel({ projectId }: { projectId: string }) {
+  const { session } = useAuth();
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // MCP state
@@ -33,13 +25,6 @@ export function ConnectPanel({ projectId, projectName }: { projectId: string; pr
   // Email state
   const [email, setEmail] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(true);
-
-  const host = window.location.host;
-  const origin = window.location.origin;
-  const keyDisplay = defaultApiKey || "pp_YOUR_KEY";
-  const slug = slugify(projectName || "project");
-  const gitPath = `/git/${projectId}/${slug}`;
-  const cloneCmd = `git clone https://x-token:${keyDisplay}@${host}${gitPath}`;
 
   useEffect(() => {
     api.get<{ keys: ApiKey[] }>("/api/keys").then((r) => setApiKeys(r.keys)).catch(() => {});
@@ -101,62 +86,6 @@ export function ConnectPanel({ projectId, projectName }: { projectId: string; pr
         <h3 className="text-sm font-semibold text-text">Connect</h3>
       </div>
       <div className="p-4 space-y-5 overflow-y-auto text-xs">
-        {/* ── Git ──────────────────────────────── */}
-        <section className="space-y-3">
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide">Git</h4>
-          <p className="text-text-muted">
-            Clone this project with Git to work locally.
-          </p>
-
-          {/* Clone command */}
-          <div>
-            <label className="font-medium text-text-muted block mb-1">Clone</label>
-            <div className="flex items-center gap-1.5">
-              <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text break-all select-all">
-                {cloneCmd}
-              </code>
-              <button
-                onClick={() => copy(cloneCmd, "clone")}
-                className="shrink-0 px-2.5 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg hover:text-text hover:border-text-muted transition-colors"
-              >
-                {copiedField === "clone" ? "Copied!" : "Copy"}
-              </button>
-            </div>
-          </div>
-
-          {/* Repository URL */}
-          <div>
-            <label className="font-medium text-text-muted block mb-1">Repository URL</label>
-            <div className="flex items-center gap-1.5">
-              <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text break-all select-all">
-                {origin}{gitPath}
-              </code>
-              <button
-                onClick={() => copy(`${origin}${gitPath}`, "url")}
-                className="shrink-0 px-2.5 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg hover:text-text hover:border-text-muted transition-colors"
-              >
-                {copiedField === "url" ? "Copied!" : "Copy"}
-              </button>
-            </div>
-          </div>
-
-          {/* Push & pull info */}
-          <div className="bg-surface-alt rounded-lg p-3 space-y-1.5">
-            <p className="font-medium text-text">Push &amp; pull</p>
-            <p className="text-text-muted">
-              Changes you push will appear in the browser immediately. Edits made in the browser are auto-committed every 60 seconds, so pull to get the latest.
-            </p>
-          </div>
-
-          {!defaultApiKey && (
-            <p className="text-text-muted">
-              Create an API key below to fill in the clone command above.
-            </p>
-          )}
-        </section>
-
-        <div className="border-t border-border" />
-
         {/* ── MCP ──────────────────────────────── */}
         <section className="space-y-3">
           <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide">MCP Server</h4>

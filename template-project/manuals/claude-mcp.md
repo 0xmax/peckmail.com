@@ -4,7 +4,7 @@ Peckmail has a Model Context Protocol (MCP) server that lets you connect your wo
 
 ## What is MCP?
 
-MCP is a protocol that lets AI assistants use external tools. When you connect Peckmail as an MCP server, Claude can directly read and write files in your workspace, manage projects, browse version history, and more — all from your desktop AI client.
+MCP is a protocol that lets AI assistants use external tools. When you connect Peckmail as an MCP server, Claude can directly read and write files in your workspace, manage projects, and collaborate with your team from your desktop AI client.
 
 ## Setting it up
 
@@ -21,7 +21,6 @@ Once connected, Claude has access to these tools:
 - `read_file` / `write_file` — Read and edit files
 - `list_files` — Browse the file tree
 - `create_project` / `rename_project` / `delete_project` — Manage workspaces
-- `get_revisions` / `get_status` — Browse version history
 - `invite_to_project` — Invite collaborators by email
 - `send_email` — Email workspace members
 
