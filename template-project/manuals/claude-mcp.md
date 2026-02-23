@@ -1,16 +1,16 @@
 # Claude Integration (MCP)
 
-Perchpad has a Model Context Protocol (MCP) server that lets you connect your workspace to Claude Desktop, Claude Code, or any MCP-compatible AI client.
+Peckmail has a Model Context Protocol (MCP) server that lets you connect your workspace to Claude Desktop, Claude Code, or any MCP-compatible AI client.
 
 ## What is MCP?
 
-MCP is a protocol that lets AI assistants use external tools. When you connect Perchpad as an MCP server, Claude can directly read and write files in your workspace, manage projects, browse version history, and more — all from your desktop AI client.
+MCP is a protocol that lets AI assistants use external tools. When you connect Peckmail as an MCP server, Claude can directly read and write files in your workspace, manage projects, browse version history, and more — all from your desktop AI client.
 
 ## Setting it up
 
 1. Go to **Settings** and copy your API key (starts with `pp_`)
 2. In Claude Desktop, go to Settings > MCP Servers and add a new server:
-   - **URL**: `https://perchpad.co/mcp`
+   - **URL**: `https://peckmail.com/mcp`
    - **Authentication**: Use your API key as a Bearer token
 
 ## Available tools
@@ -30,4 +30,4 @@ Once connected, Claude has access to these tools:
 - Ask Claude to update your task lists from your desktop
 - Have Claude draft documents directly into your workspace
 - Use Claude Code to manage your writing projects alongside code
-- Automate workflows that read from and write to Perchpad
+- Automate workflows that read from and write to Peckmail

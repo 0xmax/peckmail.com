@@ -13,6 +13,8 @@ import { placeHold, settleHold, releaseHold, calculateOpusCost } from "./credits
 const anthropic = new Anthropic();
 
 const MAX_MESSAGES_PER_SESSION = 200;
+const CHAT_DIR = ".peckmail";
+const LEGACY_CHAT_DIR = ".perchpad";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -28,19 +30,42 @@ interface ChatSession {
 }
 
 // Chat directory for a project
-function chatDir(projectId: string): string {
-  return join(PROJECTS_DIR, projectId, ".perchpad", "chats");
+function primaryChatDir(projectId: string): string {
+  return join(PROJECTS_DIR, projectId, CHAT_DIR, "chats");
 }
 
-function sessionPath(projectId: string, sessionId: string): string {
-  return join(chatDir(projectId), `${sessionId}.json`);
+function legacyChatDir(projectId: string): string {
+  return join(PROJECTS_DIR, projectId, LEGACY_CHAT_DIR, "chats");
+}
+
+function sessionPath(chatDirectory: string, sessionId: string): string {
+  return join(chatDirectory, `${sessionId}.json`);
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveReadableChatDir(projectId: string): Promise<string> {
+  const primary = primaryChatDir(projectId);
+  if (await exists(primary)) return primary;
+
+  const legacy = legacyChatDir(projectId);
+  if (await exists(legacy)) return legacy;
+
+  return primary;
 }
 
 // Session CRUD
 export async function listSessions(
   projectId: string
 ): Promise<Array<{ id: string; title: string; updatedAt: string }>> {
-  const dir = chatDir(projectId);
+  const dir = await resolveReadableChatDir(projectId);
   try {
     const files = await fs.readdir(dir);
     const sessions: Array<{ id: string; title: string; updatedAt: string }> =
@@ -72,12 +97,19 @@ export async function getSession(
   projectId: string,
   sessionId: string
 ): Promise<ChatSession | null> {
-  try {
-    const raw = await fs.readFile(sessionPath(projectId, sessionId), "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
+  const paths = [
+    sessionPath(primaryChatDir(projectId), sessionId),
+    sessionPath(legacyChatDir(projectId), sessionId),
+  ];
+  for (const path of paths) {
+    try {
+      const raw = await fs.readFile(path, "utf-8");
+      return JSON.parse(raw);
+    } catch {
+      // Try next location
+    }
   }
+  return null;
 }
 
 export async function createSession(projectId: string): Promise<ChatSession> {
@@ -88,9 +120,10 @@ export async function createSession(projectId: string): Promise<ChatSession> {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  await fs.mkdir(chatDir(projectId), { recursive: true });
+  const dir = primaryChatDir(projectId);
+  await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
-    sessionPath(projectId, session.id),
+    sessionPath(dir, session.id),
     JSON.stringify(session, null, 2)
   );
   return session;
@@ -100,16 +133,25 @@ export async function deleteSession(
   projectId: string,
   sessionId: string
 ): Promise<void> {
-  try {
-    await fs.unlink(sessionPath(projectId, sessionId));
-  } catch {
-    // Already gone
+  const paths = [
+    sessionPath(primaryChatDir(projectId), sessionId),
+    sessionPath(legacyChatDir(projectId), sessionId),
+  ];
+  for (const path of paths) {
+    try {
+      await fs.unlink(path);
+      return;
+    } catch {
+      // Try next location
+    }
   }
 }
 
 async function saveSession(projectId: string, session: ChatSession) {
+  const dir = primaryChatDir(projectId);
+  await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
-    sessionPath(projectId, session.id),
+    sessionPath(dir, session.id),
     JSON.stringify(session, null, 2)
   );
 }
@@ -1424,11 +1466,11 @@ export async function handleChatMessage(
       const systemBlocks: Anthropic.TextBlockParam[] = [
         {
           type: "text",
-          text: `You are a friendly writing assistant in Perchpad, a collaborative workspace for markdown and CSV files. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. You can also use the highlight tool to draw attention to specific lines in the editor. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.
+          text: `You are a friendly writing assistant in Peckmail, a collaborative workspace for markdown and CSV files. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. You can also use the highlight tool to draw attention to specific lines in the editor. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.
 
 When you create or edit a file, use the open_file tool to open it in the user's editor so they can see the result. Always open files you are actively working on — the user should be able to watch your changes happen in real time.
 
-Perchpad primarily works with two file formats:
+Peckmail primarily works with two file formats:
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose.
 - **CSV (.csv)** — structured tabular data such as lists, trackers, logs, and datasets.
 

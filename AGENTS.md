@@ -1,10 +1,10 @@
-# Perchpad
+# Peckmail
 
-Perchpad is a collaborative writing workspace for markdown and CSV files. It features a built-in AI assistant, real-time sync, version history, text-to-speech, and an MCP server for external tool integrations.
+Peckmail is a collaborative writing workspace for markdown and CSV files. It features a built-in AI assistant, real-time sync, version history, text-to-speech, and an MCP server for external tool integrations.
 
 ## Style & Design Language
 
-Perchpad's visual identity is **warm, pastel, and calming** — a cozy writing environment that feels like a sunlit notebook.
+Peckmail's visual identity is **warm, pastel, and calming** — a cozy writing environment that feels like a sunlit notebook.
 
 **Color palette** (defined in `src/client/index.css` `@theme {}` block):
 - `--color-bg: #faf6f1` — warm cream background
@@ -22,7 +22,7 @@ Perchpad's visual identity is **warm, pastel, and calming** — a cozy writing e
 
 **Typography**: Georgia serif for the editor and preview (literary feel), system-ui sans-serif for the UI chrome. Line height 1.75 for comfortable reading.
 
-**Mascot**: Birdie — a friendly little bird that represents Perchpad. The logo lives at `src/client/assets/logo.png` and is displayed in the workspace header alongside the "Perchpad" wordmark (set in Playfair Display serif).
+**Mascot**: Birdie — a friendly little bird that represents Peckmail. The logo lives at `src/client/assets/logo.png` and is displayed in the workspace header alongside the "Peckmail" wordmark (set in Playfair Display serif).
 
 **Design principles**:
 - Soft rounded corners, subtle shadows, airy spacing
@@ -50,7 +50,7 @@ Perchpad's visual identity is **warm, pastel, and calming** — a cozy writing e
 ## Project Structure
 
 ```
-perchpad/
+peckmail/
 ├── src/
 │   ├── server/
 │   │   ├── index.ts        # Hono app, all API routes, WS upgrade, SPA fallback
@@ -88,7 +88,7 @@ perchpad/
 
 ## File Formats
 
-Perchpad primarily works with two file formats:
+Peckmail primarily works with two file formats:
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose
 - **CSV (.csv)** — structured tabular data (lists, trackers, logs, datasets)
 
@@ -152,7 +152,7 @@ All `/api/*` routes require a valid Supabase JWT or API key (`pp_` prefix).
 - `GET /api/projects/:id/members` — list members
 - `PUT /api/projects/:id/members/:userId` — update member role (owner)
 - `DELETE /api/projects/:id/members/:userId` — remove member (owner)
-- `GET /api/projects/:id/settings` — get .perchpad.json
+- `GET /api/projects/:id/settings` — get .peckmail.json
 - `PUT /api/projects/:id/settings` — update settings
 
 ### Files
@@ -273,8 +273,8 @@ The server uses `fs.watch` to detect external changes and broadcasts them. File 
 
 ## Deployment
 
-- **Host**: Fly.io (app: `perchpad`, region: `iad`)
-- **Volume**: Persistent volume `perchpad_data` mounted at `/data`
+- **Host**: Fly.io (app: `peckmail`, region: `iad`)
+- **Volume**: Persistent volume `peckmail_data` mounted at `/data`
 - **Projects dir**: `/data/projects` (each project is a git repo on the volume)
 - **Docker**: Multi-stage build — `node:20-alpine` builder compiles TS + bundles client, production image runs `node dist/server/index.js`
 - **Health check**: `GET /` every 30s

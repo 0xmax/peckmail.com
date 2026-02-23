@@ -50,8 +50,8 @@ fi
 # Web manifest (static, just ensure it exists)
 cat > "$DEST_ROOT/site.webmanifest" <<'MANIFEST'
 {
-  "name": "Perchpad",
-  "short_name": "Perchpad",
+  "name": "Peckmail",
+  "short_name": "Peckmail",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }

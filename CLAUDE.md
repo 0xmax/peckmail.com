@@ -1,4 +1,4 @@
-# Perchpad
+# Peckmail
 
 A collaborative markdown writing app with AI assistance and text-to-speech.
 

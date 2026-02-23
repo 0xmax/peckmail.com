@@ -20,7 +20,7 @@ function projectDir(projectId: string): string {
   return join(PROJECTS_DIR, projectId);
 }
 
-// Recursively list files, excluding hidden dirs like .git and .perchpad
+// Recursively list files, excluding hidden dirs like .git and .peckmail
 async function listTree(
   dir: string,
   base: string

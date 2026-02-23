@@ -6,9 +6,45 @@ import { PROJECTS_DIR } from "./files.js";
 import { updateProjectDescription } from "./db.js";
 
 const anthropic = new Anthropic();
+const INTERNAL_DIR = ".peckmail";
+const LEGACY_INTERNAL_DIR = ".perchpad";
 
 // Track active git manager intervals
 const gitManagers = new Map<string, ReturnType<typeof setInterval>>();
+
+function isInternalPath(filepath: string): boolean {
+  return (
+    filepath.startsWith(`${INTERNAL_DIR}/`) ||
+    filepath.startsWith(`${LEGACY_INTERNAL_DIR}/`) ||
+    filepath.startsWith(".git/")
+  );
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function migrateLegacyMetadata(dir: string): Promise<void> {
+  const legacyDir = join(dir, LEGACY_INTERNAL_DIR);
+  const currentDir = join(dir, INTERNAL_DIR);
+  if ((await pathExists(legacyDir)) && !(await pathExists(currentDir))) {
+    await fs.rename(legacyDir, currentDir);
+  }
+
+  const legacySettings = join(dir, `${LEGACY_INTERNAL_DIR}.json`);
+  const currentSettings = join(dir, `${INTERNAL_DIR}.json`);
+  if (
+    (await pathExists(legacySettings)) &&
+    !(await pathExists(currentSettings))
+  ) {
+    await fs.rename(legacySettings, currentSettings);
+  }
+}
 
 export async function initRepo(projectId: string) {
   const dir = join(PROJECTS_DIR, projectId);
@@ -25,15 +61,22 @@ export async function initRepo(projectId: string) {
     value: "updateInstead",
   });
 
-  // Create .perchpad/chats directory
-  await fs.mkdir(join(dir, ".perchpad", "chats"), { recursive: true });
+  // Migrate legacy metadata names before ensuring current directories exist.
+  await migrateLegacyMetadata(dir);
+
+  // Create .peckmail/chats directory
+  await fs.mkdir(join(dir, INTERNAL_DIR, "chats"), { recursive: true });
 
   // Create .gitignore if missing
   const gitignorePath = join(dir, ".gitignore");
   try {
     await fs.access(gitignorePath);
   } catch {
-    await fs.writeFile(gitignorePath, ".perchpad/\n.tts/\n", "utf-8");
+    await fs.writeFile(
+      gitignorePath,
+      `${INTERNAL_DIR}/\n${LEGACY_INTERNAL_DIR}/\n.tts/\n`,
+      "utf-8"
+    );
   }
 
   // Check if repo already has commits
@@ -55,7 +98,7 @@ export async function initRepo(projectId: string) {
     fs,
     dir,
     message: "Initialize workspace",
-    author: { name: "Perchpad", email: "perchpad@local" },
+    author: { name: "Peckmail", email: "peckmail@local" },
   });
 }
 
@@ -97,10 +140,9 @@ async function autoCommit(projectId: string) {
   // Get status matrix
   const matrix = await git.statusMatrix({ fs, dir });
 
-  // Filter for changed files (not in .perchpad/ or .git/)
+  // Filter for changed files (not in internal metadata dirs or .git/)
   const changed = matrix.filter(([filepath, head, workdir, stage]) => {
-    if (filepath.startsWith(".perchpad/") || filepath.startsWith(".git/"))
-      return false;
+    if (isInternalPath(filepath)) return false;
     // head !== workdir means file has changed
     return head !== workdir || head !== stage;
   });
@@ -169,7 +211,7 @@ Description:`,
     fs,
     dir,
     message: commitMessage,
-    author: { name: "Perchpad", email: "perchpad@local" },
+    author: { name: "Peckmail", email: "peckmail@local" },
   });
 
   console.log(`[git] ${projectId}: ${commitMessage}`);
@@ -184,7 +226,7 @@ async function refreshProjectSummary(projectId: string) {
   try {
     const files = await git.listFiles({ fs, dir, ref: "HEAD" });
     const relevant = files.filter(
-      (f) => !f.startsWith(".") && !f.startsWith(".perchpad/")
+      (f) => !f.startsWith(".") && !f.startsWith(".peckmail/")
     );
     if (relevant.length === 0) return;
 
@@ -220,7 +262,7 @@ export async function getUncommittedStatus(projectId: string): Promise<{ hasChan
   const dir = join(PROJECTS_DIR, projectId);
   const matrix = await git.statusMatrix({ fs, dir });
   const changed = matrix.filter(([filepath, head, workdir, stage]) => {
-    if (filepath.startsWith(".perchpad/") || filepath.startsWith(".git/")) return false;
+    if (isInternalPath(filepath)) return false;
     return head !== workdir || head !== stage;
   });
 
@@ -237,7 +279,7 @@ export async function manualCommit(projectId: string, message?: string): Promise
   const dir = join(PROJECTS_DIR, projectId);
   const matrix = await git.statusMatrix({ fs, dir });
   const changed = matrix.filter(([filepath, head, workdir, stage]) => {
-    if (filepath.startsWith(".perchpad/") || filepath.startsWith(".git/")) return false;
+    if (isInternalPath(filepath)) return false;
     return head !== workdir || head !== stage;
   });
 
@@ -296,7 +338,7 @@ export async function manualCommit(projectId: string, message?: string): Promise
     fs,
     dir,
     message: commitMessage,
-    author: { name: "Perchpad", email: "perchpad@local" },
+    author: { name: "Peckmail", email: "peckmail@local" },
   });
 
   console.log(`[git] ${projectId}: ${commitMessage}`);

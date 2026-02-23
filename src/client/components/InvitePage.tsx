@@ -109,7 +109,7 @@ export function InvitePage({
           <h1 className="text-xl font-semibold text-text mb-3">Invitation Error</h1>
           <p className="text-text-muted mb-6">{state.message}</p>
           <a href="/" className="text-accent hover:underline font-medium">
-            Go to Perchpad
+            Go to Peckmail
           </a>
         </div>
       </div>
@@ -123,7 +123,7 @@ export function InvitePage({
           <h1 className="text-xl font-semibold text-text mb-3">Invitation Declined</h1>
           <p className="text-text-muted mb-6">You've declined this invitation.</p>
           <a href="/" className="text-accent hover:underline font-medium">
-            Go to Perchpad
+            Go to Peckmail
           </a>
         </div>
       </div>
@@ -142,7 +142,7 @@ export function InvitePage({
             Please sign in with that email address to accept.
           </p>
           <a href="/" className="text-accent hover:underline font-medium">
-            Go to Perchpad
+            Go to Peckmail
           </a>
         </div>
       </div>

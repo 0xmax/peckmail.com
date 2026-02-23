@@ -89,7 +89,7 @@ export function OAuthConsent() {
     <div className="min-h-screen flex items-center justify-center bg-bg">
       <div className="bg-surface rounded-xl border border-border p-8 max-w-md w-full">
         <div className="text-center mb-6">
-          <div className="text-2xl font-bold text-text mb-1">Perchpad</div>
+          <div className="text-2xl font-bold text-text mb-1">Peckmail</div>
           <p className="text-sm text-text-muted">Authorize access to your account</p>
         </div>
 
@@ -101,7 +101,7 @@ export function OAuthConsent() {
             <p className="text-xs text-text-muted">{details.client.description}</p>
           )}
           <p className="text-xs text-text-muted mt-2">
-            wants to access your Perchpad account as <strong>{user?.email}</strong>
+            wants to access your Peckmail account as <strong>{user?.email}</strong>
           </p>
           {details?.scopes && details.scopes.length > 0 && (
             <div className="mt-3 pt-3 border-t border-border">

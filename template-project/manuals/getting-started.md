@@ -1,6 +1,6 @@
 # Getting Started
 
-Perchpad is a writing workspace that combines a clean markdown editor with AI assistance, version control, and real-time collaboration.
+Peckmail is a writing workspace that combines a clean markdown editor with AI assistance, version control, and real-time collaboration.
 
 ## The basics
 
@@ -16,7 +16,7 @@ Click the **+** button in the sidebar to create a new file. You can also create 
 
 The editor supports full markdown with live syntax highlighting. Write headings, bold, italic, lists, links, code blocks — the works.
 
-For CSV files, Perchpad renders them as interactive tables with sticky headers. Great for trackers, logs, and lists.
+For CSV files, Peckmail renders them as interactive tables with sticky headers. Great for trackers, logs, and lists.
 
 ## Keyboard shortcuts
 

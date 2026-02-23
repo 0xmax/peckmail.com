@@ -1,10 +1,10 @@
-# Welcome to Perchpad!
+# Welcome to Peckmail!
 
 Hey there! Welcome to your new workspace. This is your little corner of the internet for writing, organizing, and thinking out loud.
 
 Here's what you'll find in this starter workspace:
 
-- **manuals/** — Quick guides on everything Perchpad can do
+- **manuals/** — Quick guides on everything Peckmail can do
 - **recipes/** — A few of our favorite dishes to get your collection started
 - **reading/** — Reading list and movie watchlist templates
 - **todo/** — Task lists to keep you organized

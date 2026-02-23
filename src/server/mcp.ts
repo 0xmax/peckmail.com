@@ -25,24 +25,24 @@ async function checkAccess(userId: string, projectId: string) {
 function createMcpServer(userId: string): McpServer {
   const server = new McpServer(
     {
-      name: "Perchpad",
+      name: "Peckmail",
       version: "0.1.0",
-      description: "Perchpad is a collaborative writing and note-taking platform. Use these tools to read, write, and manage files across your Perchpad projects.",
+      description: "Peckmail is a collaborative writing and note-taking platform. Use these tools to read, write, and manage files across your Peckmail projects.",
     },
     {
-      instructions: `You are connected to Perchpad — a collaborative writing and data platform at https://perchpad.co.
+      instructions: `You are connected to Peckmail — a collaborative writing and data platform at https://peckmail.com.
 
-## What is Perchpad?
-Perchpad is a web-based workspace where users organize their work into **projects**. Each project is a collection of files with built-in version control. Perchpad focuses on two primary file formats:
+## What is Peckmail?
+Peckmail is a web-based workspace where users organize their work into **projects**. Each project is a collection of files with built-in version control. Peckmail focuses on two primary file formats:
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose.
 - **CSV (.csv)** — structured tabular data such as lists, trackers, logs, and datasets.
 
 ## Key concepts:
 - **Projects**: Top-level containers for files. Users can own or be invited to projects. Use list_projects to see available projects.
 - **Files**: Markdown and CSV files organized in directories. The editor supports rich markdown with a pastel theme and renders CSV as editable tables.
-- **Auto-versioning**: Perchpad automatically commits changes via git every 60 seconds. Use get_revisions to browse the edit history.
+- **Auto-versioning**: Peckmail automatically commits changes via git every 60 seconds. Use get_revisions to browse the edit history.
 - **Collaboration**: Projects can be shared with other users who get editor access.
-- **AI chat**: Perchpad has a built-in AI assistant (separate from this MCP connection) that can read and edit files within projects.
+- **AI chat**: Peckmail has a built-in AI assistant (separate from this MCP connection) that can read and edit files within projects.
 
 ## How to use these tools:
 1. Start with list_projects to see what projects the user has
@@ -65,7 +65,7 @@ Perchpad is a web-based workspace where users organize their work into **project
     }
   );
 
-  server.tool("list_projects", "List all Perchpad projects you have access to. Returns project IDs, names, and your role (owner/editor).", {}, async () => {
+  server.tool("list_projects", "List all Peckmail projects you have access to. Returns project IDs, names, and your role (owner/editor).", {}, async () => {
     try {
       const projects = await getUserProjects(userId);
       return { content: [{ type: "text", text: JSON.stringify(projects, null, 2) }] };
@@ -76,7 +76,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "create_project",
-    "Create a new Perchpad project. Returns the new project's ID and name. The project starts empty with version control initialized.",
+    "Create a new Peckmail project. Returns the new project's ID and name. The project starts empty with version control initialized.",
     { name: z.string().describe("Name for the new project") },
     async ({ name }) => {
       try {
@@ -92,7 +92,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "rename_project",
-    "Rename an existing Perchpad project. Only owners can rename projects.",
+    "Rename an existing Peckmail project. Only owners can rename projects.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       name: z.string().describe("New name for the project"),
@@ -112,7 +112,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "delete_project",
-    "Delete a Perchpad project (soft delete — files are preserved but the project is hidden). Only owners can delete projects.",
+    "Delete a Peckmail project (soft delete — files are preserved but the project is hidden). Only owners can delete projects.",
     { projectId: z.string().describe("The project ID (UUID from list_projects)") },
     async ({ projectId }) => {
       try {
@@ -130,7 +130,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "list_files",
-    "List all files and directories in a Perchpad project as a tree. Files are typically markdown (.md) documents.",
+    "List all files and directories in a Peckmail project as a tree. Files are typically markdown (.md) documents.",
     { projectId: z.string().describe("The project ID (UUID from list_projects)") },
     async ({ projectId }) => {
       try {
@@ -146,7 +146,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "read_file",
-    "Read the contents of a file in a Perchpad project. Returns the full file content as text.",
+    "Read the contents of a file in a Peckmail project. Returns the full file content as text.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       path: z.string().describe("File path relative to project root (e.g. 'notes/ideas.md')"),
@@ -165,7 +165,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "write_file",
-    "Write content to a file in a Perchpad project. Creates the file if it doesn't exist, or overwrites it. Parent directories are created automatically. Changes are auto-committed via git.",
+    "Write content to a file in a Peckmail project. Creates the file if it doesn't exist, or overwrites it. Parent directories are created automatically. Changes are auto-committed via git.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       path: z.string().describe("File path relative to project root (e.g. 'notes/ideas.md')"),
@@ -185,7 +185,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "create_directory",
-    "Create a directory in a Perchpad project. Parent directories are created automatically.",
+    "Create a directory in a Peckmail project. Parent directories are created automatically.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       path: z.string().describe("Directory path relative to project root (e.g. 'notes/drafts')"),
@@ -204,7 +204,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "delete_file",
-    "Delete a file or directory from a Perchpad project. Directories are deleted recursively.",
+    "Delete a file or directory from a Peckmail project. Directories are deleted recursively.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       path: z.string().describe("File or directory path relative to project root"),
@@ -223,7 +223,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "rename_file",
-    "Rename or move a file or directory within a Perchpad project.",
+    "Rename or move a file or directory within a Peckmail project.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       from: z.string().describe("Current file path"),
@@ -243,7 +243,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "copy_file",
-    "Copy a file to a new location within a Perchpad project. Parent directories are created automatically.",
+    "Copy a file to a new location within a Peckmail project. Parent directories are created automatically.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       from: z.string().describe("Source file path relative to project root"),
@@ -263,7 +263,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "get_revisions",
-    "Get the git revision history for a Perchpad project. Perchpad auto-commits changes every 60 seconds, so revisions represent a timeline of edits.",
+    "Get the git revision history for a Peckmail project. Peckmail auto-commits changes every 60 seconds, so revisions represent a timeline of edits.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       limit: z.number().optional().describe("Max revisions to return (default 20)"),
@@ -286,7 +286,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "get_status",
-    "Get the current uncommitted changes in a Perchpad project. Shows files that have been modified since the last auto-commit.",
+    "Get the current uncommitted changes in a Peckmail project. Shows files that have been modified since the last auto-commit.",
     { projectId: z.string().describe("The project ID (UUID from list_projects)") },
     async ({ projectId }) => {
       try {
@@ -302,7 +302,7 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.tool(
     "invite_to_project",
-    "Invite a user by email to collaborate on a Perchpad project. Only project owners can invite. Sends an invitation email to the recipient.",
+    "Invite a user by email to collaborate on a Peckmail project. Only project owners can invite. Sends an invitation email to the recipient.",
     {
       projectId: z.string().describe("The project ID (UUID from list_projects)"),
       email: z.string().describe("Email address of the user to invite"),
@@ -384,16 +384,16 @@ Perchpad is a web-based workspace where users organize their work into **project
 
   server.resource(
     "faq",
-    "perchpad://faq",
+    "peckmail://faq",
     {
-      description: "Perchpad FAQ and features guide — lists all capabilities including file editing, AI assistant, git integration, email processing, TTS, and collaboration features.",
+      description: "Peckmail FAQ and features guide — lists all capabilities including file editing, AI assistant, git integration, email processing, TTS, and collaboration features.",
       mimeType: "text/plain",
     },
     async () => {
       return {
         contents: [
           {
-            uri: "perchpad://faq",
+            uri: "peckmail://faq",
             text: FAQ_TEXT,
             mimeType: "text/plain",
           },
@@ -405,10 +405,10 @@ Perchpad is a web-based workspace where users organize their work into **project
   return server;
 }
 
-const FAQ_TEXT = `# Perchpad — Features & FAQ
+const FAQ_TEXT = `# Peckmail — Features & FAQ
 
-## What is Perchpad?
-Perchpad is a web-based collaborative writing workspace. Organize your work into projects, write in markdown, manage structured data in CSV files, and let the built-in AI assistant help you along the way. Everything is version-controlled and synced in real time.
+## What is Peckmail?
+Peckmail is a web-based collaborative writing workspace. Organize your work into projects, write in markdown, manage structured data in CSV files, and let the built-in AI assistant help you along the way. Everything is version-controlled and synced in real time.
 
 ## File Formats
 - **Markdown (.md)** — rich text documents, notes, outlines, and prose. Rendered with live preview and line-level highlighting.
@@ -427,7 +427,7 @@ Every project is a git repository. Git Smart HTTP endpoints let you clone, push,
 Multiple users can work on the same project simultaneously. File changes, cursor positions, and chat messages sync in real time over WebSockets.
 
 ## Email Integration
-Each workspace gets a unique email address (e.g. robin-willow-42@in.perchpad.co). Emails sent to this address are processed by an AI agent that reads the content and updates project files. Configure agent behavior via an AGENTS.md file in the project root.
+Each workspace gets a unique email address (e.g. robin-willow-42@in.peckmail.com). Emails sent to this address are processed by an AI agent that reads the content and updates project files. Configure agent behavior via an AGENTS.md file in the project root.
 
 ## Text-to-Speech
 Read documents aloud using ElevenLabs or OpenAI TTS. The current sentence is highlighted in the editor during playback. Choose your preferred provider and voice in account settings.

@@ -21,7 +21,7 @@ const WORKSPACE_COLOR_HEX: Record<ItemColor, string> = {
 
 const WORKSPACE_COLORS: ItemColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "gray"];
 
-const WS_COLORS_KEY = "perchpad:workspace-colors";
+const WS_COLORS_KEY = "peckmail:workspace-colors";
 
 function loadWorkspaceColors(): Record<string, ItemColor> {
   try {
@@ -296,8 +296,8 @@ export function ProjectList({
       {/* Header */}
       <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img src="/assets/logo.png" alt="Perchpad" className="h-7 w-auto" />
-          <h1 className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</h1>
+          <img src="/assets/logo.png" alt="Peckmail" className="h-7 w-auto" />
+          <h1 className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Peckmail</h1>
         </div>
         <div className="relative" ref={menuRef}>
           <button

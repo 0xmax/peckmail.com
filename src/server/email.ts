@@ -22,13 +22,13 @@ export async function sendInvitationEmail({
     return;
   }
 
-  const inviteUrl = `https://perchpad.co/invite/${invitationId}`;
+  const inviteUrl = `https://peckmail.com/invite/${invitationId}`;
 
   try {
     await resend.emails.send({
-      from: "Perchpad <noreply@chirp.perchpad.co>",
+      from: "Peckmail <noreply@chirp.peckmail.com>",
       to,
-      subject: `${inviterName} invited you to "${projectName}" on Perchpad`,
+      subject: `${inviterName} invited you to "${projectName}" on Peckmail`,
       html: `
 <!DOCTYPE html>
 <html>
@@ -42,7 +42,7 @@ export async function sendInvitationEmail({
         </td></tr>
         <tr><td style="text-align:center;padding-bottom:32px;color:#9a8b7a;font-size:16px;line-height:1.6;">
           <strong style="color:#3d3229;">${escapeHtml(inviterName)}</strong> invited you to collaborate on
-          <strong style="color:#3d3229;">"${escapeHtml(projectName)}"</strong> on Perchpad.
+          <strong style="color:#3d3229;">"${escapeHtml(projectName)}"</strong> on Peckmail.
         </td></tr>
         <tr><td style="text-align:center;padding-bottom:32px;">
           <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:#c4956a;color:#fff;text-decoration:none;border-radius:12px;font-weight:500;font-size:16px;">
@@ -51,7 +51,7 @@ export async function sendInvitationEmail({
         </td></tr>
         <tr><td style="text-align:center;color:#9a8b7a;font-size:13px;line-height:1.5;">
           Or copy this link: ${inviteUrl}<br><br>
-          <span style="color:#9a8b7a;">Perchpad — Your friendly writing workspace</span>
+          <span style="color:#9a8b7a;">Peckmail — Your friendly writing workspace</span>
         </td></tr>
       </table>
     </td></tr>
@@ -77,7 +77,7 @@ export async function sendEmail(params: {
   const { to, subject, body, replyTo } = params;
 
   await resend.emails.send({
-    from: "Perchpad <noreply@chirp.perchpad.co>",
+    from: "Peckmail <noreply@chirp.peckmail.com>",
     to,
     subject,
     ...(replyTo ? { reply_to: replyTo } : {}),
@@ -91,7 +91,7 @@ export async function sendEmail(params: {
       <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e8ddd0;padding:40px;">
         <tr><td style="color:#3d3229;font-size:16px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(body)}</td></tr>
         <tr><td style="text-align:center;padding-top:32px;color:#9a8b7a;font-size:13px;line-height:1.5;">
-          <span>Perchpad — Your friendly writing workspace</span>
+          <span>Peckmail — Your friendly writing workspace</span>
         </td></tr>
       </table>
     </td></tr>

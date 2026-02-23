@@ -1,4 +1,4 @@
--- Perchpad schema
+-- Peckmail schema
 create extension if not exists pgcrypto with schema extensions;
 
 -- Profiles (extends auth.users)

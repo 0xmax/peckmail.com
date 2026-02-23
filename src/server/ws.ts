@@ -72,8 +72,12 @@ function startWatcher(projectId: string) {
   try {
     const watcher = watch(dir, { recursive: true }, (_event, filename) => {
       if (!filename) return;
-      // Ignore .git and .perchpad directories
-      if (filename.startsWith(".git") || filename.startsWith(".perchpad"))
+      // Ignore git and app metadata directories
+      if (
+        filename.startsWith(".git") ||
+        filename.startsWith(".peckmail") ||
+        filename.startsWith(".perchpad")
+      )
         return;
 
       // Skip if this path was recently mutated by a client

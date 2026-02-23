@@ -36,8 +36,8 @@ export function ContactPage() {
     <div className="min-h-screen bg-bg">
       <header className="bg-surface border-b border-border px-6 py-4 flex items-center gap-3">
         <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <img src="/assets/logo.png" alt="Perchpad" className="h-7 w-auto" />
-          <span className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Perchpad</span>
+          <img src="/assets/logo.png" alt="Peckmail" className="h-7 w-auto" />
+          <span className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Peckmail</span>
         </a>
       </header>
 

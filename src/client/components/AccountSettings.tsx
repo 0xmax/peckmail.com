@@ -128,7 +128,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
     }
   };
 
-  const MCP_URL = "https://perchpad.co/mcp";
+  const MCP_URL = "https://peckmail.com/mcp";
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(MCP_URL);
@@ -137,7 +137,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   };
 
   const handleCopyCliCommand = (key: string) => {
-    const cmd = `claude mcp add perchpad --url ${MCP_URL} --header "Authorization: Bearer ${key}"`;
+    const cmd = `claude mcp add peckmail --url ${MCP_URL} --header "Authorization: Bearer ${key}"`;
     navigator.clipboard.writeText(cmd);
     setCliCopied(true);
     setTimeout(() => setCliCopied(false), 2000);
@@ -147,8 +147,8 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
     if (!createdKey) return;
     const config = {
       mcpServers: {
-        perchpad: {
-          url: "https://perchpad.co/mcp",
+        peckmail: {
+          url: "https://peckmail.com/mcp",
           headers: {
             Authorization: `Bearer ${createdKey}`,
           },
@@ -242,9 +242,9 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
           <ArrowLeft size={14} weight="bold" className="inline" /> Back
         </button>
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
-          <img src="/assets/logo.png" alt="Perchpad" className="h-6 w-auto" />
+          <img src="/assets/logo.png" alt="Peckmail" className="h-6 w-auto" />
           <span style={{ fontFamily: "'Playfair Display', serif" }} className="text-lg font-medium text-text -tracking-[0.01em]">
-            Perchpad
+            Peckmail
           </span>
         </div>
         <div className="relative" ref={menuRef}>
@@ -283,7 +283,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
                 Contact
               </a>
               <a
-                href="https://x.com/perchpad"
+                href="https://x.com/peckmail"
                 target="_blank"
                 rel="noopener"
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
@@ -407,7 +407,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
           <h2 className="text-base font-semibold text-text mb-4">Connect to Claude</h2>
           <div className="bg-surface rounded-xl border border-border p-5 space-y-5">
             <p className="text-xs text-text-muted">
-              Connect Claude to your Perchpad projects so it can read, write, and manage your files directly.
+              Connect Claude to your Peckmail projects so it can read, write, and manage your files directly.
             </p>
 
             {/* MCP URL */}
@@ -474,7 +474,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
                     <label className="text-xs font-medium text-green-800 block mb-1">Run in terminal:</label>
                     <div className="flex items-center gap-2">
                       <code className="flex-1 text-xs bg-white border border-green-200 rounded px-2 py-1.5 font-mono text-green-900 break-all select-all">
-                        claude mcp add perchpad --url {MCP_URL} --header &quot;Authorization: Bearer {createdKey}&quot;
+                        claude mcp add peckmail --url {MCP_URL} --header &quot;Authorization: Bearer {createdKey}&quot;
                       </code>
                       <button
                         onClick={() => handleCopyCliCommand(createdKey)}

@@ -64,22 +64,22 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
   const { onlineUsers } = usePresence(projectId, user, openFilePath);
   const editorViewRef = useRef<EditorView | null>(null);
   const modeStorageKey = useMemo(
-    () => `perchpad:view-mode:${projectId}`,
+    () => `peckmail:view-mode:${projectId}`,
     [projectId]
   );
   const [showPreview, setShowPreview] = useState(() => {
     try {
-      return window.localStorage.getItem(`perchpad:view-mode:${projectId}`) === MODE_PREVIEW;
+      return window.localStorage.getItem(`peckmail:view-mode:${projectId}`) === MODE_PREVIEW;
     } catch {
       return false;
     }
   });
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
-    try { return Number(localStorage.getItem("perchpad:sidebar-w")) || 240; } catch { return 240; }
+    try { return Number(localStorage.getItem("peckmail:sidebar-w")) || 240; } catch { return 240; }
   });
   const [panelWidth, setPanelWidth] = useState(() => {
-    try { return Number(localStorage.getItem("perchpad:panel-w")) || 320; } catch { return 320; }
+    try { return Number(localStorage.getItem("peckmail:panel-w")) || 320; } catch { return 320; }
   });
   const openFilePathRef = useRef<string | null>(openFilePath);
   const loadFileContentRef = useRef(loadFileContent);
@@ -137,7 +137,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
   useEffect(() => {
     if (openFilePath) {
       try {
-        window.localStorage.setItem(`perchpad:last-file:${projectId}`, openFilePath);
+        window.localStorage.setItem(`peckmail:last-file:${projectId}`, openFilePath);
       } catch {}
     }
   }, [openFilePath, projectId]);
@@ -154,7 +154,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
     if (openFilePathRef.current) return;
 
     try {
-      const lastFile = window.localStorage.getItem(`perchpad:last-file:${projectId}`);
+      const lastFile = window.localStorage.getItem(`peckmail:last-file:${projectId}`);
       if (lastFile && fileExistsInTree(tree, lastFile)) {
         loadFileContentRef.current(lastFile);
         return;
@@ -366,7 +366,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
                   Contact
                 </a>
                 <a
-                  href="https://x.com/perchpad"
+                  href="https://x.com/peckmail"
                   target="_blank"
                   rel="noopener"
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
@@ -407,7 +407,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
             </div>
             <div
               className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10"
-              onMouseDown={startResize(setSidebarWidth, "perchpad:sidebar-w", 180, 400, "right")}
+              onMouseDown={startResize(setSidebarWidth, "peckmail:sidebar-w", 180, 400, "right")}
             />
           </div>
         )}
@@ -433,7 +433,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <img src="/assets/logo.png" alt="Perchpad" className="h-10 w-auto mx-auto mb-3 opacity-40" />
+                <img src="/assets/logo.png" alt="Peckmail" className="h-10 w-auto mx-auto mb-3 opacity-40" />
                 <p className="text-text-muted">
                   Select a page to start editing
                 </p>
@@ -453,7 +453,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
           >
             <div
               className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10"
-              onMouseDown={startResize(setPanelWidth, "perchpad:panel-w", 260, 600, "left")}
+              onMouseDown={startResize(setPanelWidth, "peckmail:panel-w", 260, 600, "left")}
             />
             {activePanel === "chat" && <ChatPanel />}
             {activePanel === "revisions" && <Revisions projectId={projectId} />}

@@ -4,7 +4,7 @@ import type { TemplateFile } from "./templates.js";
 
 const anthropic = new Anthropic();
 
-const SYSTEM_PROMPT = `You are a workspace generator for a markdown writing app called Perchpad. Given a user's description of what they want to use their workspace for, generate a set of files and folders that would give them a great starting point.
+const SYSTEM_PROMPT = `You are a workspace generator for a markdown writing app called Peckmail. Given a user's description of what they want to use their workspace for, generate a set of files and folders that would give them a great starting point.
 
 Rules:
 - Return ONLY a JSON array of objects with "path" and "content" fields

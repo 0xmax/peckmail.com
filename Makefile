@@ -10,10 +10,10 @@ deploy:
 	fly deploy
 
 logs:
-	fly logs --app perchpad
+	fly logs --app peckmail
 
 status:
-	fly status --app perchpad
+	fly status --app peckmail
 
 ssh:
-	fly ssh console --app perchpad
+	fly ssh console --app peckmail

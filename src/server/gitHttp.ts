@@ -142,7 +142,7 @@ async function gitInfoRefs(c: any) {
 
   const user = await authenticateGitRequest(c);
   if (!user) {
-    c.header("WWW-Authenticate", 'Basic realm="Perchpad"');
+    c.header("WWW-Authenticate", 'Basic realm="Peckmail"');
     return c.text("Authentication required", 401);
   }
 
@@ -205,7 +205,7 @@ gitRouter.post("/:projectId/git-upload-pack", async (c) => gitUploadPack(c));
 async function gitUploadPack(c: any) {
   const user = await authenticateGitRequest(c);
   if (!user) {
-    c.header("WWW-Authenticate", 'Basic realm="Perchpad"');
+    c.header("WWW-Authenticate", 'Basic realm="Peckmail"');
     return c.text("Authentication required", 401);
   }
 
@@ -246,7 +246,7 @@ gitRouter.post("/:projectId/git-receive-pack", async (c) => gitReceivePack(c));
 async function gitReceivePack(c: any) {
   const user = await authenticateGitRequest(c);
   if (!user) {
-    c.header("WWW-Authenticate", 'Basic realm="Perchpad"');
+    c.header("WWW-Authenticate", 'Basic realm="Peckmail"');
     return c.text("Authentication required", 401);
   }
 

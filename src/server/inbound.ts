@@ -285,6 +285,7 @@ async function buildSystemPrompt(
   const instructionFiles = [
     "AGENTS.md",
     "agents.md",
+    ".peckmail/agents.md",
     ".perchpad/agents.md",
   ];
 
@@ -309,7 +310,7 @@ async function buildSystemPrompt(
     replyInstructions = `The sender (${senderNormalized}) is not a workspace member. Process this email silently — do not send any replies.`;
   }
 
-  const base = `You are a helpful AI assistant for the Perchpad workspace "${projectName}". You have just received an inbound email sent to this workspace's email address. Process it according to the instructions below.
+  const base = `You are a helpful AI assistant for the Peckmail workspace "${projectName}". You have just received an inbound email sent to this workspace's email address. Process it according to the instructions below.
 
 You have tools to read, create, and edit files in this workspace. Use them as needed to carry out the task.
 

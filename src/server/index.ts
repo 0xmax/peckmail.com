@@ -84,7 +84,7 @@ app.get(
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 app.get("/.well-known/oauth-protected-resource", (c) => {
   return c.json({
-    resource: "https://perchpad.co",
+    resource: "https://peckmail.com",
     authorization_servers: [`${SUPABASE_URL}/auth/v1`],
     bearer_methods_supported: ["header"],
   });
@@ -150,7 +150,7 @@ app.post("/api/contact", async (c) => {
   try {
     await sendEmail({
       to: "max@markets.sh",
-      subject: `[Perchpad Contact] from ${name.trim()}`,
+      subject: `[Peckmail Contact] from ${name.trim()}`,
       body: `From: ${name.trim()} <${email.trim()}>\n\n${message.trim()}`,
       replyTo: email.trim(),
     });
@@ -632,18 +632,24 @@ api.delete("/chat/:projectId/sessions/:sessionId", async (c) => {
   return c.json({ ok: true });
 });
 
-// Project settings (.perchpad.json)
+// Project settings (.peckmail.json, with .perchpad.json legacy fallback)
 api.get("/projects/:id/settings", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership) return c.json({ error: "Access denied" }, 403);
-  const settingsPath = join(PROJECTS_DIR, projectId, ".perchpad.json");
+  const settingsPath = join(PROJECTS_DIR, projectId, ".peckmail.json");
+  const legacySettingsPath = join(PROJECTS_DIR, projectId, ".perchpad.json");
   try {
     const raw = await fs.readFile(settingsPath, "utf-8");
     return c.json(JSON.parse(raw));
   } catch {
-    return c.json({});
+    try {
+      const raw = await fs.readFile(legacySettingsPath, "utf-8");
+      return c.json(JSON.parse(raw));
+    } catch {
+      return c.json({});
+    }
   }
 });
 
@@ -653,7 +659,7 @@ api.put("/projects/:id/settings", async (c) => {
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership) return c.json({ error: "Access denied" }, 403);
   const settings = await c.req.json();
-  const settingsPath = join(PROJECTS_DIR, projectId, ".perchpad.json");
+  const settingsPath = join(PROJECTS_DIR, projectId, ".peckmail.json");
   await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
   return c.json({ ok: true });
 });
@@ -694,7 +700,7 @@ api.post("/projects/:id/emails/test", async (c) => {
       from: userEmail,
       to: [projectEmail],
       subject: "Test email",
-      text: "This is a test email sent from the Perchpad UI to verify inbound email processing is working.",
+      text: "This is a test email sent from the Peckmail UI to verify inbound email processing is working.",
       email_id: `test-${Date.now()}`,
     },
   };
@@ -850,7 +856,7 @@ app.get("*", async (c) => {
 // --- Start server ---
 const port = parseInt(process.env.PORT || "3000");
 const server = serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`Perchpad running at http://localhost:${info.port}`);
+  console.log(`Peckmail running at http://localhost:${info.port}`);
 });
 
 injectWebSocket(server);
@@ -874,7 +880,7 @@ function sharePageHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${fileName} — Perchpad</title>
+  <title>${fileName} — Peckmail</title>
   <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
   <style>
     body { background: #faf5ff; margin: 0; padding: 2rem; font-family: system-ui, -apple-system, sans-serif; }
@@ -888,7 +894,7 @@ function sharePageHtml(
 <body>
   <div class="share-container">
     <div class="share-header">
-      <p class="brand">Shared via Perchpad</p>
+      <p class="brand">Shared via Peckmail</p>
       <h1>${fileName}</h1>
     </div>
     <div class="share-content">${escapeHtml(content)}</div>
@@ -913,19 +919,19 @@ function landingPageHtml(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Perchpad — A collaborative writing workspace</title>
+  <title>Peckmail — A collaborative writing workspace</title>
   <meta name="description" content="A calm writing workspace with a smart little bird. Organize projects, write in markdown, and collaborate in real time.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://perchpad.co/">
-  <meta property="og:title" content="Perchpad — A writing workspace that thinks with you">
+  <meta property="og:url" content="https://peckmail.com/">
+  <meta property="og:title" content="Peckmail — A writing workspace that thinks with you">
   <meta property="og:description" content="Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.">
-  <meta property="og:image" content="https://perchpad.co/assets/og.jpg">
+  <meta property="og:image" content="https://peckmail.com/assets/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="628">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Perchpad — A writing workspace that thinks with you">
+  <meta name="twitter:title" content="Peckmail — A writing workspace that thinks with you">
   <meta name="twitter:description" content="Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.">
-  <meta name="twitter:image" content="https://perchpad.co/assets/og.jpg">
+  <meta name="twitter:image" content="https://peckmail.com/assets/og.jpg">
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -940,7 +946,7 @@ function landingPageHtml(): string {
 
   <nav class="flex items-center justify-between max-w-[1100px] mx-auto px-6 py-4 sm:px-8 sm:py-5">
     <a href="/" class="flex items-center gap-2 font-heading text-[1.35rem] font-bold text-text">
-      <img src="/assets/logo.png" alt="" class="h-7 w-auto">Perchpad
+      <img src="/assets/logo.png" alt="" class="h-7 w-auto">Peckmail
     </a>
     <div id="nav-actions" class="flex items-center gap-5">
       <a href="/login" class="text-[0.95rem] text-text-secondary font-medium hover:text-text transition-colors">Sign In</a>
@@ -1058,7 +1064,7 @@ function landingPageHtml(): string {
   <section id="faq" class="max-w-[800px] mx-auto px-6 pt-8 pb-12 sm:px-8">
     <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">Under the Hood</h2>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">What is Perchpad?</h3>
+      <h3 class="text-[1.05rem] mb-2 text-accent">What is Peckmail?</h3>
       <p class="text-[0.95rem] text-text leading-relaxed">A collaborative writing workspace where every project is a git repository. You write in markdown, get help from a friendly little bird that lives in your workspace, and everything syncs in real time.</p>
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
@@ -1075,7 +1081,7 @@ function landingPageHtml(): string {
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">Can I connect Claude Desktop or Cursor?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Perchpad includes a Model Context Protocol (MCP) server, so you can connect from Claude Desktop, Cursor, or any MCP-compatible client to manage your projects directly.</p>
+      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Peckmail includes a Model Context Protocol (MCP) server, so you can connect from Claude Desktop, Cursor, or any MCP-compatible client to manage your projects directly.</p>
     </div>
     <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
       <h3 class="text-[1.05rem] mb-2 text-accent">How does sharing work?</h3>
@@ -1120,11 +1126,11 @@ function landingPageHtml(): string {
   <footer class="bg-footer-bg text-footer-text pt-16 px-6 pb-10 sm:px-8">
     <div class="max-w-[1100px] mx-auto flex flex-col gap-8 sm:flex-row sm:justify-between sm:items-start sm:gap-16">
       <div>
-        <div class="font-heading text-xl font-bold text-white mb-2">Perchpad</div>
+        <div class="font-heading text-xl font-bold text-white mb-2">Peckmail</div>
         <div class="text-[0.85rem] text-footer-muted max-w-[280px] leading-relaxed">A calm writing workspace with a smart little bird.</div>
-        <a href="https://x.com/perchpad" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-[0.85rem] text-footer-muted hover:text-white transition-colors mt-3">
+        <a href="https://x.com/peckmail" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-[0.85rem] text-footer-muted hover:text-white transition-colors mt-3">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-          Follow @perchpad
+          Follow @peckmail
         </a>
       </div>
       <div class="flex gap-8 sm:gap-16">
@@ -1143,7 +1149,7 @@ function landingPageHtml(): string {
         </div>
       </div>
     </div>
-    <div class="max-w-[1100px] mx-auto mt-10 pt-6 border-t border-dark text-[0.8rem] text-footer-dim">&copy; 2026 Perchpad</div>
+    <div class="max-w-[1100px] mx-auto mt-10 pt-6 border-t border-dark text-[0.8rem] text-footer-dim">&copy; 2026 Peckmail</div>
   </footer>
 ${isDev ? `<script>
 (function(){var t;function c(){var ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=function(){if(t){location.reload()}};ws.onclose=function(){t=true;setTimeout(c,500)}}c()})();

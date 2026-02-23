@@ -10,7 +10,7 @@ interface ApiKey {
   last_used_at: string | null;
 }
 
-const MCP_URL = "https://perchpad.co/mcp";
+const MCP_URL = "https://peckmail.com/mcp";
 
 function slugify(name: string): string {
   return name
@@ -78,7 +78,7 @@ export function ConnectPanel({ projectId, projectName }: { projectId: string; pr
     if (!createdKey) return;
     const config = {
       mcpServers: {
-        perchpad: {
+        peckmail: {
           url: MCP_URL,
           headers: {
             Authorization: `Bearer ${createdKey}`,
@@ -225,10 +225,10 @@ export function ConnectPanel({ projectId, projectName }: { projectId: string; pr
                   <label className="font-medium text-green-800 block mb-1">Run in terminal:</label>
                   <div className="flex items-center gap-1.5">
                     <code className="flex-1 bg-white border border-green-200 rounded px-2 py-1.5 font-mono text-green-900 break-all select-all">
-                      claude mcp add perchpad --url {MCP_URL} --header &quot;Authorization: Bearer {createdKey}&quot;
+                      claude mcp add peckmail --url {MCP_URL} --header &quot;Authorization: Bearer {createdKey}&quot;
                     </code>
                     <button
-                      onClick={() => copy(`claude mcp add perchpad --url ${MCP_URL} --header "Authorization: Bearer ${createdKey}"`, "cli")}
+                      onClick={() => copy(`claude mcp add peckmail --url ${MCP_URL} --header "Authorization: Bearer ${createdKey}"`, "cli")}
                       className="shrink-0 px-2.5 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                     >
                       {copiedField === "cli" ? "Copied!" : "Copy"}

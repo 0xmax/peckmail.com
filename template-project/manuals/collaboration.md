@@ -1,6 +1,6 @@
 # Collaboration
 
-Perchpad workspaces can be shared with others. Invite teammates, friends, or collaborators to work together in real time.
+Peckmail workspaces can be shared with others. Invite teammates, friends, or collaborators to work together in real time.
 
 ## Inviting people
 

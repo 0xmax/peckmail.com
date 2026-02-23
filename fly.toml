@@ -1,4 +1,4 @@
-app = 'perchpad'
+app = 'peckmail'
 primary_region = 'iad'
 
 [build]
@@ -8,7 +8,7 @@ primary_region = 'iad'
   PROJECTS_DIR = '/data/projects'
 
 [mounts]
-  source = 'perchpad_data'
+  source = 'peckmail_data'
   destination = '/data'
 
 [http_service]

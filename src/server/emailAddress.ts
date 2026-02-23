@@ -13,7 +13,7 @@ const NATURE = [
   "cove", "ridge", "dale", "heath", "marsh", "briar",
 ];
 
-const DOMAIN = "chirp.perchpad.co";
+const DOMAIN = "chirp.peckmail.com";
 
 export function generateEmailAddress(): string {
   const bird = BIRDS[Math.floor(Math.random() * BIRDS.length)];

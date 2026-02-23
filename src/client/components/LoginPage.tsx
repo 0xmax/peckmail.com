@@ -31,9 +31,9 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
     <div className="min-h-screen flex flex-col items-center justify-center bg-bg px-4 py-12">
       {/* Hero */}
       <div className="w-full max-w-md text-center mb-6">
-        <img src="/assets/logo.png" alt="Perchpad" className="h-14 w-auto mx-auto mb-3" />
+        <img src="/assets/logo.png" alt="Peckmail" className="h-14 w-auto mx-auto mb-3" />
         <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-4xl font-semibold text-text mb-2 -tracking-[0.01em]">
-          Perchpad
+          Peckmail
         </h1>
         <p className="text-text-muted mb-4">Your friendly writing workspace</p>
         <p className="text-sm text-text-muted/80 leading-relaxed">

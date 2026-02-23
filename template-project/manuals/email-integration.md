@@ -4,7 +4,7 @@ Every workspace gets a unique email address. When someone sends an email to your
 
 ## Finding your workspace email
 
-Go to **Settings** (gear icon in the sidebar) to see your workspace's email address. It looks something like `robin-willow-42@in.perchpad.co`.
+Go to **Settings** (gear icon in the sidebar) to see your workspace's email address. It looks something like `robin-willow-42@in.peckmail.com`.
 
 ## How it works
 
