@@ -22,6 +22,9 @@ import { PresenceAvatars } from "./PresenceAvatars.js";
 import { useAuth } from "../context/AuthContext.js";
 import { usePresence } from "../hooks/usePresence.js";
 import { ArrowLeft, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope, XLogo } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel } from "@/components/ui/dropdown-menu.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 
 function fileExistsInTree(tree: FileNode[], path: string): boolean {
   for (const node of tree) {
@@ -51,8 +54,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [showShare, setShowShare] = useState(false);
   const chatPrompt = useChatPrompt();
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, signOut, handle } = useAuth();
   const { onlineUsers } = usePresence(projectId, user, openFilePath);
   const editorViewRef = useRef<EditorView | null>(null);
@@ -150,18 +151,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
     }
   }, [treeLoading, tree, projectId]);
 
-  // Close user menu on outside click.
-  useEffect(() => {
-    if (!userMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [userMenuOpen]);
-
   // Keep workspace URL shareable with current file + mode.
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -177,13 +166,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
     const next = `${url.pathname}?${params.toString()}${url.hash}`;
     window.history.replaceState(null, "", next);
   }, [openFilePath]);
-
-  const panelBtnClass = (panel: Panel) =>
-    `p-2 rounded-lg transition-colors ${
-      activePanel === panel
-        ? "text-accent hover:text-accent"
-        : "text-text-muted hover:text-text"
-    }`;
 
   // --- Resize helpers ---
   const startResize = (
@@ -222,12 +204,9 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
       {/* Top bar */}
       <header className="bg-surface border-b border-border px-4 py-2 flex items-center justify-between shrink-0 relative">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="text-text-muted hover:text-text transition-colors text-sm"
-          >
+          <Button variant="ghost" size="sm" onClick={onBack}>
             <ArrowLeft size={14} weight="bold" className="inline" /> Back
-          </button>
+          </Button>
         </div>
         <div className="absolute left-1/2 -translate-x-1/2">
           {editingName ? (
@@ -258,96 +237,97 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
         </div>
         <div className="flex items-center gap-2">
           {!connected && (
-            <span className="text-xs text-danger px-2 py-1 bg-red-50 rounded-full">
+            <span className="text-xs text-danger px-2 py-1 bg-red-50 dark:bg-red-950 rounded-full">
               Reconnecting...
             </span>
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
             onClick={() => setShowShare(true)}
             title="Share workspace"
-            className="p-2 rounded-lg transition-colors text-text-muted hover:text-text"
           >
             <Users size={16} />
-          </button>
+          </Button>
           <PresenceAvatars users={onlineUsers} />
-          {/* Panel toggle pill */}
+          {/* Panel toggle buttons */}
           <div className="flex items-center gap-px bg-surface-alt/50 rounded-xl p-0.5">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 rounded-lg ${
+                activePanel === "connect"
+                  ? "text-accent hover:text-accent"
+                  : "text-text-muted hover:text-text"
+              }`}
               onClick={() => togglePanel("connect")}
               title="Connect"
-              className={panelBtnClass("connect")}
             >
               <Plugs size={16} />
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 rounded-lg ${
+                activePanel === "chat"
+                  ? "text-accent hover:text-accent"
+                  : "text-text-muted hover:text-text"
+              }`}
               onClick={() => togglePanel("chat")}
               title="Assistant"
-              className={panelBtnClass("chat")}
             >
               <ChatCircle size={16} />
-            </button>
+            </Button>
           </div>
-          <div className="relative" ref={userMenuRef}>
-            <button
-              onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="rounded-full hover:opacity-80 transition-opacity"
-            >
-              <UserAvatar
-                src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
-                name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-                size={26}
-              />
-            </button>
-            {userMenuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50">
-                <div className="px-4 py-3 border-b border-border">
-                  <div className="text-sm font-medium text-text truncate">
-                    {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-                  </div>
-                  {handle && (
-                    <div className="text-xs text-text-muted truncate mt-0.5">@{handle}</div>
-                  )}
+          <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="rounded-full hover:opacity-80 transition-opacity">
+                <UserAvatar
+                  src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
+                  name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+                  size={26}
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="text-sm font-medium text-text truncate">
+                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
                 </div>
-                <button
-                  onClick={() => { setUserMenuOpen(false); onBack(); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
-                >
-                  <ArrowLeft size={16} className="text-text-muted" />
-                  All workspaces
-                </button>
-                <button
-                  onClick={() => { setUserMenuOpen(false); onOpenSettings(); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
-                >
-                  <GearSix size={16} className="text-text-muted" />
-                  Settings
-                </button>
-                <a
-                  href="/contact"
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
-                >
+                {handle && (
+                  <div className="text-xs text-text-muted truncate mt-0.5 font-normal">@{handle}</div>
+                )}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onBack()}>
+                <ArrowLeft size={16} className="text-text-muted" />
+                All workspaces
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onOpenSettings()}>
+                <GearSix size={16} className="text-text-muted" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a href="/contact">
                   <Envelope size={16} className="text-text-muted" />
                   Contact
                 </a>
-                <a
-                  href="https://x.com/peckmail"
-                  target="_blank"
-                  rel="noopener"
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
-                >
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a href="https://x.com/peckmail" target="_blank" rel="noopener">
                   <XLogo size={16} className="text-text-muted" />
                   Follow on X
                 </a>
-                <button
-                  onClick={() => { setUserMenuOpen(false); signOut(); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors border-t border-border"
-                >
-                  <SignOut size={16} className="text-text-muted" />
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => signOut()}>
+                <SignOut size={16} className="text-text-muted" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 

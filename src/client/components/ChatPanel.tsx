@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatState, useChatPrompt, useStoreDispatch } from "../store/StoreContext.js";
 import { ChatMessage } from "./ChatMessage.js";
 import { Archive, Plus, Lightbulb, PaperPlaneRight, ChatCircle } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button.js";
+import { Textarea } from "@/components/ui/textarea.js";
 
 export function ChatPanel() {
   const { sessions, currentSessionId, messages, streaming, error } = useChatState();
@@ -55,20 +57,24 @@ export function ChatPanel() {
           <span className="text-sm font-medium text-text">Assistant</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
             onClick={() => setShowSessions(!showSessions)}
-            className="text-xs text-text-muted hover:text-text p-1 transition-colors"
             title="Chat history"
           >
             <Archive size={16} />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
             onClick={() => dispatch({ type: "chat:new-session" })}
-            className="text-xs text-text-muted hover:text-text p-1 transition-colors"
             title="New chat"
           >
             <Plus size={16} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -130,7 +136,7 @@ export function ChatPanel() {
           </div>
         )}
         {error && (
-          <div className="text-xs text-danger bg-red-50 rounded-lg p-2">
+          <div className="text-xs text-destructive bg-destructive/10 dark:bg-destructive/20 rounded-lg p-2">
             {error}
             <button
               onClick={() => {
@@ -148,7 +154,7 @@ export function ChatPanel() {
       {/* Input */}
       <div className="p-3 border-t border-border">
         <div className="flex gap-2">
-          <textarea
+          <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -165,24 +171,23 @@ export function ChatPanel() {
               t.style.height = `${Math.min(t.scrollHeight, 120)}px`;
             }}
           />
-          <button
+          <Button
+            variant={thinking ? "secondary" : "outline"}
+            size="icon"
+            className="h-9 w-9 shrink-0"
             onClick={() => setThinking((t) => !t)}
-            className={`px-2 py-2 rounded-xl border transition-colors shrink-0 ${
-              thinking
-                ? "bg-accent/10 border-accent text-accent"
-                : "border-border text-text-muted hover:text-text hover:border-text-muted"
-            }`}
             title={thinking ? "Thinking enabled" : "Enable thinking"}
           >
             <Lightbulb size={16} weight={thinking ? "duotone" : "regular"} />
-          </button>
-          <button
+          </Button>
+          <Button
+            size="icon"
+            className="h-9 w-9 shrink-0"
             onClick={handleSend}
             disabled={!input.trim() || streaming}
-            className="px-3 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-40 transition-colors shrink-0"
           >
             <PaperPlaneRight size={16} weight="fill" />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -8,6 +8,12 @@ import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import type { ItemColor } from "../store/types.js";
+import { Button } from "@/components/ui/button.js";
+import { Input } from "@/components/ui/input.js";
+import { Card, CardContent } from "@/components/ui/card.js";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel } from "@/components/ui/dropdown-menu.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 
 const WORKSPACE_COLOR_HEX: Record<ItemColor, string> = {
   red: "#E8A8A0",
@@ -145,21 +151,17 @@ export function ProjectList({
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [creatingSample, setCreatingSample] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest" | "a-z" | "z-a">("newest");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const [wsColors, setWsColors] = useState<Record<string, ItemColor>>(loadWorkspaceColors);
   const [colorMenu, setColorMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
-  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [shareProjectId, setShareProjectId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   const { matches: fileMatches, searching: fileSearching } = useFileSearch(search);
   const matchesByProject = useMemo(() => {
@@ -172,18 +174,6 @@ export function ProjectList({
     return map;
   }, [fileMatches]);
 
-  // Close menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
-
   // Close color menu on outside click
   useEffect(() => {
     if (!colorMenu) return;
@@ -191,18 +181,6 @@ export function ProjectList({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [colorMenu]);
-
-  // Close action menu on outside click
-  useEffect(() => {
-    if (!actionMenuId) return;
-    const handler = (e: MouseEvent) => {
-      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
-        setActionMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [actionMenuId]);
 
   const loadData = useCallback(async () => {
     try {
@@ -299,52 +277,49 @@ export function ProjectList({
           <img src="/assets/logo.png" alt="Peckmail" className="h-7 w-auto" />
           <h1 className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Peckmail</h1>
         </div>
-        <div className="relative" ref={menuRef}>
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 rounded-full hover:opacity-80 transition-opacity"
-          >
-            <UserAvatar
-              src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
-              name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-              size={32}
-            />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50">
-              <div className="px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex items-center gap-2 rounded-full hover:opacity-80 transition-opacity"
+              >
+                <UserAvatar
+                  src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
+                  name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
+                  size={32}
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
                 <div className="text-sm font-medium text-text truncate">
                   {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
                 </div>
                 {handle && (
                   <div className="text-xs text-text-muted truncate mt-0.5">@{handle}</div>
                 )}
-              </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
               {onOpenSettings && (
-                <button
-                  onClick={() => { setMenuOpen(false); onOpenSettings(); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
-                >
+                <DropdownMenuItem onClick={() => onOpenSettings()}>
                   <GearSix size={16} className="text-text-muted" />
                   Settings
-                </button>
+                </DropdownMenuItem>
               )}
-              <a
-                href="/contact"
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
-              >
-                <Envelope size={16} className="text-text-muted" />
-                Contact
-              </a>
-              <button
-                onClick={() => { setMenuOpen(false); signOut(); }}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors border-t border-border"
-              >
+              <DropdownMenuItem asChild>
+                <a href="/contact">
+                  <Envelope size={16} className="text-text-muted" />
+                  Contact
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => signOut()}>
                 <SignOut size={16} className="text-text-muted" />
                 Sign out
-              </button>
-            </div>
-          )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -365,12 +340,9 @@ export function ProjectList({
                     You've been invited to{" "}
                     <strong>{inv.projects.name}</strong>
                   </span>
-                  <button
-                    onClick={() => handleAcceptInvite(inv.id)}
-                    className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors text-sm"
-                  >
+                  <Button onClick={() => handleAcceptInvite(inv.id)}>
                     Accept
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -382,24 +354,21 @@ export function ProjectList({
           <h2 className="text-lg font-semibold text-text">
             Your workspaces
           </h2>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover transition-colors text-sm font-medium"
-          >
+          <Button onClick={() => setShowCreate(true)}>
             + New workspace
-          </button>
+          </Button>
         </div>
 
         {projects.length > 0 && (
           <div className="flex items-center gap-2 mb-4">
             <div className="relative flex-1">
               <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
+              <Input
                 type="text"
                 placeholder="Search workspaces and files..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 bg-surface border border-border rounded-xl text-sm text-text placeholder:text-text-muted/60 focus:outline-none focus:border-accent/50 transition-colors"
+                className="pl-9 pr-8"
               />
               {fileSearching && (
                 <SpinnerGap size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" />
@@ -570,62 +539,42 @@ export function ProjectList({
                       </div>
                     )}
                     <div className="relative shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActionMenuId(actionMenuId === project.id ? null : project.id);
-                        }}
-                        className="p-1 rounded-lg text-text-muted opacity-0 group-hover:opacity-100 hover:bg-surface-alt hover:text-text transition-all"
-                      >
-                        <DotsThree size={20} weight="bold" />
-                      </button>
-                      {actionMenuId === project.id && (
-                        <div
-                          ref={actionMenuRef}
-                          className="absolute right-0 top-full mt-1 w-44 bg-surface rounded-xl border border-border shadow-lg overflow-hidden z-50"
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActionMenuId(null);
-                              setShareProjectId(project.id);
-                            }}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1 rounded-lg text-text-muted opacity-0 group-hover:opacity-100 hover:bg-surface-alt hover:text-text transition-all"
                           >
+                            <DotsThree size={20} weight="bold" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem onClick={() => setShareProjectId(project.id)}>
                             <UserPlus size={15} className="text-text-muted" />
                             Share
-                          </button>
+                          </DropdownMenuItem>
                           {project.role === "owner" && (
                             <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActionMenuId(null);
-                                  setRenamingId(project.id);
-                                  setRenameValue(project.name);
-                                  setTimeout(() => renameInputRef.current?.select(), 0);
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface-alt transition-colors"
-                              >
+                              <DropdownMenuItem onClick={() => {
+                                setRenamingId(project.id);
+                                setRenameValue(project.name);
+                                setTimeout(() => renameInputRef.current?.select(), 0);
+                              }}>
                                 <PencilSimple size={15} className="text-text-muted" />
                                 Rename
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActionMenuId(null);
-                                  setDeleteConfirmId(project.id);
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-danger hover:bg-surface-alt transition-colors border-t border-border"
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setDeleteConfirmId(project.id)}
                               >
                                 <Trash size={15} />
                                 Delete
-                              </button>
+                              </DropdownMenuItem>
                             </>
                           )}
-                        </div>
-                      )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                   {hits && hits.length > 0 && (
@@ -754,34 +703,28 @@ export function ProjectList({
         />
       )}
 
-      {deleteConfirmId && (
-        <div
-          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setDeleteConfirmId(null); }}
-        >
-          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm border border-border shadow-xl">
-            <h2 className="text-lg font-semibold text-text mb-2">Delete workspace</h2>
-            <p className="text-sm text-text-muted mb-5">
+      <Dialog open={!!deleteConfirmId} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete workspace</DialogTitle>
+            <DialogDescription>
               Are you sure you want to delete <strong>{projects.find((p) => p.id === deleteConfirmId)?.name}</strong>? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 text-sm text-text-muted hover:text-text transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDelete(deleteConfirmId)}
-                disabled={deleting}
-                className="px-4 py-2 bg-danger text-white rounded-xl hover:bg-danger-hover disabled:opacity-50 transition-colors text-sm font-medium"
-              >
-                {deleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

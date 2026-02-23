@@ -7,6 +7,18 @@ import {
   FileText,
   SpinnerGap,
 } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button.js";
+import { Input } from "@/components/ui/input.js";
+import { Textarea } from "@/components/ui/textarea.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog.js";
+import { Label } from "@/components/ui/label.js";
 
 type Mode = "template" | "empty" | "ai";
 type Step = "pick" | "configure";
@@ -85,13 +97,8 @@ export function CreateProjectModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="bg-surface rounded-2xl w-full max-w-2xl border border-border shadow-xl overflow-hidden">
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl p-0" showCloseButton={false}>
         {step === "pick" ? (
           <>
             <div className="px-6 pt-6 pb-4">
@@ -152,12 +159,14 @@ export function CreateProjectModal({
         ) : (
           <>
             <div className="px-6 pt-5 pb-4 flex items-center gap-3">
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={goBack}
-                className="p-1.5 -ml-1.5 rounded-lg hover:bg-surface-alt transition-colors text-text-muted hover:text-text"
+                className="-ml-1.5"
               >
                 <ArrowLeft size={18} />
-              </button>
+              </Button>
               <div>
                 <h2 className="text-lg font-semibold text-text">
                   {selection?.mode === "ai"
@@ -175,10 +184,8 @@ export function CreateProjectModal({
             </div>
 
             <form onSubmit={handleSubmit} className="px-6 pb-6">
-              <label className="block text-sm font-medium text-text mb-1.5">
-                Workspace name
-              </label>
-              <input
+              <Label className="mb-1.5">Workspace name</Label>
+              <Input
                 autoFocus
                 type="text"
                 value={name}
@@ -188,20 +195,18 @@ export function CreateProjectModal({
                     ? "My AI workspace"
                     : "My writing project"
                 }
-                className="w-full py-2.5 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
               />
 
               {selection?.mode === "ai" && (
                 <>
-                  <label className="block text-sm font-medium text-text mt-4 mb-1.5">
+                  <Label className="mt-4 mb-1.5">
                     Describe your workspace
-                  </label>
-                  <textarea
+                  </Label>
+                  <Textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g., A workspace for planning my wedding — guest lists, vendor contacts, budget tracking, and timeline..."
                     rows={3}
-                    className="w-full py-2.5 px-4 bg-bg border border-border rounded-xl text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
                   />
                 </>
               )}
@@ -211,21 +216,16 @@ export function CreateProjectModal({
               )}
 
               <div className="flex justify-end gap-3 mt-5">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm text-text-muted hover:text-text transition-colors"
-                >
+                <Button type="button" variant="ghost" onClick={onClose}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={
                     !name.trim() ||
                     (selection?.mode === "ai" && !prompt.trim()) ||
                     loading
                   }
-                  className="px-5 py-2 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium inline-flex items-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -237,12 +237,12 @@ export function CreateProjectModal({
                   ) : (
                     "Create workspace"
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

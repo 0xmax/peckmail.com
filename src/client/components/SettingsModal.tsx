@@ -1,6 +1,11 @@
-import { useEffect } from "react";
 import { MembersPanel } from "./MembersPanel.js";
 import { InviteForm } from "./InviteModal.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
 
 export function SettingsModal({
   projectId,
@@ -11,28 +16,16 @@ export function SettingsModal({
   onClose: () => void;
   onLeave?: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="bg-surface rounded-2xl w-full max-w-2xl border border-border shadow-xl flex flex-col"
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        className="max-w-2xl p-0 flex flex-col"
         style={{ maxHeight: "80vh" }}
+        showCloseButton={false}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border">
-          <h2 className="text-lg font-semibold text-text">Share</h2>
+          <DialogTitle>Share</DialogTitle>
           <button
             onClick={onClose}
             className="text-text-muted hover:text-text transition-colors text-xl leading-none"
@@ -46,7 +39,7 @@ export function SettingsModal({
           <InviteForm projectId={projectId} />
           <MembersPanel projectId={projectId} onLeave={onLeave} />
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { Monitor, Terminal } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button.js";
+import { Input } from "@/components/ui/input.js";
 
 interface ApiKey {
   id: string;
@@ -97,12 +99,13 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
               <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text select-all">
                 {MCP_URL}
               </code>
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => copy(MCP_URL, "mcp-url")}
-                className="shrink-0 px-2.5 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg hover:text-text hover:border-text-muted transition-colors"
               >
                 {copiedField === "mcp-url" ? "Copied!" : "Copy"}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -133,48 +136,52 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
 
             {/* Created key display */}
             {createdKey && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-3">
-                <p className="font-medium text-green-800">
+              <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-3 space-y-3">
+                <p className="font-medium text-green-800 dark:text-green-200">
                   Key created! Copy it now — you won't see it again.
                 </p>
                 <div className="flex items-center gap-1.5">
-                  <code className="flex-1 bg-white border border-green-200 rounded px-2 py-1.5 font-mono text-green-900 break-all select-all">
+                  <code className="flex-1 bg-white dark:bg-green-900 border border-green-200 dark:border-green-700 rounded px-2 py-1.5 font-mono text-green-900 dark:text-green-100 break-all select-all">
                     {createdKey}
                   </code>
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => copy(createdKey, "key")}
-                    className="shrink-0 px-2.5 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    className="shrink-0 bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white border-transparent"
                   >
                     {copiedField === "key" ? "Copied!" : "Copy key"}
-                  </button>
+                  </Button>
                 </div>
 
                 {/* CLI one-liner */}
                 <div>
-                  <label className="font-medium text-green-800 block mb-1">Run in terminal:</label>
+                  <label className="font-medium text-green-800 dark:text-green-200 block mb-1">Run in terminal:</label>
                   <div className="flex items-center gap-1.5">
-                    <code className="flex-1 bg-white border border-green-200 rounded px-2 py-1.5 font-mono text-green-900 break-all select-all">
+                    <code className="flex-1 bg-white dark:bg-green-900 border border-green-200 dark:border-green-700 rounded px-2 py-1.5 font-mono text-green-900 dark:text-green-100 break-all select-all">
                       claude mcp add peckmail --url {MCP_URL} --header &quot;Authorization: Bearer {createdKey}&quot;
                     </code>
-                    <button
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => copy(`claude mcp add peckmail --url ${MCP_URL} --header "Authorization: Bearer ${createdKey}"`, "cli")}
-                      className="shrink-0 px-2.5 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      className="shrink-0 bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white border-transparent"
                     >
                       {copiedField === "cli" ? "Copied!" : "Copy"}
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 pt-1">
                   <button
                     onClick={handleDownloadConfig}
-                    className="font-medium text-green-700 hover:text-green-900 transition-colors underline"
+                    className="font-medium text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100 transition-colors underline"
                   >
                     Download config file instead
                   </button>
                   <button
                     onClick={() => setCreatedKey(null)}
-                    className="text-green-600 hover:text-green-800 transition-colors"
+                    className="text-green-600 hover:text-green-800 dark:text-green-300 dark:hover:text-green-100 transition-colors"
                   >
                     Dismiss
                   </button>
@@ -185,21 +192,21 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
             {/* Create new key */}
             {!createdKey && (
               <div className="flex items-center gap-1.5">
-                <input
+                <Input
                   type="text"
                   placeholder="Key name (e.g. My Laptop)"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreateKey()}
-                  className="flex-1 bg-white border border-border rounded-lg px-2.5 py-1.5 text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="flex-1"
                 />
-                <button
+                <Button
+                  size="sm"
                   onClick={handleCreateKey}
                   disabled={creatingKey || !newKeyName.trim()}
-                  className="shrink-0 px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors disabled:opacity-50"
                 >
                   {creatingKey ? "..." : "Create key"}
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -238,12 +245,13 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
                 <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text break-all select-all">
                   {email}
                 </code>
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => copy(email, "email")}
-                  className="shrink-0 px-2.5 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg hover:text-text hover:border-text-muted transition-colors"
                 >
                   {copiedField === "email" ? "Copied!" : "Copy"}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (

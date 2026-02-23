@@ -30,6 +30,8 @@ import { api } from "../lib/api.js";
 import { useToast } from "../context/ToastContext.js";
 import { useDictation } from "../hooks/useDictation.js";
 import { DictationOverlay } from "./DictationOverlay.js";
+import { Button } from "@/components/ui/button.js";
+import { Separator } from "@/components/ui/separator.js";
 
 interface EditorToolbarProps {
   editorViewRef: RefObject<EditorView | null>;
@@ -49,18 +51,10 @@ function ToolbarButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      title={title}
-      className="p-1.5 rounded text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
-    >
+    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClick} title={title}>
       {children}
-    </button>
+    </Button>
   );
-}
-
-function Separator() {
-  return <div className="w-px h-5 bg-border mx-0.5" />;
 }
 
 export function EditorToolbar({
@@ -148,7 +142,7 @@ export function EditorToolbar({
               <TextStrikethrough size={16} />
             </ToolbarButton>
 
-            <Separator />
+            <Separator orientation="vertical" className="mx-0.5 h-5" />
 
             <ToolbarButton
               onClick={() => { const v = getView(); if (v) toggleHeading(v, 1); }}
@@ -169,7 +163,7 @@ export function EditorToolbar({
               <TextHThree size={16} />
             </ToolbarButton>
 
-            <Separator />
+            <Separator orientation="vertical" className="mx-0.5 h-5" />
 
             <ToolbarButton
               onClick={() => { const v = getView(); if (v) toggleList(v, false); }}
@@ -190,7 +184,7 @@ export function EditorToolbar({
               <Quotes size={16} />
             </ToolbarButton>
 
-            <Separator />
+            <Separator orientation="vertical" className="mx-0.5 h-5" />
 
             <ToolbarButton
               onClick={() => { const v = getView(); if (v) wrapSelection(v, "`", "`"); }}
@@ -215,7 +209,14 @@ export function EditorToolbar({
 
         <div className="flex-1" />
 
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 ${
+            isRecording
+              ? "text-danger recording-pulse"
+              : ""
+          }`}
           onClick={() => {
             const v = getView();
             if (!v) return;
@@ -226,33 +227,27 @@ export function EditorToolbar({
             }
           }}
           title={isRecording ? "Stop dictation (Ctrl+Shift+D)" : "Dictate (Ctrl+Shift+D)"}
-          className={`p-1.5 rounded transition-colors ${
-            isRecording
-              ? "text-danger recording-pulse"
-              : "text-text-muted hover:text-text hover:bg-surface-alt"
-          }`}
         >
           <Microphone size={16} weight={isRecording ? "fill" : "regular"} />
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
           onClick={handleSharePage}
           disabled={shareLoading}
           title="Share this page"
-          className="p-1.5 rounded transition-colors text-text-muted hover:text-text hover:bg-surface-alt"
         >
           <LinkSimple size={16} />
-        </button>
+        </Button>
 
-        <Separator />
+        <Separator orientation="vertical" className="mx-0.5 h-5" />
 
-        <button
+        <Button
+          variant={showPreview ? "secondary" : "ghost"}
+          size="sm"
           onClick={onTogglePreview}
-          className={`flex items-center gap-1.5 text-sm px-3 py-1 rounded-lg transition-colors ${
-            showPreview
-              ? "bg-surface-alt text-accent"
-              : "text-text-muted hover:text-text hover:bg-surface-alt"
-          }`}
           title={showPreview ? "Edit mode" : "Preview mode"}
         >
           {showPreview ? (
@@ -264,7 +259,7 @@ export function EditorToolbar({
               <Eye size={14} /> Preview
             </>
           )}
-        </button>
+        </Button>
       </div>
 
       {/* Dictation overlay — slides down when recording */}

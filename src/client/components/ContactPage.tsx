@@ -1,5 +1,10 @@
 import { useState } from "react";
 import { Envelope, SpinnerGap, CheckCircle, ArrowLeft } from "@phosphor-icons/react";
+import { Input } from "@/components/ui/input.js";
+import { Textarea } from "@/components/ui/textarea.js";
+import { Button } from "@/components/ui/button.js";
+import { Label } from "@/components/ui/label.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 
 export function ContactPage() {
   const [name, setName] = useState("");
@@ -34,6 +39,10 @@ export function ContactPage() {
 
   return (
     <div className="min-h-screen bg-bg">
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
+
       <header className="bg-surface border-b border-border px-6 py-4 flex items-center gap-3">
         <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <img src="/assets/logo.png" alt="Peckmail" className="h-7 w-auto" />
@@ -62,37 +71,34 @@ export function ContactPage() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-text mb-1.5">Name</label>
-                <input
+                <Label htmlFor="name" className="block text-sm font-medium text-text mb-1.5">Name</Label>
+                <Input
                   id="name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
                   placeholder="Your name"
                 />
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-text mb-1.5">Email</label>
-                <input
+                <Label htmlFor="email" className="block text-sm font-medium text-text mb-1.5">Email</Label>
+                <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
                   placeholder="you@example.com"
                 />
               </div>
 
               <div>
-                <label htmlFor="message" className="block text-sm font-medium text-text mb-1.5">Message</label>
-                <textarea
+                <Label htmlFor="message" className="block text-sm font-medium text-text mb-1.5">Message</Label>
+                <Textarea
                   id="message"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={5}
-                  className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors resize-none"
                   placeholder="What's on your mind?"
                 />
               </div>
@@ -101,11 +107,7 @@ export function ContactPage() {
                 <p className="text-sm text-red-600">{errorMsg}</p>
               )}
 
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors font-medium"
-              >
+              <Button className="w-full h-12" disabled={!canSubmit}>
                 {status === "sending" ? (
                   <>
                     <SpinnerGap size={18} className="animate-spin" />
@@ -117,7 +119,7 @@ export function ContactPage() {
                     Send message
                   </>
                 )}
-              </button>
+              </Button>
             </form>
           </>
         )}

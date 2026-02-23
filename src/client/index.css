@@ -2,40 +2,77 @@
 @import "tw-animate-css";
 @source "../server/index.ts";
 
+/* ── Stone light palette ─────────────────────────── */
 :root {
-  --background: 34 45% 97%;
-  --foreground: 24 20% 20%;
+  --background: 0 0% 100%;
+  --foreground: 24 10% 10%;
   --card: 0 0% 100%;
-  --card-foreground: 24 20% 20%;
+  --card-foreground: 24 10% 10%;
   --popover: 0 0% 100%;
-  --popover-foreground: 24 20% 20%;
+  --popover-foreground: 24 10% 10%;
   --primary: 25 40% 59%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 28 33% 92%;
-  --secondary-foreground: 24 20% 20%;
-  --muted: 28 33% 92%;
-  --muted-foreground: 25 14% 54%;
+  --secondary: 30 10% 95%;
+  --secondary-foreground: 24 10% 10%;
+  --muted: 30 10% 95%;
+  --muted-foreground: 24 5% 46%;
   --accent: 25 40% 59%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 59% 57%;
   --destructive-foreground: 0 0% 100%;
-  --border: 28 30% 87%;
-  --input: 28 30% 87%;
+  --border: 20 6% 90%;
+  --input: 20 6% 90%;
   --ring: 25 40% 59%;
   --radius: 0.5rem;
   --sidebar-background: 0 0% 100%;
-  --sidebar-foreground: 24 20% 20%;
+  --sidebar-foreground: 24 10% 10%;
   --sidebar-primary: 25 40% 59%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 28 33% 92%;
-  --sidebar-accent-foreground: 24 20% 20%;
-  --sidebar-border: 28 30% 87%;
+  --sidebar-accent: 30 10% 95%;
+  --sidebar-accent-foreground: 24 10% 10%;
+  --sidebar-border: 20 6% 90%;
   --sidebar-ring: 25 40% 59%;
   --chart-1: 25 40% 59%;
   --chart-2: 28 33% 72%;
   --chart-3: 24 20% 40%;
   --chart-4: 0 59% 57%;
   --chart-5: 120 25% 63%;
+}
+
+/* ── Stone dark palette ──────────────────────────── */
+.dark {
+  --background: 24 10% 10%;
+  --foreground: 30 10% 90%;
+  --card: 24 8% 14%;
+  --card-foreground: 30 10% 90%;
+  --popover: 24 8% 14%;
+  --popover-foreground: 30 10% 90%;
+  --primary: 25 40% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 24 6% 18%;
+  --secondary-foreground: 30 10% 90%;
+  --muted: 24 6% 18%;
+  --muted-foreground: 24 5% 60%;
+  --accent: 25 40% 59%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 55% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 24 6% 22%;
+  --input: 24 6% 22%;
+  --ring: 25 40% 59%;
+  --sidebar-background: 24 8% 14%;
+  --sidebar-foreground: 30 10% 90%;
+  --sidebar-primary: 25 40% 59%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 24 6% 18%;
+  --sidebar-accent-foreground: 30 10% 90%;
+  --sidebar-border: 24 6% 22%;
+  --sidebar-ring: 25 40% 59%;
+  --chart-1: 25 45% 65%;
+  --chart-2: 28 33% 55%;
+  --chart-3: 24 20% 60%;
+  --chart-4: 0 55% 60%;
+  --chart-5: 120 25% 55%;
 }
 
 @theme inline {
@@ -77,26 +114,26 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* Existing custom tokens (preserved) */
-  --color-bg: #faf6f1;
-  --color-surface: #ffffff;
-  --color-surface-alt: #f5ebe0;
-  --color-accent: #c4956a;
-  --color-accent-hover: #b07d52;
-  --color-text: #3d3229;
-  --color-text-body: #544840;
-  --color-text-secondary: #6b5d50;
-  --color-text-muted: #9a8b7a;
-  --color-dark: #2a211a;
-  --color-chat-user: #e5eed8;
-  --color-chat-ai: #f5ebe0;
-  --color-success: #81c784;
-  --color-danger: #d45050;
-  --color-danger-hover: #c03a3a;
-  --color-footer-bg: #1a1510;
-  --color-footer-text: #a89a8c;
-  --color-footer-muted: #7a6e62;
-  --color-footer-dim: #5a4e42;
+  /* Legacy tokens mapped to shadcn vars for migration */
+  --color-bg: hsl(var(--background));
+  --color-surface: hsl(var(--card));
+  --color-surface-alt: hsl(var(--muted));
+  --color-accent: hsl(var(--primary));
+  --color-accent-hover: hsl(25 40% 50%);
+  --color-text: hsl(var(--foreground));
+  --color-text-body: hsl(var(--foreground));
+  --color-text-secondary: hsl(var(--muted-foreground));
+  --color-text-muted: hsl(var(--muted-foreground));
+  --color-dark: hsl(var(--foreground));
+  --color-chat-user: hsl(var(--secondary));
+  --color-chat-ai: hsl(var(--muted));
+  --color-success: hsl(120 40% 55%);
+  --color-danger: hsl(var(--destructive));
+  --color-danger-hover: hsl(0 59% 47%);
+  --color-footer-bg: hsl(24 10% 8%);
+  --color-footer-text: hsl(24 5% 60%);
+  --color-footer-muted: hsl(24 5% 45%);
+  --color-footer-dim: hsl(24 5% 35%);
   --font-heading: 'Playfair Display', Georgia, serif;
 }
 
@@ -117,12 +154,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: hsl(var(--border));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: hsl(var(--muted-foreground));
 }
 
 /* CodeMirror pastel theme overrides */
@@ -144,29 +181,29 @@ body {
 
 .cm-editor .cm-gutters {
   min-width: 3rem;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+  background: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
 }
 
 .cm-editor .cm-activeLineGutter {
-  background: var(--color-surface-alt);
+  background: hsl(var(--muted));
 }
 
 .cm-editor .cm-activeLine {
-  background: rgba(245, 235, 224, 0.3);
+  background: hsl(var(--muted) / 0.3);
 }
 
 .cm-editor .cm-selectionBackground {
-  background: rgba(196, 149, 106, 0.15) !important;
+  background: hsl(var(--primary) / 0.15) !important;
 }
 
 .cm-editor.cm-focused .cm-selectionBackground {
-  background: rgba(196, 149, 106, 0.25) !important;
+  background: hsl(var(--primary) / 0.25) !important;
 }
 
 .cm-editor .cm-cursor {
-  border-left-color: var(--color-accent);
+  border-left-color: hsl(var(--primary));
 }
 
 /* Toast animation */
@@ -203,7 +240,7 @@ body {
   font-family: 'Georgia', 'Times New Roman', serif;
   font-size: 16px;
   line-height: 1.75;
-  color: var(--color-text);
+  color: hsl(var(--foreground));
 }
 
 .rendered-markdown h1,
@@ -214,7 +251,7 @@ body {
 .rendered-markdown h6 {
   font-family: 'Georgia', 'Times New Roman', serif;
   font-weight: 700;
-  color: var(--color-text);
+  color: hsl(var(--foreground));
   line-height: 1.35;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
@@ -239,7 +276,7 @@ body {
 
 .rendered-markdown strong {
   font-weight: 700;
-  color: var(--color-text);
+  color: hsl(var(--foreground));
 }
 
 .rendered-markdown em {
@@ -248,26 +285,26 @@ body {
 
 .rendered-markdown del {
   text-decoration: line-through;
-  color: var(--color-text-muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .rendered-markdown a {
-  color: var(--color-accent);
+  color: hsl(var(--primary));
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .rendered-markdown a:hover {
-  color: var(--color-accent-hover);
+  color: hsl(25 40% 50%);
 }
 
 .rendered-markdown blockquote {
-  border-left: 3px solid var(--color-accent);
+  border-left: 3px solid hsl(var(--primary));
   padding: 0.25em 1em;
   margin: 1em 0;
-  background: var(--color-surface-alt);
+  background: hsl(var(--muted));
   border-radius: 0 0.4rem 0.4rem 0;
-  color: var(--color-text-secondary);
+  color: hsl(var(--muted-foreground));
 }
 
 .rendered-markdown blockquote p {
@@ -277,19 +314,19 @@ body {
 .rendered-markdown code {
   font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Menlo', monospace;
   font-size: 0.875em;
-  background: var(--color-surface-alt);
+  background: hsl(var(--muted));
   padding: 0.15em 0.4em;
   border-radius: 0.25em;
-  color: var(--color-text);
+  color: hsl(var(--foreground));
 }
 
 .rendered-markdown pre {
   margin: 1em 0;
   padding: 1em;
-  background: var(--color-surface-alt);
+  background: hsl(var(--muted));
   border-radius: 0.5em;
   overflow-x: auto;
-  border: 1px solid var(--color-border);
+  border: 1px solid hsl(var(--border));
 }
 
 .rendered-markdown pre code {
@@ -324,7 +361,7 @@ body {
 
 .rendered-markdown hr {
   border: none;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid hsl(var(--border));
   margin: 1.5em 0;
 }
 
@@ -339,16 +376,16 @@ body {
 .rendered-markdown td {
   padding: 0.5em 0.75em;
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .rendered-markdown th {
   font-weight: 600;
-  background: var(--color-surface-alt);
+  background: hsl(var(--muted));
 }
 
 .rendered-markdown tbody tr:hover {
-  background: rgba(196, 149, 106, 0.06);
+  background: hsl(var(--primary) / 0.06);
 }
 
 .rendered-markdown img {
@@ -360,7 +397,7 @@ body {
 
 .rendered-markdown input[type="checkbox"] {
   margin-right: 0.5em;
-  accent-color: var(--color-accent);
+  accent-color: hsl(var(--primary));
 }
 
 /* Chat markdown — compact version for chat bubbles */
@@ -369,18 +406,18 @@ body {
 .chat-markdown p:last-child { margin-bottom: 0; }
 .chat-markdown strong { font-weight: 600; }
 .chat-markdown em { font-style: italic; }
-.chat-markdown a { color: var(--color-accent); text-decoration: underline; }
+.chat-markdown a { color: hsl(var(--primary)); text-decoration: underline; }
 .chat-markdown code {
   font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
   font-size: 0.85em;
-  background: rgba(0,0,0,0.06);
+  background: hsl(var(--muted));
   padding: 0.15em 0.35em;
   border-radius: 4px;
 }
 .chat-markdown pre {
   margin: 0.5em 0;
   padding: 0.6em 0.8em;
-  background: rgba(0,0,0,0.06);
+  background: hsl(var(--muted));
   border-radius: 6px;
   overflow-x: auto;
   font-size: 0.85em;
@@ -397,15 +434,15 @@ body {
 }
 .chat-markdown h1:first-child, .chat-markdown h2:first-child, .chat-markdown h3:first-child { margin-top: 0; }
 .chat-markdown blockquote {
-  border-left: 2px solid var(--color-accent);
+  border-left: 2px solid hsl(var(--primary));
   padding-left: 0.75em;
   margin: 0.4em 0;
-  color: var(--color-text-muted);
+  color: hsl(var(--muted-foreground));
 }
-.chat-markdown hr { border: none; border-top: 1px solid var(--color-border); margin: 0.6em 0; }
+.chat-markdown hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 0.6em 0; }
 .chat-markdown table { border-collapse: collapse; margin: 0.4em 0; font-size: 0.9em; }
-.chat-markdown th, .chat-markdown td { padding: 0.3em 0.5em; border: 1px solid var(--color-border); }
-.chat-markdown th { font-weight: 600; background: rgba(0,0,0,0.03); }
+.chat-markdown th, .chat-markdown td { padding: 0.3em 0.5em; border: 1px solid hsl(var(--border)); }
+.chat-markdown th { font-weight: 600; background: hsl(var(--muted)); }
 
 /* CSV table preview */
 .csv-table {
@@ -420,7 +457,7 @@ body {
 .csv-table td {
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid hsl(var(--border));
   white-space: nowrap;
   max-width: 320px;
   overflow: hidden;
@@ -429,23 +466,23 @@ body {
 
 .csv-table th {
   font-weight: 600;
-  color: var(--color-text);
-  background: var(--color-surface-alt);
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted));
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
 .csv-table tbody tr:hover {
-  background: rgba(196, 149, 106, 0.06);
+  background: hsl(var(--primary) / 0.06);
 }
 
 .csv-table td {
-  color: var(--color-text);
+  color: hsl(var(--foreground));
 }
 
 .csv-row-num {
-  color: var(--color-text-muted);
+  color: hsl(var(--muted-foreground));
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   width: 3rem;
@@ -460,8 +497,8 @@ body {
   top: 0;
   left: 0;
   width: 2px;
-  background: var(--color-accent);
-  box-shadow: 0 0 8px var(--color-accent), 0 0 20px rgba(196, 149, 106, 0.4);
+  background: hsl(var(--primary));
+  box-shadow: 0 0 8px hsl(var(--primary)), 0 0 20px hsl(var(--primary) / 0.4);
   border-radius: 1px;
   pointer-events: none;
   z-index: 10;
@@ -476,7 +513,7 @@ body {
   top: 0;
   width: 40px;
   height: 100%;
-  background: linear-gradient(to right, transparent, rgba(196, 149, 106, 0.25));
+  background: linear-gradient(to right, transparent, hsl(var(--primary) / 0.25));
   border-radius: 2px;
   pointer-events: none;
 }
@@ -500,9 +537,9 @@ body {
 .skeleton {
   background: linear-gradient(
     90deg,
-    var(--color-surface-alt) 0%,
-    var(--color-surface) 40%,
-    var(--color-surface-alt) 80%
+    hsl(var(--muted)) 0%,
+    hsl(var(--card)) 40%,
+    hsl(var(--muted)) 80%
   );
   background-size: 800px 100%;
   animation: shimmer 1.8s ease-in-out infinite;
@@ -524,14 +561,14 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-danger);
+  background: hsl(var(--destructive));
   animation: recording-pulse 1.2s ease-in-out infinite;
   flex-shrink: 0;
 }
 
 /* Dictation ghost text — partial transcript preview */
 .dictation-ghost {
-  color: var(--color-text-muted);
+  color: hsl(var(--muted-foreground));
   opacity: 0.6;
   font-style: italic;
   pointer-events: none;
@@ -549,11 +586,11 @@ body {
   right: 0;
   width: 320px;
   padding: 0.75rem 1rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
   border-top: none;
   border-radius: 0 0 0.75rem 0.75rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px hsl(var(--foreground) / 0.08);
   z-index: 30;
   animation: overlay-slide-in 0.15s ease-out;
 }
@@ -568,7 +605,7 @@ body {
   display: flex;
   position: relative;
   width: 100%;
-  background: var(--color-surface-alt);
+  background: hsl(var(--muted));
   border-radius: 0.5rem;
   padding: 2px;
 }
@@ -579,7 +616,7 @@ body {
   font-size: 11px;
   font-weight: 500;
   padding: 0.25rem 0;
-  color: var(--color-text-muted);
+  color: hsl(var(--muted-foreground));
   cursor: pointer;
   position: relative;
   z-index: 1;
@@ -589,16 +626,16 @@ body {
 }
 
 .dictation-mode-stop.active {
-  color: var(--color-text);
+  color: hsl(var(--foreground));
 }
 
 .dictation-mode-indicator {
   position: absolute;
   top: 2px;
   bottom: 2px;
-  background: var(--color-surface);
+  background: hsl(var(--card));
   border-radius: 0.375rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.08);
   transition: left 0.2s ease, width 0.2s ease;
   z-index: 0;
 }

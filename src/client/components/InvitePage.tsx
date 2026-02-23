@@ -3,6 +3,8 @@ import { useAuth } from "../context/AuthContext.js";
 import { LoginPage } from "./LoginPage.js";
 import { api } from "../lib/api.js";
 import { SpinnerGap } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button.js";
+import { Card, CardContent } from "@/components/ui/card.js";
 
 interface InviteInfo {
   id: string;
@@ -105,13 +107,15 @@ export function InvitePage({
   if (state.step === "error") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg px-4">
-        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
-          <h1 className="text-xl font-semibold text-text mb-3">Invitation Error</h1>
-          <p className="text-text-muted mb-6">{state.message}</p>
-          <a href="/" className="text-accent hover:underline font-medium">
-            Go to Peckmail
-          </a>
-        </div>
+        <Card className="w-full max-w-md">
+          <CardContent className="p-8 text-center">
+            <h1 className="text-xl font-semibold text-text mb-3">Invitation Error</h1>
+            <p className="text-text-muted mb-6">{state.message}</p>
+            <a href="/" className="text-accent hover:underline font-medium">
+              Go to Peckmail
+            </a>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -119,13 +123,15 @@ export function InvitePage({
   if (state.step === "declined") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg px-4">
-        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
-          <h1 className="text-xl font-semibold text-text mb-3">Invitation Declined</h1>
-          <p className="text-text-muted mb-6">You've declined this invitation.</p>
-          <a href="/" className="text-accent hover:underline font-medium">
-            Go to Peckmail
-          </a>
-        </div>
+        <Card className="w-full max-w-md">
+          <CardContent className="p-8 text-center">
+            <h1 className="text-xl font-semibold text-text mb-3">Invitation Declined</h1>
+            <p className="text-text-muted mb-6">You've declined this invitation.</p>
+            <a href="/" className="text-accent hover:underline font-medium">
+              Go to Peckmail
+            </a>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -133,18 +139,20 @@ export function InvitePage({
   if (state.step === "mismatch") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg px-4">
-        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
-          <h1 className="text-xl font-semibold text-text mb-3">Email Mismatch</h1>
-          <p className="text-text-muted mb-2">
-            This invitation was sent to <strong>{state.info.email}</strong>.
-          </p>
-          <p className="text-text-muted mb-6">
-            Please sign in with that email address to accept.
-          </p>
-          <a href="/" className="text-accent hover:underline font-medium">
-            Go to Peckmail
-          </a>
-        </div>
+        <Card className="w-full max-w-md">
+          <CardContent className="p-8 text-center">
+            <h1 className="text-xl font-semibold text-text mb-3">Email Mismatch</h1>
+            <p className="text-text-muted mb-2">
+              This invitation was sent to <strong>{state.info.email}</strong>.
+            </p>
+            <p className="text-text-muted mb-6">
+              Please sign in with that email address to accept.
+            </p>
+            <a href="/" className="text-accent hover:underline font-medium">
+              Go to Peckmail
+            </a>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -152,26 +160,22 @@ export function InvitePage({
   if (state.step === "confirm") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg px-4">
-        <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border text-center">
-          <h1 className="text-xl font-semibold text-text mb-3">You're Invited</h1>
-          <p className="text-text-muted mb-6">
-            Join <strong>{state.info.projectName}</strong>?
-          </p>
-          <div className="flex gap-3 justify-center">
-            <button
-              onClick={handleDecline}
-              className="px-5 py-2 rounded-lg border border-border text-text-muted hover:bg-bg transition-colors text-sm font-medium"
-            >
-              Decline
-            </button>
-            <button
-              onClick={handleAccept}
-              className="px-5 py-2 rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors text-sm font-medium"
-            >
-              Accept & Join
-            </button>
-          </div>
-        </div>
+        <Card className="w-full max-w-md">
+          <CardContent className="p-8 text-center">
+            <h1 className="text-xl font-semibold text-text mb-3">You're Invited</h1>
+            <p className="text-text-muted mb-6">
+              Join <strong>{state.info.projectName}</strong>?
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Button variant="outline" onClick={handleDecline}>
+                Decline
+              </Button>
+              <Button onClick={handleAccept}>
+                Accept & Join
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

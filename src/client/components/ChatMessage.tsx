@@ -68,7 +68,7 @@ export function ChatMessage({ message }: { message: Message }) {
             {message.toolUse.map((tu, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 text-xs bg-white/60 rounded-lg px-2.5 py-1.5 border border-border"
+                className="flex items-center gap-2 text-xs bg-card/60 rounded-lg px-2.5 py-1.5 border border-border"
               >
                 <span>{toolIcon(tu.tool)}</span>
                 <span className="text-text-muted">

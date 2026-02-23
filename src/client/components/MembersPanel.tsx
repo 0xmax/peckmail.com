@@ -3,7 +3,9 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SkeletonLine, SkeletonCircle } from "./Skeleton.js";
-import { SignOut } from "@phosphor-icons/react";
+import { SignOut, X } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.js";
 
 interface Member {
   user_id: string;
@@ -105,17 +107,21 @@ export function MembersPanel({ projectId, onLeave }: { projectId: string; onLeav
                     )}
                   </div>
                   {isOwner && !isSelf ? (
-                    <select
+                    <Select
                       value={m.role}
-                      onChange={(e) => changeRole(m.user_id, e.target.value)}
-                      className="text-xs text-text-muted bg-transparent border border-border rounded px-1 py-0.5 cursor-pointer hover:border-accent/50 focus:outline-none focus:border-accent"
+                      onValueChange={(v) => changeRole(m.user_id, v)}
                     >
-                      {ROLE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="h-6 text-xs w-auto">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROLE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <div className="text-xs text-text-muted">
                       {ROLE_OPTIONS.find((o) => o.value === m.role)?.label ||
@@ -124,25 +130,15 @@ export function MembersPanel({ projectId, onLeave }: { projectId: string; onLeav
                   )}
                 </div>
                 {isOwner && !isSelf && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
                     onClick={() => removeMember(m.user_id)}
-                    className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 transition-all p-1"
                     title="Remove member"
                   >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
+                    <X size={14} />
+                  </Button>
                 )}
               </div>
             );
@@ -151,13 +147,15 @@ export function MembersPanel({ projectId, onLeave }: { projectId: string; onLeav
       </div>
       {!loading && !isOwner && currentUserId && (
         <div className="px-4 py-3 border-t border-border">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
             onClick={leaveProject}
-            className="flex items-center gap-2 text-sm text-danger hover:text-red-400 transition-colors"
           >
             <SignOut size={15} />
             Leave project
-          </button>
+          </Button>
         </div>
       )}
     </div>

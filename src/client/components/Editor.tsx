@@ -17,6 +17,53 @@ import {
   useTtsPlayback,
 } from "../store/StoreContext.js";
 import { ChatCircle, MagnifyingGlass, PencilLine } from "@phosphor-icons/react";
+import { useTheme } from "../context/ThemeContext.js";
+
+const lightEditorTheme = EditorView.theme({
+  "&": { backgroundColor: "hsl(0 0% 100%)" },
+  ".cm-content": {
+    caretColor: "hsl(25 40% 59%)",
+    maxWidth: "760px",
+    margin: "0 auto",
+    padding: "2rem 1.5rem",
+    fontFamily: "'Georgia', 'Times New Roman', serif",
+    fontSize: "16px",
+    lineHeight: "1.75",
+  },
+  ".cm-line": { padding: "0" },
+  ".cm-ai-highlight": {
+    backgroundColor: "rgba(196, 149, 106, 0.1)",
+    borderLeft: "3px solid hsl(25 40% 59%)",
+  },
+});
+
+const darkEditorTheme = EditorView.theme({
+  "&": { backgroundColor: "hsl(24 10% 10%)" },
+  ".cm-content": {
+    caretColor: "hsl(25 40% 59%)",
+    maxWidth: "760px",
+    margin: "0 auto",
+    padding: "2rem 1.5rem",
+    fontFamily: "'Georgia', 'Times New Roman', serif",
+    fontSize: "16px",
+    lineHeight: "1.75",
+  },
+  ".cm-gutters": {
+    backgroundColor: "hsl(24 8% 14%)",
+    borderRight: "1px solid hsl(24 6% 22%)",
+    color: "hsl(24 5% 60%)",
+  },
+  ".cm-activeLineGutter": { backgroundColor: "hsl(24 6% 18%)" },
+  ".cm-activeLine": { backgroundColor: "hsla(24, 6%, 18%, 0.3)" },
+  ".cm-selectionBackground": { backgroundColor: "hsla(25, 40%, 59%, 0.2) !important" },
+  "&.cm-focused .cm-selectionBackground": { backgroundColor: "hsla(25, 40%, 59%, 0.3) !important" },
+  ".cm-cursor": { borderLeftColor: "hsl(25 40% 59%)" },
+  ".cm-line": { padding: "0" },
+  ".cm-ai-highlight": {
+    backgroundColor: "rgba(196, 149, 106, 0.15)",
+    borderLeft: "3px solid hsl(25 40% 59%)",
+  },
+});
 
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
@@ -110,12 +157,14 @@ export function Editor({ editorViewRef }: EditorProps) {
   const projectSettings = useProjectSettings();
   const simpleMode = Boolean(projectSettings.tts?.simpleMode);
   const ttsPlayback = useTtsPlayback();
+  const { resolvedTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const playbackRef = useRef(ttsPlayback);
   playbackRef.current = ttsPlayback;
   const wrapCompartment = useRef(new Compartment());
+  const themeCompartment = useRef(new Compartment());
   const [wordWrap, setWordWrap] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; line: number; fromChar: number } | null>(null);
@@ -147,6 +196,7 @@ export function Editor({ editorViewRef }: EditorProps) {
         highlightField,
         dictationGhostField,
         wrapCompartment.current.of(wordWrap ? EditorView.lineWrapping : []),
+        themeCompartment.current.of(resolvedTheme === "dark" ? darkEditorTheme : lightEditorTheme),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
@@ -205,27 +255,6 @@ export function Editor({ editorViewRef }: EditorProps) {
             return true;
           },
         }),
-        EditorView.theme({
-          "&": {
-            backgroundColor: "#ffffff",
-          },
-          ".cm-content": {
-            caretColor: "#c4956a",
-            maxWidth: "760px",
-            margin: "0 auto",
-            padding: "2rem 1.5rem",
-            fontFamily: "'Georgia', 'Times New Roman', serif",
-            fontSize: "16px",
-            lineHeight: "1.75",
-          },
-          ".cm-line": {
-            padding: "0",
-          },
-          ".cm-ai-highlight": {
-            backgroundColor: "rgba(196, 149, 106, 0.1)",
-            borderLeft: "3px solid #c4956a",
-          },
-        }),
       ],
     });
 
@@ -263,6 +292,16 @@ export function Editor({ editorViewRef }: EditorProps) {
       ),
     });
   }, [wordWrap]);
+
+  // Switch CodeMirror theme on dark/light mode change
+  useEffect(() => {
+    if (!editorViewRef.current) return;
+    editorViewRef.current.dispatch({
+      effects: themeCompartment.current.reconfigure(
+        resolvedTheme === "dark" ? darkEditorTheme : lightEditorTheme
+      ),
+    });
+  }, [resolvedTheme]);
 
   // Handle external content updates (file:live / file:updated from other clients)
   useEffect(() => {

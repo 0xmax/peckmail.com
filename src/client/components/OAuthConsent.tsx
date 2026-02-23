@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase.js";
 import { useAuth } from "../context/AuthContext.js";
 import { SpinnerGap } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button.js";
+import { Card, CardContent } from "@/components/ui/card.js";
+import { Badge } from "@/components/ui/badge.js";
 
 interface AuthorizationDetails {
   client: { name: string; description?: string };
@@ -77,63 +80,68 @@ export function OAuthConsent() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="bg-surface rounded-xl border border-border p-8 max-w-md w-full text-center">
-          <h1 className="text-lg font-semibold text-text mb-2">Authorization Error</h1>
-          <p className="text-sm text-text-muted">{error}</p>
-        </div>
+        <Card className="max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <h1 className="text-lg font-semibold text-text mb-2">Authorization Error</h1>
+            <p className="text-sm text-text-muted">{error}</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg">
-      <div className="bg-surface rounded-xl border border-border p-8 max-w-md w-full">
-        <div className="text-center mb-6">
-          <div className="text-2xl font-bold text-text mb-1">Peckmail</div>
-          <p className="text-sm text-text-muted">Authorize access to your account</p>
-        </div>
-
-        <div className="bg-surface-alt rounded-lg p-4 mb-6">
-          <div className="text-sm font-medium text-text mb-1">
-            {details?.client?.name || "An application"}
+      <Card className="max-w-md w-full">
+        <CardContent className="p-8">
+          <div className="text-center mb-6">
+            <div className="text-2xl font-bold text-text mb-1">Peckmail</div>
+            <p className="text-sm text-text-muted">Authorize access to your account</p>
           </div>
-          {details?.client?.description && (
-            <p className="text-xs text-text-muted">{details.client.description}</p>
-          )}
-          <p className="text-xs text-text-muted mt-2">
-            wants to access your Peckmail account as <strong>{user?.email}</strong>
-          </p>
-          {details?.scopes && details.scopes.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-border">
-              <div className="text-xs font-medium text-text-muted mb-1">Requested access:</div>
-              <div className="flex flex-wrap gap-1">
-                {details.scopes.map((s) => (
-                  <span key={s} className="text-xs bg-bg px-2 py-0.5 rounded text-text-muted">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={handleDeny}
-            disabled={submitting}
-            className="flex-1 px-4 py-2.5 bg-surface-alt text-text-muted rounded-xl hover:bg-border transition-colors text-sm font-medium disabled:opacity-50"
-          >
-            Deny
-          </button>
-          <button
-            onClick={handleApprove}
-            disabled={submitting}
-            className="flex-1 px-4 py-2.5 bg-accent text-white rounded-xl hover:bg-accent-hover transition-colors text-sm font-medium disabled:opacity-50"
-          >
-            {submitting ? "Authorizing..." : "Approve"}
-          </button>
-        </div>
-      </div>
+          <div className="bg-surface-alt rounded-lg p-4 mb-6">
+            <div className="text-sm font-medium text-text mb-1">
+              {details?.client?.name || "An application"}
+            </div>
+            {details?.client?.description && (
+              <p className="text-xs text-text-muted">{details.client.description}</p>
+            )}
+            <p className="text-xs text-text-muted mt-2">
+              wants to access your Peckmail account as <strong>{user?.email}</strong>
+            </p>
+            {details?.scopes && details.scopes.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-border">
+                <div className="text-xs font-medium text-text-muted mb-1">Requested access:</div>
+                <div className="flex flex-wrap gap-1">
+                  {details.scopes.map((s) => (
+                    <Badge key={s} variant="secondary">
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={handleDeny}
+              disabled={submitting}
+            >
+              Deny
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleApprove}
+              disabled={submitting}
+            >
+              {submitting ? "Authorizing..." : "Approve"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
