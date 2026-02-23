@@ -263,8 +263,27 @@ interface TtsRequest {
   speed?: number;
 }
 
+interface TtsClientLogRequest {
+  scope?: string;
+  message?: string;
+  level?: "debug" | "info" | "warn" | "error" | string;
+  projectId?: string;
+  meta?: Record<string, unknown>;
+  error?: {
+    name?: string;
+    message?: string;
+    stack?: string;
+  };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function toLogText(value: unknown, max: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (!value) return undefined;
+  return value.slice(0, max);
 }
 
 // --- Routes ---
@@ -448,6 +467,58 @@ ttsRouter.get("/tts/preview/:voiceId", authMiddleware, async (c) => {
 
   previewCache.set(vid, { url: previewUrl, expiresAt: Date.now() + 60 * 60 * 1000 });
   return c.redirect(previewUrl);
+});
+
+// Client-side TTS errors (player/core) forwarded for server-side observability
+ttsRouter.post("/tts/client-log", authMiddleware, async (c) => {
+  const user = getUser(c);
+  let body: TtsClientLogRequest = {};
+  try {
+    body = await c.req.json<TtsClientLogRequest>();
+  } catch {
+    // ignore malformed payloads; we'll still log caller context.
+  }
+
+  const scope = toLogText(body.scope, 160) || "tts.client";
+  const message = toLogText(body.message, 4000) || "Client TTS error";
+  const levelRaw = toLogText(body.level, 16) || "info";
+  const level = (["debug", "info", "warn", "error"] as const).includes(levelRaw as any)
+    ? (levelRaw as "debug" | "info" | "warn" | "error")
+    : "info";
+  const projectId = toLogText(body.projectId, 120);
+  const errorName = toLogText(body.error?.name, 160);
+  const errorMessage = toLogText(body.error?.message, 4000);
+  const errorStack = toLogText(body.error?.stack, 12000);
+  const meta =
+    body.meta && typeof body.meta === "object" && !Array.isArray(body.meta)
+      ? body.meta
+      : {};
+
+  const payload = {
+    userId: user.id,
+    email: user.email,
+    scope,
+    level,
+    message,
+    projectId,
+    meta,
+    error: {
+      name: errorName,
+      message: errorMessage,
+      stack: errorStack,
+    },
+  };
+
+  const prefix = `[tts][client][${level}]`;
+  if (level === "error") {
+    console.error(prefix, payload);
+  } else if (level === "warn") {
+    console.warn(prefix, payload);
+  } else {
+    console.log(prefix, payload);
+  }
+
+  return c.json({ ok: true });
 });
 
 // Prepare TTS: check disk cache or create streaming job

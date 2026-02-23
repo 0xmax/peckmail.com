@@ -18,6 +18,7 @@ import type {
   TtsPlayback,
   HighlightRange,
   IncomingEmail,
+  TtsPlayFromTarget,
 } from "./types.js";
 
 const StoreContext = createContext<WorkspaceStore | null>(null);
@@ -128,7 +129,7 @@ export function useTtsPlayback(): TtsPlayback | null {
   return useSelector((s) => s.ttsPlayback);
 }
 
-export function useTtsFromLine(): number | null {
+export function useTtsFromLine(): TtsPlayFromTarget | null {
   return useSelector((s) => s.ttsFromLine);
 }
 

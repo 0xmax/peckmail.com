@@ -8,7 +8,18 @@ import {
 } from "../store/StoreContext.js";
 import { useAuth } from "../context/AuthContext.js";
 import { supabase } from "../lib/supabase.js";
-import { Rewind, Stop, Pause, Play, SkipForward, DownloadSimple, SpeakerX, SpeakerLow, SpeakerHigh, GearSix, Warning, X, ArrowsClockwise, SpinnerGap } from "@phosphor-icons/react";
+import { pipeTtsErrorToServer } from "../lib/ttsClientLog.js";
+import {
+  TtsRenderCore,
+  buildTtsChunks,
+  clampV2Settings,
+  getTimestampDuration,
+  type LineTimestamp,
+  type TtsChunk,
+  type TtsPreparedChunk,
+  type V2Settings,
+} from "../lib/ttsCore.js";
+import { Rewind, Stop, Pause, Play, SkipForward, DownloadSimple, SpeakerX, SpeakerLow, SpeakerHigh, GearSix, Warning, X, ArrowsClockwise, SpinnerGap, ListBullets } from "@phosphor-icons/react";
 
 // Pastel palette for generative art
 const PASTELS = [
@@ -127,23 +138,9 @@ const VOICES = [
 type PlayState = "idle" | "loading" | "playing" | "paused";
 type TtsModel = "v3" | "v2";
 
-interface LineTimestamp {
-  start: number;
-  end: number;
-  line: number;
-  fromChar: number;
-  toChar: number;
-}
-
-interface V2Settings {
-  stability: number;
-  similarityBoost: number;
-  style: number;
-  speed: number;
-}
-
 const V2_SPEED_MIN = 0.7;
 const V2_SPEED_MAX = 1.2;
+const DEFAULT_VOICE_ID = "pqHfZKP75CvOlQylNhV4";
 
 const DEFAULT_V2: V2Settings = {
   stability: 0.5,
@@ -151,36 +148,6 @@ const DEFAULT_V2: V2Settings = {
   style: 0,
   speed: 1.0,
 };
-
-function clampV2Settings(input: V2Settings): V2Settings {
-  return {
-    ...input,
-    speed: Math.max(V2_SPEED_MIN, Math.min(V2_SPEED_MAX, input.speed)),
-  };
-}
-
-function isValidTimestamp(x: any): x is LineTimestamp {
-  return (
-    x &&
-    Number.isFinite(x.start) &&
-    Number.isFinite(x.end) &&
-    Number.isFinite(x.line) &&
-    Number.isFinite(x.fromChar) &&
-    Number.isFinite(x.toChar) &&
-    x.end > x.start &&
-    x.toChar > x.fromChar
-  );
-}
-
-function getTimestampDuration(timestamps: LineTimestamp[]): number {
-  let maxEnd = 0;
-  for (const ts of timestamps) {
-    if (Number.isFinite(ts.end) && ts.end > maxEnd) {
-      maxEnd = ts.end;
-    }
-  }
-  return maxEnd;
-}
 
 /** Find 1-indexed line numbers where new chunks (paragraphs / headings) start */
 function getChunkStartLines(content: string): number[] {
@@ -197,6 +164,155 @@ function getChunkStartLines(content: string): number[] {
   return starts;
 }
 
+function mergeTtsSettings(
+  workspaceTts: {
+    voiceId?: string;
+    model?: TtsModel;
+    simpleMode?: boolean;
+    followAlong?: boolean;
+    v2?: V2Settings;
+  } | undefined,
+  accountTts: {
+    voiceId?: string;
+    model?: TtsModel;
+    simpleMode?: boolean;
+    followAlong?: boolean;
+    v2?: V2Settings;
+  } | undefined
+): { voiceId: string; model: TtsModel; simpleMode: boolean; followAlong: boolean; v2: V2Settings } {
+  return {
+    voiceId: workspaceTts?.voiceId ?? accountTts?.voiceId ?? DEFAULT_VOICE_ID,
+    model: workspaceTts?.model ?? accountTts?.model ?? "v2",
+    simpleMode: workspaceTts?.simpleMode ?? accountTts?.simpleMode ?? false,
+    followAlong: workspaceTts?.followAlong ?? accountTts?.followAlong ?? true,
+    v2: clampV2Settings({
+      ...DEFAULT_V2,
+      ...(accountTts?.v2 || {}),
+      ...(workspaceTts?.v2 || {}),
+    }),
+  };
+}
+
+function estimateChunkDurationSeconds(chunk: TtsChunk): number {
+  return Math.max(2.5, chunk.text.length / 16);
+}
+
+function sum(values: number[]): number {
+  let total = 0;
+  for (const value of values) {
+    if (Number.isFinite(value) && value > 0) total += value;
+  }
+  return total;
+}
+
+const PRECISE_SEEK_STT_WAIT_MS = 1400;
+const FULL_PREP_CONCURRENCY = 6;
+const PLAY_FROM_WORD_BACKOFF = 1;
+const AVG_CHARS_PER_WORD = 6;
+
+type ChunkAudioStatus =
+  | "pending"
+  | "preparing"
+  | "ready-cached"
+  | "ready-streaming"
+  | "playing"
+  | "error";
+
+type ChunkTimingStatus = "pending" | "ready" | "missing";
+
+interface ChunkRuntimeStatus {
+  audio: ChunkAudioStatus;
+  timing: ChunkTimingStatus;
+  note?: string;
+}
+
+function audioStatusLabel(status: ChunkAudioStatus): string {
+  switch (status) {
+    case "pending":
+      return "pending";
+    case "preparing":
+      return "preparing";
+    case "ready-cached":
+      return "cached";
+    case "ready-streaming":
+      return "stream";
+    case "playing":
+      return "playing";
+    case "error":
+      return "error";
+  }
+}
+
+function audioStatusTone(status: ChunkAudioStatus): string {
+  switch (status) {
+    case "playing":
+      return "text-accent";
+    case "ready-cached":
+      return "text-success";
+    case "ready-streaming":
+      return "text-text";
+    case "error":
+      return "text-danger";
+    default:
+      return "text-text-muted";
+  }
+}
+
+function timingStatusTone(status: ChunkTimingStatus): string {
+  switch (status) {
+    case "ready":
+      return "text-success";
+    case "missing":
+      return "text-danger";
+    case "pending":
+      return "text-text-muted";
+  }
+}
+
+function getPreciseSeekStart(
+  timestamps: LineTimestamp[],
+  seekLine?: number,
+  seekChunkChar?: number
+): number | null {
+  if (timestamps.length === 0) return null;
+
+  if (typeof seekChunkChar === "number" && Number.isFinite(seekChunkChar)) {
+    const backoffChars = PLAY_FROM_WORD_BACKOFF * AVG_CHARS_PER_WORD;
+    const targetChar = Math.max(0, seekChunkChar - backoffChars);
+    const containing = timestamps.find(
+      (entry) => targetChar >= entry.fromChar && targetChar <= entry.toChar
+    );
+    if (containing) {
+      const span = Math.max(1, containing.toChar - containing.fromChar);
+      const ratio = Math.max(
+        0,
+        Math.min(1, (targetChar - containing.fromChar) / span)
+      );
+      return containing.start + ratio * (containing.end - containing.start);
+    }
+
+    const forward = timestamps.find((entry) => entry.fromChar >= targetChar);
+    if (forward) return forward.start;
+
+    let backward: LineTimestamp | null = null;
+    for (const entry of timestamps) {
+      if (entry.toChar <= targetChar) backward = entry;
+    }
+    if (backward) return backward.start;
+  }
+
+  if (seekLine && seekLine > 1) {
+    const lineTarget = timestamps.find((entry) => entry.line >= seekLine);
+    if (lineTarget) return lineTarget.start;
+  }
+
+  return timestamps[0]?.start ?? null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function AudioBar({ onClose }: { onClose: () => void }) {
   const { path: openFilePath, content } = useOpenFile();
   const projectId = useProjectId();
@@ -204,8 +320,32 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
   const ttsFromLine = useTtsFromLine();
   const projectSettings = useProjectSettings();
   const { preferences: userPrefs } = useAuth();
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const activeStreamId = useRef<string | null>(null);
+  const coreRef = useRef<TtsRenderCore | null>(null);
+  const coreProjectIdRef = useRef<string | null>(null);
+  const playbackSessionRef = useRef(0);
+  const chunkPlanRef = useRef<TtsChunk[]>([]);
+  const preparedChunksRef = useRef<Map<number, TtsPreparedChunk>>(new Map());
+  const chunkAudioPrepRef = useRef<Map<number, Promise<TtsPreparedChunk>>>(new Map());
+  const chunkDurationsRef = useRef<number[]>([]);
+  const currentChunkRef = useRef<TtsChunk | null>(null);
+  const currentChunkIndexRef = useRef(0);
+  const forceRunRef = useRef(false);
+  const fullPrepPromiseRef = useRef<Promise<void> | null>(null);
+  const fullPrepKeyRef = useRef<string>("");
+  const fullPrepRunIdRef = useRef(0);
+  const blobUrlsRef = useRef<Set<string>>(new Set());
+  const stopPlaybackRef = useRef<() => void>(() => {});
+  const playChunkRef = useRef<((chunkIndex: number, options: {
+    sessionId: number;
+    startAt?: number;
+    force?: boolean;
+    seekLine?: number;
+    seekChar?: number;
+    preferPreciseSeek?: boolean;
+  }) => Promise<void>) | null>(null);
+
   const [state, setState] = useState<PlayState>("idle");
   const [progress, setProgress] = useState(0);
   const [mediaDuration, setMediaDuration] = useState(0);
@@ -213,48 +353,92 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
   const [model, setModel] = useState<TtsModel>("v2");
-  const [voiceId, setVoiceId] = useState(VOICES[0].id);
+  const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   const [simpleMode, setSimpleMode] = useState(false);
+  const [followAlong, setFollowAlong] = useState(true);
   const [v2Settings, setV2Settings] = useState<V2Settings>(DEFAULT_V2);
   const [error, setError] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [downloadBusy, setDownloadBusy] = useState(false);
+  const [, setDetailsVersion] = useState(0);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLDivElement>(null);
   const timestampsRef = useRef<LineTimestamp[]>([]);
+  const applyChunkTimestampsRef = useRef<(chunkIndex: number, ts: LineTimestamp[]) => void>(
+    () => {}
+  );
   const missingTimingLoggedRef = useRef(false);
-  const settingsInitialized = useRef(false);
+  const settingsHydratedRef = useRef(false);
+  const skipNextSettingsSaveRef = useRef(false);
+  const projectSettingsRef = useRef(projectSettings);
+  const chunkStatusRef = useRef<Map<number, ChunkRuntimeStatus>>(new Map());
   const lastHighlightLine = useRef<number | null>(null);
-  const charOffsetRef = useRef(0);
   const forceRegenRef = useRef(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize from project settings, falling back to user preferences
+  const bumpDetails = useCallback(() => {
+    setDetailsVersion((v) => (v + 1) % 1000000);
+  }, []);
+
+  const setChunkStatus = useCallback(
+    (chunkIndex: number, patch: Partial<ChunkRuntimeStatus>) => {
+      const current = chunkStatusRef.current.get(chunkIndex) || {
+        audio: "pending",
+        timing: "pending",
+      };
+      chunkStatusRef.current.set(chunkIndex, { ...current, ...patch });
+      bumpDetails();
+    },
+    [bumpDetails]
+  );
+
+  const mergedTts = useMemo(
+    () => mergeTtsSettings(projectSettings.tts, userPrefs.tts),
+    [projectSettings.tts, userPrefs.tts]
+  );
+
   useEffect(() => {
-    if (settingsInitialized.current) return;
-    const tts = projectSettings.tts || userPrefs.tts;
-    if (!tts) return;
-    settingsInitialized.current = true;
-    if (tts.voiceId) setVoiceId(tts.voiceId);
-    if (tts.model) setModel(tts.model);
-    if (typeof tts.simpleMode === "boolean") setSimpleMode(tts.simpleMode);
-    if (tts.v2) setV2Settings(clampV2Settings(tts.v2));
-  }, [projectSettings, userPrefs]);
+    projectSettingsRef.current = projectSettings;
+  }, [projectSettings]);
+
+  // Workspace-level settings override account defaults per-field.
+  useEffect(() => {
+    setVoiceId(mergedTts.voiceId);
+    setModel(mergedTts.model);
+    setSimpleMode(mergedTts.simpleMode);
+    setFollowAlong(mergedTts.followAlong);
+    setV2Settings(clampV2Settings(mergedTts.v2));
+    settingsHydratedRef.current = true;
+    skipNextSettingsSaveRef.current = true;
+  }, [
+    mergedTts.voiceId,
+    mergedTts.model,
+    mergedTts.simpleMode,
+    mergedTts.followAlong,
+    mergedTts.v2.stability,
+    mergedTts.v2.similarityBoost,
+    mergedTts.v2.style,
+    mergedTts.v2.speed,
+  ]);
 
   // Close settings on outside click
   useEffect(() => {
-    if (!showSettings) return;
+    if (!showSettings && !showDetails) return;
     const handler = (e: MouseEvent) => {
-      if (
-        settingsRef.current &&
-        !settingsRef.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node;
+      const inSettings = settingsRef.current?.contains(target);
+      const inDetails = detailsRef.current?.contains(target);
+      if (!inSettings && !inDetails) {
         setShowSettings(false);
+        setShowDetails(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showSettings]);
+  }, [showSettings, showDetails]);
 
   // Stop preview when settings panel closes
   useEffect(() => {
@@ -264,6 +448,68 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
       setPreviewingVoice(null);
     }
   }, [showSettings]);
+
+  // Stop all audio output when navigating away or unloading the page.
+  useEffect(() => {
+    const haltAudio = () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      audioRef.current = null;
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current.currentTime = 0;
+      }
+      previewAudioRef.current = null;
+    };
+
+    window.addEventListener("pagehide", haltAudio);
+    window.addEventListener("beforeunload", haltAudio);
+    return () => {
+      window.removeEventListener("pagehide", haltAudio);
+      window.removeEventListener("beforeunload", haltAudio);
+      haltAudio();
+    };
+  }, []);
+
+  const reportTtsClientLog = useCallback(
+    (
+      scope: string,
+      message: string,
+      options?: {
+        level?: "debug" | "info" | "warn" | "error";
+        error?: unknown;
+        meta?: Record<string, unknown>;
+      }
+    ) => {
+      void pipeTtsErrorToServer({
+        scope,
+        message,
+        level: options?.level || "info",
+        error: options?.error,
+        meta: options?.meta,
+        projectId,
+      });
+    },
+    [projectId]
+  );
+
+  const reportTtsClientError = useCallback(
+    (
+      scope: string,
+      message: string,
+      error?: unknown,
+      meta?: Record<string, unknown>
+    ) => {
+      reportTtsClientLog(scope, message, {
+        level: "error",
+        error,
+        meta,
+      });
+    },
+    [reportTtsClientLog]
+  );
 
   const previewVoice = useCallback(
     async (vid: string, e: React.MouseEvent) => {
@@ -283,6 +529,19 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         previewAudioRef.current = null;
       }
 
+      // Preview should take over output — stop the main reader first.
+      if (audioRef.current || state !== "idle") {
+        reportTtsClientLog(
+          "audio_bar.preview_voice.stop_main",
+          "Stopping main audio before preview",
+          {
+            level: "info",
+            meta: { currentState: state, voiceId: vid },
+          }
+        );
+        stopPlaybackRef.current();
+      }
+
       setPreviewingVoice(vid);
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -296,130 +555,333 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         });
         previewAudioRef.current = audio;
         await audio.play();
-      } catch {
+      } catch (err) {
+        reportTtsClientError(
+          "audio_bar.preview_voice",
+          "Voice preview playback failed",
+          err,
+          { voiceId: vid }
+        );
         setPreviewingVoice(null);
         previewAudioRef.current = null;
       }
     },
-    [previewingVoice, volume]
+    [previewingVoice, reportTtsClientError, reportTtsClientLog, state, volume]
   );
 
   // Auto-save TTS settings to project when changed
   useEffect(() => {
-    if (!settingsInitialized.current) return;
+    if (!settingsHydratedRef.current) return;
+    if (skipNextSettingsSaveRef.current) {
+      skipNextSettingsSaveRef.current = false;
+      return;
+    }
+
     const settings = {
-      ...projectSettings,
+      ...projectSettingsRef.current,
       tts: {
         voiceId,
         model,
         simpleMode,
-        v2: v2Settings,
+        followAlong,
+        v2: clampV2Settings(v2Settings),
       },
     };
     dispatch({ type: "settings:save", settings });
-  }, [voiceId, model, simpleMode, v2Settings]); // intentionally omit dispatch/projectSettings to avoid loops
+  }, [voiceId, model, simpleMode, followAlong, v2Settings, dispatch]);
 
-  const cleanup = useCallback(() => {
-    activeStreamId.current = null;
+  const getAccessToken = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? "";
   }, []);
 
-  const stop = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
+  const ensureCore = useCallback(() => {
+    const settings = {
+      voiceId,
+      model,
+      v2: clampV2Settings(v2Settings),
+    };
+    if (!coreRef.current || coreProjectIdRef.current !== projectId) {
+      coreRef.current = new TtsRenderCore({
+        projectId,
+        getAccessToken,
+        settings,
+      });
+      coreProjectIdRef.current = projectId;
+      return coreRef.current;
     }
-    audioRef.current = null;
-    timestampsRef.current = [];
-    missingTimingLoggedRef.current = false;
-    cleanup();
-    setState("idle");
-    setProgress(0);
-    setMediaDuration(0);
-    setTimingDuration(0);
-    setCurrentTime(0);
-    setActivity(null);
-    dispatch({ type: "tts:clear" });
-  }, [dispatch, cleanup]);
+    coreRef.current.updateSettings(settings);
+    return coreRef.current;
+  }, [getAccessToken, model, projectId, v2Settings, voiceId]);
 
-  // Stop playback when file changes
-  useEffect(() => {
-    stop();
-  }, [openFilePath, stop]);
+  const clearBlobUrls = useCallback(() => {
+    for (const url of blobUrlsRef.current) {
+      URL.revokeObjectURL(url);
+    }
+    blobUrlsRef.current.clear();
+  }, []);
 
-  // Sync volume
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
+  const materializeStreamingChunk = useCallback(
+    async (chunk: TtsChunk, prepared: TtsPreparedChunk): Promise<TtsPreparedChunk> => {
+      if (!prepared.streamId) return prepared;
+      const core = ensureCore();
+      let candidate = prepared;
+      let lastErr: unknown = null;
 
-  // Poll for real Whisper timestamps (required for cursor animation).
-  const pollTimestamps = useCallback(
-    async (streamId: string, token: string) => {
-      for (let i = 0; i < 60; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        if (activeStreamId.current !== streamId) return;
-        if (i === 2) setActivity("Refining timestamps...");
-        try {
-          const res = await fetch(
-            `/api/tts/${projectId}/timestamps/${streamId}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (!res.ok) {
-            console.warn("[AudioBar] Timestamp poll failed", {
-              streamId,
-              attempt: i + 1,
-              status: res.status,
-            });
-            continue;
-          }
-          const data = await res.json();
-          if (data.ready) {
-            const tsRaw = Array.isArray(data.timestamps) ? data.timestamps : [];
-            const ts = tsRaw.filter(isValidTimestamp) as LineTimestamp[];
-            if (ts.length > 0) {
-              timestampsRef.current = ts;
-              setTimingDuration(getTimestampDuration(ts));
-              missingTimingLoggedRef.current = false;
-            } else {
-              timestampsRef.current = [];
-              setTimingDuration(0);
-              console.error(
-                "[AudioBar] Timestamp refinement returned no valid segments; cursor animation disabled",
-                { streamId, count: tsRaw.length }
-              );
-            }
-            setActivity(null);
-            return;
-          }
-        } catch (err) {
-          console.error("[AudioBar] Timestamp poll error", {
-            streamId,
-            attempt: i + 1,
-            error: err,
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(candidate.audioUrl);
+        if (res.ok) {
+          const bytes = await res.arrayBuffer();
+          const blobUrl = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+          blobUrlsRef.current.add(blobUrl);
+          return {
+            ...candidate,
+            audioUrl: blobUrl,
+            streamId: null,
+          };
+        }
+
+        lastErr = new Error(
+          `Chunk stream fetch failed (${res.status}) for chunk ${chunk.index + 1}`
+        );
+        core.invalidateChunk(chunk);
+        await sleep(200 + attempt * 200);
+        candidate = await core.prepareChunk(chunk, { force: false });
+        if (!candidate.streamId) return candidate;
+      }
+
+      throw lastErr instanceof Error
+        ? lastErr
+        : new Error(`Chunk stream fetch failed for chunk ${chunk.index + 1}`);
+    },
+    [ensureCore]
+  );
+
+  const ensurePreparedChunk = useCallback(
+    async (
+      chunkIndex: number,
+      options: {
+        force?: boolean;
+        waitForTimestamps?: boolean;
+        reason?: string;
+      } = {}
+    ): Promise<TtsPreparedChunk> => {
+      const { force = false, waitForTimestamps = false } = options;
+      const chunk = chunkPlanRef.current[chunkIndex];
+      if (!chunk) {
+        throw new Error(`Chunk ${chunkIndex + 1} not found`);
+      }
+
+      if (force) {
+        chunkAudioPrepRef.current.delete(chunkIndex);
+      } else {
+        const existing = chunkAudioPrepRef.current.get(chunkIndex);
+        if (existing) {
+          const prepared = await existing;
+          if (!waitForTimestamps) return prepared;
+          const ts = prepared.timestamps.length > 0 ? prepared.timestamps : await prepared.timestampsReady;
+          prepared.timestamps = ts;
+          applyChunkTimestampsRef.current(chunkIndex, ts);
+          setChunkStatus(chunkIndex, {
+            timing: ts.length > 0 ? "ready" : "missing",
+            note: ts.length > 0 ? `timestamps ${ts.length}` : "timestamps unavailable",
           });
+          return prepared;
         }
       }
-      // Poll timed out — keep playback, but disable cursor animation.
-      if (activeStreamId.current === streamId) {
-        console.error(
-          "[AudioBar] Timestamp refinement timed out; cursor animation disabled",
-          { streamId }
-        );
-        timestampsRef.current = [];
-        setTimingDuration(0);
-        setActivity(null);
-      }
+
+      const run = (async () => {
+        const core = ensureCore();
+        if (force) {
+          core.invalidateChunk(chunk);
+          preparedChunksRef.current.delete(chunkIndex);
+        }
+
+        setChunkStatus(chunkIndex, {
+          audio: "preparing",
+          timing: "pending",
+          note: "requesting audio",
+        });
+
+        let prepared = preparedChunksRef.current.get(chunkIndex);
+        if (!prepared) {
+          prepared = await core.prepareChunk(chunk, { force });
+        }
+
+        prepared = await materializeStreamingChunk(chunk, prepared);
+
+        preparedChunksRef.current.set(chunkIndex, prepared);
+
+        setChunkStatus(chunkIndex, {
+          audio: "ready-cached",
+          timing: prepared.timestamps.length > 0 ? "ready" : "pending",
+          note: prepared.timestamps.length > 0 ? "ready" : "waiting timestamps",
+        });
+
+        if (prepared.timestamps.length > 0) {
+          applyChunkTimestampsRef.current(chunkIndex, prepared.timestamps);
+        }
+
+        if (waitForTimestamps) {
+          const ts =
+            prepared.timestamps.length > 0
+              ? prepared.timestamps
+              : await prepared.timestampsReady;
+          prepared.timestamps = ts;
+          applyChunkTimestampsRef.current(chunkIndex, ts);
+          setChunkStatus(chunkIndex, {
+            timing: ts.length > 0 ? "ready" : "missing",
+            note: ts.length > 0 ? `timestamps ${ts.length}` : "timestamps unavailable",
+          });
+        }
+
+        return prepared;
+      })().catch((err) => {
+        chunkAudioPrepRef.current.delete(chunkIndex);
+        setChunkStatus(chunkIndex, {
+          audio: "error",
+          timing: "missing",
+          note: err instanceof Error ? err.message : "prepare failed",
+        });
+        throw err;
+      });
+
+      chunkAudioPrepRef.current.set(chunkIndex, run);
+      return run;
     },
-    [projectId]
+    [ensureCore, materializeStreamingChunk, setChunkStatus]
   );
+
+  const warmAllChunks = useCallback(
+    (chunks: TtsChunk[], force = false): Promise<void> => {
+      if (chunks.length === 0) return Promise.resolve();
+      const safe = clampV2Settings(v2Settings);
+      const settingsKey = JSON.stringify({
+        voiceId,
+        model,
+        stability: safe.stability,
+        similarityBoost: safe.similarityBoost,
+        style: safe.style,
+        speed: safe.speed,
+      });
+      const key = `${settingsKey}:${chunks.map((chunk) => chunk.key).join(",")}:${force ? "force" : "normal"}`;
+      if (!force && fullPrepPromiseRef.current && fullPrepKeyRef.current === key) {
+        return fullPrepPromiseRef.current;
+      }
+
+      const runId = fullPrepRunIdRef.current + 1;
+      fullPrepRunIdRef.current = runId;
+      fullPrepKeyRef.current = key;
+
+      const run = (async () => {
+        let done = 0;
+        let cursor = 0;
+        const total = chunks.length;
+        reportTtsClientLog("audio_bar.full_prep.start", "Started full-document audio + STT prep", {
+          level: "info",
+          meta: {
+            chunkCount: total,
+            force,
+          },
+        });
+        setActivity(`Preparing full document audio (0/${total})...`);
+
+        const worker = async () => {
+          while (true) {
+            const idx = cursor++;
+            if (idx >= total) return;
+            const chunkIndex = chunks[idx].index;
+            const prepared = await ensurePreparedChunk(chunkIndex, {
+              force,
+              waitForTimestamps: true,
+              reason: "full-warm",
+            });
+            done += 1;
+            reportTtsClientLog("audio_bar.full_prep.chunk", "Prepared chunk audio + STT", {
+              level: "info",
+              meta: {
+                chunkIndex,
+                done,
+                total,
+                timestampCount: prepared.timestamps.length,
+              },
+            });
+            if (fullPrepRunIdRef.current === runId) {
+              setActivity(`Preparing full document audio (${done}/${total})...`);
+            }
+          }
+        };
+
+        const workers = Math.max(1, Math.min(FULL_PREP_CONCURRENCY, total));
+        await Promise.all(
+          Array.from({ length: workers }, () => worker())
+        );
+        if (fullPrepRunIdRef.current === runId) {
+          reportTtsClientLog("audio_bar.full_prep.done", "Completed full-document audio + STT prep", {
+            level: "info",
+            meta: {
+              chunkCount: total,
+            },
+          });
+          setActivity(null);
+        }
+      })().catch((err) => {
+        if (fullPrepRunIdRef.current === runId) {
+          reportTtsClientError(
+            "audio_bar.full_prep",
+            "Full-document preparation failed",
+            err,
+            { chunkCount: chunks.length }
+          );
+          setActivity(null);
+        }
+        throw err;
+      });
+
+      fullPrepPromiseRef.current = run;
+      return run;
+    },
+    [ensurePreparedChunk, model, reportTtsClientError, reportTtsClientLog, v2Settings, voiceId]
+  );
+
+  const recalcTimelineDuration = useCallback(() => {
+    const total = sum(chunkDurationsRef.current);
+    setMediaDuration(total);
+    setTimingDuration(total);
+    return total;
+  }, []);
+
+  const chunkStartTime = useCallback((chunkIndex: number) => {
+    let acc = 0;
+    for (let i = 0; i < chunkIndex; i++) {
+      acc += chunkDurationsRef.current[i] || 0;
+    }
+    return acc;
+  }, []);
 
   const dispatchPlaybackFromCurrentTime = useCallback(
     (audio: HTMLAudioElement) => {
+      const chunk = currentChunkRef.current;
       const ts = timestampsRef.current;
+      if (!chunk) return;
+      if (!followAlong) return;
+
       if (ts.length === 0) {
         if (!missingTimingLoggedRef.current) {
-          console.error(
-            "[AudioBar] Missing timing information; cursor animation disabled until real timestamps are available"
+          const message =
+            "Missing timing information; cursor animation disabled until real timestamps are available";
+          console.error("[AudioBar]", message);
+          reportTtsClientError(
+            "audio_bar.missing_timestamps",
+            message,
+            undefined,
+            {
+              chunkIndex: chunk.index,
+              lineOffset: chunk.lineOffset,
+              lineCount: chunk.lineCount,
+            }
           );
           missingTimingLoggedRef.current = true;
           dispatch({ type: "tts:highlight-clear" });
@@ -446,9 +908,8 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         0,
         Math.min(segmentDuration, t - best.start)
       );
-      const charOffset = charOffsetRef.current;
-      const fromChar = charOffset + best.fromChar;
-      const toChar = charOffset + best.toChar;
+      const fromChar = chunk.charOffset + best.fromChar;
+      const toChar = chunk.charOffset + best.toChar;
       lastHighlightLine.current = best.line;
 
       dispatch({
@@ -472,245 +933,927 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         },
       });
     },
-    [dispatch, simpleMode]
+    [dispatch, followAlong, reportTtsClientError, simpleMode]
   );
 
-  // Simple mode disables cursor animation state entirely.
+  const updatePlaybackFromAudio = useCallback(
+    (audio: HTMLAudioElement) => {
+      const total = sum(chunkDurationsRef.current);
+      const start = chunkStartTime(currentChunkIndexRef.current);
+      const now = start + audio.currentTime;
+      setCurrentTime(now);
+      if (total > 0) {
+        setProgress(Math.max(0, Math.min(1, now / total)));
+      } else {
+        setProgress(0);
+      }
+      dispatchPlaybackFromCurrentTime(audio);
+    },
+    [chunkStartTime, dispatchPlaybackFromCurrentTime]
+  );
+
+  const applyChunkTimestamps = useCallback(
+    (chunkIndex: number, ts: LineTimestamp[]) => {
+      if (ts.length === 0) {
+        setChunkStatus(chunkIndex, { timing: "missing" });
+        return;
+      }
+      setChunkStatus(chunkIndex, { timing: "ready" });
+      const duration = getTimestampDuration(ts);
+      if (duration > 0) {
+        chunkDurationsRef.current[chunkIndex] = duration;
+        recalcTimelineDuration();
+      }
+      if (chunkIndex === currentChunkIndexRef.current) {
+        timestampsRef.current = ts;
+        missingTimingLoggedRef.current = false;
+        const audio = audioRef.current;
+        if (audio) updatePlaybackFromAudio(audio);
+      }
+    },
+    [recalcTimelineDuration, setChunkStatus, updatePlaybackFromAudio]
+  );
+  applyChunkTimestampsRef.current = applyChunkTimestamps;
+
+  const stop = useCallback(() => {
+    playbackSessionRef.current += 1;
+    fullPrepRunIdRef.current += 1;
+
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    audioRef.current = null;
+
+    chunkPlanRef.current = [];
+    preparedChunksRef.current.clear();
+    chunkAudioPrepRef.current.clear();
+    chunkDurationsRef.current = [];
+    chunkStatusRef.current.clear();
+    fullPrepPromiseRef.current = null;
+    fullPrepKeyRef.current = "";
+    clearBlobUrls();
+    currentChunkRef.current = null;
+    currentChunkIndexRef.current = 0;
+    forceRunRef.current = false;
+    timestampsRef.current = [];
+    missingTimingLoggedRef.current = false;
+    lastHighlightLine.current = null;
+
+    setState("idle");
+    setProgress(0);
+    setMediaDuration(0);
+    setTimingDuration(0);
+    setCurrentTime(0);
+    setActivity(null);
+    bumpDetails();
+    dispatch({ type: "tts:clear" });
+  }, [bumpDetails, clearBlobUrls, dispatch]);
+  stopPlaybackRef.current = stop;
+
+  const playChunk = useCallback(
+    async (
+      chunkIndex: number,
+      options: {
+        sessionId: number;
+        startAt?: number;
+        force?: boolean;
+        seekLine?: number;
+        seekChar?: number;
+        preferPreciseSeek?: boolean;
+      }
+    ) => {
+      const {
+        sessionId,
+        startAt = 0,
+        force = false,
+        seekLine,
+        seekChar,
+        preferPreciseSeek = false,
+      } = options;
+      const chunk = chunkPlanRef.current[chunkIndex];
+      if (!chunk) {
+        if (playbackSessionRef.current !== sessionId) return;
+        setState("idle");
+        setProgress(0);
+        setCurrentTime(0);
+        setActivity(null);
+        timestampsRef.current = [];
+        currentChunkRef.current = null;
+        currentChunkIndexRef.current = 0;
+        lastHighlightLine.current = null;
+        dispatch({ type: "tts:highlight-clear" });
+        dispatch({ type: "tts:playback-stop" });
+        dispatch({ type: "tts:clear" });
+        return;
+      }
+
+      if (playbackSessionRef.current !== sessionId) return;
+
+      const prevAudio = audioRef.current;
+      if (prevAudio) {
+        prevAudio.pause();
+        audioRef.current = null;
+      }
+
+      currentChunkRef.current = chunk;
+      currentChunkIndexRef.current = chunkIndex;
+      timestampsRef.current = [];
+      missingTimingLoggedRef.current = false;
+      for (const [idx, status] of chunkStatusRef.current.entries()) {
+        if (status.audio === "playing") {
+          const fallbackAudio =
+            status.note?.includes("cache") ? "ready-cached" : "ready-streaming";
+          chunkStatusRef.current.set(idx, {
+            ...status,
+            audio: fallbackAudio,
+          });
+        }
+      }
+      bumpDetails();
+      setChunkStatus(chunkIndex, {
+        audio: "preparing",
+        timing: "pending",
+        note: "requesting audio",
+      });
+      setActivity(chunkIndex === 0 ? "Preparing first segment..." : "Preparing next segment...");
+
+      let prepared: TtsPreparedChunk;
+      try {
+        prepared = await ensurePreparedChunk(chunkIndex, {
+          force,
+          waitForTimestamps:
+            Boolean(preferPreciseSeek) ||
+            Boolean(seekLine) ||
+            (typeof seekChar === "number" && Number.isFinite(seekChar)),
+          reason: "playback",
+        });
+      } catch (err: any) {
+        reportTtsClientError(
+          "audio_bar.prepare_chunk",
+          "Chunk preparation failed",
+          err,
+          {
+            chunkIndex,
+            lineOffset: chunk.lineOffset,
+            lineCount: chunk.lineCount,
+            force,
+          }
+        );
+        setChunkStatus(chunkIndex, {
+          audio: "error",
+          timing: "missing",
+          note: err?.message || "failed to prepare",
+        });
+        throw err;
+      }
+
+      if (playbackSessionRef.current !== sessionId) return;
+
+      setChunkStatus(chunkIndex, {
+        audio: "ready-cached",
+        timing: prepared.timestamps.length > 0 ? "ready" : "pending",
+        note: prepared.timestamps.length > 0 ? "ready" : "waiting timestamps",
+      });
+
+      setActivity(null);
+
+      if (prepared.timestamps.length > 0) {
+        timestampsRef.current = prepared.timestamps;
+        applyChunkTimestamps(chunkIndex, prepared.timestamps);
+      }
+
+      const seekChunkChar =
+        typeof seekChar === "number" && Number.isFinite(seekChar)
+          ? Math.max(0, seekChar - chunk.charOffset)
+          : undefined;
+
+      if (
+        preferPreciseSeek &&
+        prepared.timestamps.length === 0 &&
+        (seekLine || (typeof seekChunkChar === "number" && Number.isFinite(seekChunkChar)))
+      ) {
+        setActivity("Aligning exact word...");
+        const maybeTimestamps = await Promise.race([
+          prepared.timestampsReady.then((ts) => ts),
+          new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), PRECISE_SEEK_STT_WAIT_MS)
+          ),
+        ]);
+        if (playbackSessionRef.current !== sessionId) return;
+        if (maybeTimestamps && maybeTimestamps.length > 0) {
+          prepared.timestamps = maybeTimestamps;
+          applyChunkTimestamps(chunkIndex, maybeTimestamps);
+          setChunkStatus(chunkIndex, {
+            timing: "ready",
+            note: `timestamps ${maybeTimestamps.length}`,
+          });
+          reportTtsClientLog("audio_bar.srt_ready_wait", "STT/SRT became ready during precise-seek wait", {
+            level: "info",
+            meta: {
+              chunkIndex,
+              timestampCount: maybeTimestamps.length,
+            },
+          });
+        } else {
+          reportTtsClientLog("audio_bar.srt_wait_timeout", "STT/SRT not ready before precise-seek wait timeout", {
+            level: "warn",
+            meta: {
+              chunkIndex,
+              waitMs: PRECISE_SEEK_STT_WAIT_MS,
+            },
+          });
+        }
+      }
+
+      void prepared.timestampsReady.then((ts) => {
+        if (playbackSessionRef.current !== sessionId) return;
+        prepared.timestamps = ts;
+        applyChunkTimestamps(chunkIndex, ts);
+        if (ts.length === 0) {
+          setChunkStatus(chunkIndex, { timing: "missing" });
+          reportTtsClientLog("audio_bar.srt_missing", "No STT/SRT timestamps available for chunk", {
+            level: "warn",
+            meta: { chunkIndex },
+          });
+        } else {
+          setChunkStatus(chunkIndex, {
+            timing: "ready",
+            note: `timestamps ${ts.length}`,
+          });
+          reportTtsClientLog("audio_bar.srt_ready", "STT/SRT timestamps ready for chunk", {
+            level: "info",
+            meta: {
+              chunkIndex,
+              timestampCount: ts.length,
+            },
+          });
+          if (!preciseSeekApplied && chunkIndex === currentChunkIndexRef.current) {
+            const preciseStart = getPreciseSeekStart(ts, seekLine, seekChunkChar);
+            const activeAudio = audioRef.current;
+            if (typeof preciseStart === "number" && Number.isFinite(preciseStart) && activeAudio) {
+              const drift = preciseStart - activeAudio.currentTime;
+              if (drift > 0.05 || activeAudio.currentTime < 0.25) {
+                activeAudio.currentTime = preciseStart;
+                updatePlaybackFromAudio(activeAudio);
+              }
+              preciseSeekApplied = true;
+            }
+          }
+        }
+        if (chunkIndex === currentChunkIndexRef.current && ts.length > 0) {
+          setActivity(null);
+        }
+      });
+
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.volume = volume;
+      audioRef.current = audio;
+
+      let seekApplied = false;
+      let preciseSeekApplied = false;
+      let desiredStart = Math.max(0, startAt);
+      const initialPreciseStart = getPreciseSeekStart(
+        prepared.timestamps,
+        seekLine,
+        seekChunkChar
+      );
+      if (typeof initialPreciseStart === "number" && Number.isFinite(initialPreciseStart)) {
+        desiredStart = initialPreciseStart;
+        preciseSeekApplied = true;
+      }
+      const applySeek = () => {
+        if (seekApplied || desiredStart <= 0) return;
+        if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+        audio.currentTime = Math.min(desiredStart, Math.max(0, audio.duration - 0.05));
+        seekApplied = true;
+      };
+
+      const updateChunkDuration = () => {
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          chunkDurationsRef.current[chunkIndex] = audio.duration;
+          recalcTimelineDuration();
+          applySeek();
+        }
+      };
+
+      audio.addEventListener("loadedmetadata", () => {
+        updateChunkDuration();
+        updatePlaybackFromAudio(audio);
+      });
+
+      audio.addEventListener("durationchange", () => {
+        updateChunkDuration();
+        updatePlaybackFromAudio(audio);
+      });
+
+      audio.addEventListener("timeupdate", () => {
+        updatePlaybackFromAudio(audio);
+      });
+
+      audio.addEventListener("ended", () => {
+        reportTtsClientLog("audio_bar.chunk_ended", "Chunk playback ended", {
+          level: "info",
+          meta: {
+            chunkIndex,
+          },
+        });
+        dispatch({ type: "tts:highlight-clear" });
+        dispatch({ type: "tts:playback-stop" });
+        setChunkStatus(chunkIndex, {
+          audio: prepared?.streamId ? "ready-streaming" : "ready-cached",
+        });
+        const next = chunkIndex + 1;
+        if (next < chunkPlanRef.current.length) {
+          void playChunkRef.current?.(next, {
+            sessionId,
+            startAt: 0,
+            force,
+          });
+          return;
+        }
+
+        if (playbackSessionRef.current !== sessionId) return;
+        audioRef.current = null;
+        timestampsRef.current = [];
+        currentChunkRef.current = null;
+        currentChunkIndexRef.current = 0;
+        lastHighlightLine.current = null;
+        setState("idle");
+        setProgress(0);
+        setCurrentTime(0);
+        setActivity(null);
+        dispatch({ type: "tts:clear" });
+      });
+
+      audio.src = prepared.audioUrl;
+      applySeek();
+      try {
+        await audio.play();
+      } catch (err: any) {
+        reportTtsClientError(
+          "audio_bar.play_chunk",
+          "Audio playback failed for chunk",
+          err,
+          {
+            chunkIndex,
+            lineOffset: chunk.lineOffset,
+            lineCount: chunk.lineCount,
+          }
+        );
+        setChunkStatus(chunkIndex, {
+          audio: "error",
+          note: err?.message || "playback failed",
+        });
+        throw err;
+      }
+      if (playbackSessionRef.current !== sessionId) {
+        audio.pause();
+        return;
+      }
+
+      setState("playing");
+      reportTtsClientLog("audio_bar.chunk_started", "Chunk playback started", {
+        level: "info",
+        meta: {
+          chunkIndex,
+          seekLine,
+          seekChar,
+          startAt: desiredStart,
+        },
+      });
+      setChunkStatus(chunkIndex, {
+        audio: "playing",
+      });
+      setActivity(null);
+      updatePlaybackFromAudio(audio);
+
+      const nextChunk = chunkPlanRef.current[chunkIndex + 1];
+      if (nextChunk) {
+        void ensurePreparedChunk(nextChunk.index, {
+          force: false,
+          waitForTimestamps: false,
+          reason: "prefetch",
+        }).catch(() => {
+          // Best effort prefetch only.
+        });
+      }
+    },
+    [
+      applyChunkTimestamps,
+      bumpDetails,
+      dispatch,
+      ensurePreparedChunk,
+      recalcTimelineDuration,
+      reportTtsClientError,
+      reportTtsClientLog,
+      setChunkStatus,
+      updatePlaybackFromAudio,
+      volume,
+    ]
+  );
+  playChunkRef.current = playChunk;
+
+  // Stop playback when file changes
   useEffect(() => {
-    if (simpleMode) {
+    stop();
+  }, [openFilePath, stop]);
+
+  // Smart kernel: keep an always-updated full-document chunk plan and invalidate cached audio when settings change.
+  const settingsKernelKey = useMemo(() => {
+    const safe = clampV2Settings(v2Settings);
+    return JSON.stringify({
+      voiceId,
+      model,
+      stability: safe.stability,
+      similarityBoost: safe.similarityBoost,
+      style: safe.style,
+      speed: safe.speed,
+    });
+  }, [model, v2Settings, voiceId]);
+  const lastKernelContentHashRef = useRef<number>(hashStr(content || ""));
+  const lastKernelSettingsKeyRef = useRef<string>(settingsKernelKey);
+
+  useEffect(() => {
+    const nextChunks = content?.trim() ? buildTtsChunks(content, 1) : [];
+    const contentHash = hashStr(content || "");
+    const contentChanged = lastKernelContentHashRef.current !== contentHash;
+    const settingsChanged = lastKernelSettingsKeyRef.current !== settingsKernelKey;
+    const needsInitialPlan =
+      nextChunks.length > 0 && chunkPlanRef.current.length === 0;
+    if (!contentChanged && !settingsChanged && !needsInitialPlan) return;
+
+    lastKernelContentHashRef.current = contentHash;
+    lastKernelSettingsKeyRef.current = settingsKernelKey;
+
+    ensureCore();
+    if (settingsChanged) {
+      fullPrepRunIdRef.current += 1;
+      fullPrepPromiseRef.current = null;
+      fullPrepKeyRef.current = "";
+      chunkAudioPrepRef.current.clear();
+      clearBlobUrls();
+    }
+
+    if (nextChunks.length === 0) {
+      fullPrepRunIdRef.current += 1;
+      fullPrepPromiseRef.current = null;
+      fullPrepKeyRef.current = "";
+      chunkAudioPrepRef.current.clear();
+      clearBlobUrls();
+      chunkPlanRef.current = [];
+      preparedChunksRef.current.clear();
+      chunkDurationsRef.current = [];
+      chunkStatusRef.current.clear();
+      bumpDetails();
+      if (state !== "idle") stop();
+      return;
+    }
+
+    const prevChunks = chunkPlanRef.current;
+    const prevPrepared = preparedChunksRef.current;
+    const prevDurations = chunkDurationsRef.current;
+    const prevStatus = chunkStatusRef.current;
+    const prevIndexByKey = new Map<string, number>();
+    for (const chunk of prevChunks) {
+      prevIndexByKey.set(chunk.key, chunk.index);
+    }
+
+    const nextPrepared = new Map<number, TtsPreparedChunk>();
+    const nextDurations: number[] = [];
+    const nextStatus = new Map<number, ChunkRuntimeStatus>();
+
+    for (const chunk of nextChunks) {
+      const estimate = estimateChunkDurationSeconds(chunk);
+      const prevIndex = prevIndexByKey.get(chunk.key);
+      const reusable = prevIndex !== undefined && !settingsChanged;
+      if (!reusable) {
+        nextDurations[chunk.index] = estimate;
+        nextStatus.set(chunk.index, {
+          audio: "pending",
+          timing: "pending",
+          note: settingsChanged ? "settings changed" : "queued",
+        });
+        continue;
+      }
+
+      const prepared = prevPrepared.get(prevIndex);
+      if (prepared) {
+        nextPrepared.set(chunk.index, { ...prepared, chunk });
+      }
+      nextDurations[chunk.index] = prevDurations[prevIndex] || estimate;
+      const existingStatus = prevStatus.get(prevIndex);
+      if (existingStatus) {
+        nextStatus.set(chunk.index, {
+          ...existingStatus,
+          audio:
+            state === "idle" && existingStatus.audio === "playing"
+              ? "ready-cached"
+              : existingStatus.audio,
+        });
+      } else {
+        nextStatus.set(chunk.index, {
+          audio: prepared
+            ? prepared.streamId
+              ? "ready-streaming"
+              : "ready-cached"
+            : "pending",
+          timing:
+            prepared && prepared.timestamps.length > 0 ? "ready" : "pending",
+          note: prepared
+            ? prepared.streamId
+              ? "streaming source"
+              : "disk cache hit"
+            : "queued",
+        });
+      }
+    }
+
+    chunkPlanRef.current = nextChunks;
+    preparedChunksRef.current = nextPrepared;
+    chunkDurationsRef.current = nextDurations;
+    chunkStatusRef.current = nextStatus;
+    bumpDetails();
+
+    if (state !== "idle") {
+      if (settingsChanged) {
+        stop();
+        return;
+      }
+      const activeChunk = currentChunkRef.current;
+      if (activeChunk) {
+        const stillExists = nextChunks.some((chunk) => chunk.key === activeChunk.key);
+        if (!stillExists) stop();
+      }
+    }
+  }, [bumpDetails, clearBlobUrls, content, ensureCore, settingsKernelKey, state, stop]);
+
+  // Sync volume
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume;
+  }, [volume]);
+
+  // Simple mode and follow-along toggle can disable sync state.
+  useEffect(() => {
+    if (simpleMode || !followAlong) {
+      if (!followAlong) {
+        dispatch({ type: "tts:highlight-clear" });
+      }
       dispatch({ type: "tts:playback-stop" });
     }
-  }, [dispatch, simpleMode]);
+  }, [dispatch, followAlong, simpleMode]);
 
   const playFrom = useCallback(
-    async (fromLine?: number) => {
+    async (
+      fromTarget?: number | { fromLine: number; fromChar?: number }
+    ) => {
       if (!content?.trim()) return;
 
-      setState("loading");
-      setError(null);
-      setActivity(model === "v3" ? "Enhancing text with AI..." : "Preparing audio...");
-      dispatch({ type: "tts:clear" });
-      setProgress(0);
-      setCurrentTime(0);
-      setMediaDuration(0);
-      setTimingDuration(0);
+      playbackSessionRef.current += 1;
+      const sessionId = playbackSessionRef.current;
 
-      // Stop existing playback
+      ensureCore();
+
+      const lines = content.split("\n");
+      const requestedLine =
+        typeof fromTarget === "number" ? fromTarget : fromTarget?.fromLine;
+      const requestedChar =
+        typeof fromTarget === "object" ? fromTarget.fromChar : undefined;
+      const targetLine = Math.max(
+        1,
+        Math.min(lines.length, requestedLine && requestedLine > 1 ? requestedLine : 1)
+      );
+      const targetChar =
+        Number.isFinite(requestedChar) && typeof requestedChar === "number"
+          ? Math.max(0, Math.min(content.length - 1, requestedChar))
+          : undefined;
+      const hasTargetChar =
+        typeof targetChar === "number" && Number.isFinite(targetChar);
+
+      const chunks = buildTtsChunks(content, 1);
+      if (chunks.length === 0) return;
+      const existingPlan = chunkPlanRef.current;
+      const samePlan =
+        existingPlan.length === chunks.length &&
+        existingPlan.every(
+          (chunk, idx) =>
+            chunk.key === chunks[idx].key &&
+            chunk.lineOffset === chunks[idx].lineOffset &&
+            chunk.lineCount === chunks[idx].lineCount
+        );
+
+      const force = forceRegenRef.current;
+      forceRegenRef.current = false;
+      forceRunRef.current = force;
+
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      cleanup();
+
+      chunkPlanRef.current = chunks;
+      if (!samePlan || force) {
+        fullPrepRunIdRef.current += 1;
+        fullPrepPromiseRef.current = null;
+        fullPrepKeyRef.current = "";
+        preparedChunksRef.current.clear();
+        chunkAudioPrepRef.current.clear();
+        clearBlobUrls();
+        chunkDurationsRef.current = chunks.map(estimateChunkDurationSeconds);
+        chunkStatusRef.current = new Map(
+          chunks.map((chunk) => [
+            chunk.index,
+            {
+              audio: "pending",
+              timing: "pending",
+              note: force ? "forced regen" : "queued",
+            } as ChunkRuntimeStatus,
+          ])
+        );
+      } else {
+        if (chunkDurationsRef.current.length !== chunks.length) {
+          chunkDurationsRef.current = chunks.map(
+            (chunk, idx) =>
+              chunkDurationsRef.current[idx] || estimateChunkDurationSeconds(chunk)
+          );
+        }
+        for (const chunk of chunks) {
+          if (!chunkStatusRef.current.has(chunk.index)) {
+            chunkStatusRef.current.set(chunk.index, {
+              audio: "pending",
+              timing: "pending",
+              note: "queued",
+            });
+          }
+        }
+      }
+      currentChunkRef.current = null;
+      currentChunkIndexRef.current = 0;
+      timestampsRef.current = [];
+      missingTimingLoggedRef.current = false;
+      lastHighlightLine.current = null;
+      bumpDetails();
+
+      const estimatedTotal = sum(chunkDurationsRef.current);
+      setMediaDuration(estimatedTotal);
+      setTimingDuration(estimatedTotal);
+      setProgress(0);
+      setCurrentTime(0);
+      setState("loading");
+      setError(null);
+      setActivity(targetLine > 1 ? "Jumping to selected line..." : "Preparing first segment...");
+      dispatch({ type: "tts:clear" });
+      reportTtsClientLog("audio_bar.play_from.request", "Play-from requested", {
+        level: "info",
+        meta: {
+          targetLine,
+          targetChar,
+          force,
+          chunkCount: chunks.length,
+        },
+      });
+
+      let targetChunkIndex = -1;
+      if (hasTargetChar) {
+        targetChunkIndex = chunks.findIndex((chunk) => {
+          const chunkEnd = chunk.charOffset + chunk.text.length;
+          return targetChar >= chunk.charOffset && targetChar < chunkEnd;
+        });
+      }
+      if (targetChunkIndex === -1) {
+        targetChunkIndex = chunks.findIndex(
+          (chunk) =>
+            targetLine >= chunk.lineOffset &&
+            targetLine <= chunk.lineOffset + chunk.lineCount - 1
+        );
+      }
+      if (targetChunkIndex === -1) targetChunkIndex = 0;
+      const targetPrepared = preparedChunksRef.current.get(targetChunkIndex);
+      const targetChunk = chunks[targetChunkIndex];
+      const targetChunkChar =
+        hasTargetChar && targetChunk
+          ? targetChar - targetChunk.charOffset
+          : undefined;
+      const warmPromise = warmAllChunks(chunks, force);
+      const startAt =
+        getPreciseSeekStart(
+          targetPrepared?.timestamps || [],
+          targetLine > 1 ? targetLine : undefined,
+          targetChunkChar
+        ) ?? 0;
+      const preferPreciseSeek =
+        targetLine > 1 || hasTargetChar;
 
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const token = session?.access_token ?? "";
-
-        // Slice text from target line — don't send/process earlier content
-        let textToSend = content;
-        const lineOffset = fromLine && fromLine > 1 ? fromLine : 1;
-        let charOff = 0;
-        if (lineOffset > 1) {
-          const lines = content.split("\n");
-          for (let i = 0; i < lineOffset - 1 && i < lines.length; i++) {
-            charOff += lines[i].length + 1;
-          }
-          textToSend = lines.slice(lineOffset - 1).join("\n");
-        }
-        charOffsetRef.current = charOff;
-        timestampsRef.current = [];
-        missingTimingLoggedRef.current = false;
-
-        const body: Record<string, any> = {
-          text: textToSend,
-          model,
-          voiceId,
-          lineOffset, // tells server which absolute line this text starts at
-          force: forceRegenRef.current,
-        };
-        forceRegenRef.current = false;
-        if (model === "v2") {
-          const safeV2 = clampV2Settings(v2Settings);
-          body.stability = v2Settings.stability;
-          body.similarityBoost = v2Settings.similarityBoost;
-          body.style = v2Settings.style;
-          body.speed = safeV2.speed;
-        }
-
-        // Step 1: POST to prepare (cache check + Claude enhancement)
-        const res = await fetch(`/api/tts/${projectId}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: "TTS failed" }));
-          throw new Error(err.error || "TTS failed");
-        }
-
-        const data = await res.json();
-        let audioUrl: string;
-
-        if (data.cached) {
-          // Cache hit: audio + timestamps available immediately
-          audioUrl = data.audioUrl;
-          const tsRaw = Array.isArray(data.timestamps) ? data.timestamps : [];
-          const ts = tsRaw.filter(isValidTimestamp) as LineTimestamp[];
-          timestampsRef.current = ts;
-          setTimingDuration(getTimestampDuration(ts));
-          if (ts.length === 0) {
-            console.error(
-              "[AudioBar] Cached audio has no valid timestamps; cursor animation disabled",
-              { count: tsRaw.length }
-            );
-          }
-          setActivity(null);
+        if (targetChunkIndex > 0 || preferPreciseSeek) {
+          setActivity("Preparing full document for precise seek...");
+          await warmPromise;
         } else {
-          // Streaming: point audio.src at the stream URL directly
-          const streamId = data.streamId;
-          activeStreamId.current = streamId;
-          audioUrl = `/api/tts/${projectId}/stream/${streamId}?token=${encodeURIComponent(token)}`;
-          setActivity("Generating audio...");
-
-          // Poll for real Whisper timestamps in background
-          pollTimestamps(streamId, token);
+          void warmPromise.catch(() => {
+            // Playback can continue even if background warmup fails.
+          });
         }
 
-        // Step 2: Play the audio
-        const audio = new Audio();
-        audio.preload = "auto";
-        audio.volume = volume;
-        audioRef.current = audio;
-
-        const updateMediaDuration = () => {
-          if (Number.isFinite(audio.duration) && audio.duration > 0) {
-            setMediaDuration(audio.duration);
-          }
-        };
-
-        const updateProgress = () => {
-          const total =
-            Number.isFinite(audio.duration) && audio.duration > 0
-              ? audio.duration
-              : getTimestampDuration(timestampsRef.current);
-          if (total > 0) {
-            setProgress(Math.max(0, Math.min(1, audio.currentTime / total)));
-          } else {
-            setProgress(0);
-          }
-        };
-
-        audio.addEventListener("loadedmetadata", updateMediaDuration);
-        // Duration may update as more data streams in
-        audio.addEventListener("durationchange", () => {
-          updateMediaDuration();
-          updateProgress();
-          dispatchPlaybackFromCurrentTime(audio);
+        await playChunkRef.current?.(targetChunkIndex, {
+          sessionId,
+          startAt,
+          force,
+          seekLine: targetLine > 1 ? targetLine : undefined,
+          seekChar: targetChar,
+          preferPreciseSeek,
         });
-        audio.addEventListener("timeupdate", () => {
-          setCurrentTime(audio.currentTime);
-          updateProgress();
-          dispatchPlaybackFromCurrentTime(audio);
-        });
-        audio.addEventListener("ended", () => {
-          setState("idle");
-          setProgress(0);
-          setMediaDuration(0);
-          setTimingDuration(0);
-          setCurrentTime(0);
-          setActivity(null);
-          cleanup();
-          timestampsRef.current = [];
-          lastHighlightLine.current = null;
-          dispatch({ type: "tts:highlight-clear" });
-          dispatch({ type: "tts:playback-stop" });
-        });
-
-        // Set src after listeners are attached, then play
-        audio.src = audioUrl;
-        await audio.play();
-        setState("playing");
-        dispatchPlaybackFromCurrentTime(audio);
       } catch (err: any) {
+        if (playbackSessionRef.current !== sessionId) return;
         console.error("[AudioBar]", err);
+        reportTtsClientError(
+          "audio_bar.play_from",
+          "Playback failed while starting from requested line",
+          err,
+          {
+            fromLine: targetLine,
+            fromChar: targetChar,
+            targetChunkIndex,
+            preferPreciseSeek,
+          }
+        );
         setError(err.message || "Playback failed");
         setState("idle");
         setActivity(null);
       }
     },
-    [content, projectId, model, voiceId, v2Settings, volume, dispatch, cleanup, pollTimestamps, dispatchPlaybackFromCurrentTime]
+    [
+      bumpDetails,
+      clearBlobUrls,
+      content,
+      dispatch,
+      ensureCore,
+      reportTtsClientError,
+      reportTtsClientLog,
+      warmAllChunks,
+    ]
   );
 
   // Handle "read from here" triggered from editor
   useEffect(() => {
     if (ttsFromLine !== null) {
-      playFrom(ttsFromLine);
+      void playFrom(ttsFromLine);
     }
-  }, [ttsFromLine]); // intentionally omit playFrom to avoid loops
+  }, [ttsFromLine, playFrom]);
 
   const play = useCallback(() => {
-    if (state === "paused" && audioRef.current) {
-      audioRef.current.play();
-      setState("playing");
-      dispatchPlaybackFromCurrentTime(audioRef.current);
+    const pausedAudio = audioRef.current;
+    if (state === "paused" && pausedAudio) {
+      pausedAudio
+        .play()
+        .then(() => {
+          setState("playing");
+          updatePlaybackFromAudio(pausedAudio);
+        })
+        .catch((err) => {
+          reportTtsClientError(
+            "audio_bar.resume_playback",
+            "Resuming paused audio failed",
+            err,
+            {
+              chunkIndex: currentChunkIndexRef.current,
+            }
+          );
+          setError(err instanceof Error ? err.message : "Playback failed");
+          setState("paused");
+        });
       return;
     }
-    playFrom();
-  }, [state, playFrom, dispatchPlaybackFromCurrentTime]);
+    void playFrom();
+  }, [playFrom, reportTtsClientError, state, updatePlaybackFromAudio]);
 
   const pause = useCallback(() => {
     const audio = audioRef.current;
     audio?.pause();
-    if (audio) dispatchPlaybackFromCurrentTime(audio);
+    if (audio) updatePlaybackFromAudio(audio);
     setState("paused");
-  }, [dispatchPlaybackFromCurrentTime]);
+  }, [updatePlaybackFromAudio]);
 
   const effectiveDuration = mediaDuration > 0 ? mediaDuration : timingDuration;
 
+  const seekToGlobalTime = useCallback(
+    (targetSeconds: number) => {
+      const chunks = chunkPlanRef.current;
+      if (chunks.length === 0) return;
+
+      const total = sum(chunkDurationsRef.current);
+      if (total <= 0) return;
+
+      const safeTarget = Math.max(0, Math.min(total, targetSeconds));
+      let acc = 0;
+      let targetChunkIndex = chunks.length - 1;
+      for (let i = 0; i < chunks.length; i++) {
+        const dur = chunkDurationsRef.current[i] || estimateChunkDurationSeconds(chunks[i]);
+        if (safeTarget <= acc + dur || i === chunks.length - 1) {
+          targetChunkIndex = i;
+          break;
+        }
+        acc += dur;
+      }
+
+      const withinChunk = Math.max(0, safeTarget - acc);
+      if (targetChunkIndex === currentChunkIndexRef.current && audioRef.current) {
+        audioRef.current.currentTime = withinChunk;
+        updatePlaybackFromAudio(audioRef.current);
+        return;
+      }
+
+      const sessionId = playbackSessionRef.current;
+      const playPromise = playChunkRef.current?.(targetChunkIndex, {
+        sessionId,
+        startAt: withinChunk,
+        force: forceRunRef.current,
+      });
+      if (playPromise) {
+        void playPromise.catch((err) => {
+          reportTtsClientError(
+            "audio_bar.seek_to_time",
+            "Failed to seek across chunks",
+            err,
+            {
+              targetChunkIndex,
+              targetSeconds: safeTarget,
+              withinChunk,
+            }
+          );
+          setError(err instanceof Error ? err.message : "Playback failed");
+          setState("idle");
+          setActivity(null);
+        });
+      }
+    },
+    [reportTtsClientError, updatePlaybackFromAudio]
+  );
+
   const skipBack15 = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = Math.max(0, audio.currentTime - 15);
-    dispatchPlaybackFromCurrentTime(audio);
-  }, [dispatchPlaybackFromCurrentTime]);
+    seekToGlobalTime(Math.max(0, currentTime - 15));
+  }, [currentTime, seekToGlobalTime]);
 
   const skipNextChunk = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const ts = timestampsRef.current;
-    if (ts.length === 0) return;
-
+    const chunks = chunkPlanRef.current;
+    if (chunks.length === 0) return;
     const currentLine = lastHighlightLine.current ?? 1;
-    const chunks = getChunkStartLines(content || "");
-    const nextChunkLine = chunks.find((l) => l > currentLine);
+    const logicalChunks = getChunkStartLines(content || "");
+    const nextChunkLine = logicalChunks.find((line) => line > currentLine);
     if (!nextChunkLine) return;
 
-    const entry = ts.find((t) => t.line >= nextChunkLine);
-    if (entry) {
-      audio.currentTime = entry.start;
-      dispatchPlaybackFromCurrentTime(audio);
+    let targetChunkIndex = chunks.findIndex(
+      (chunk) => nextChunkLine <= chunk.lineOffset + chunk.lineCount - 1
+    );
+    if (targetChunkIndex === -1) targetChunkIndex = chunks.length - 1;
+
+    if (targetChunkIndex === currentChunkIndexRef.current && audioRef.current) {
+      const entry = timestampsRef.current.find((ts) => ts.line >= nextChunkLine);
+      if (entry) {
+        audioRef.current.currentTime = entry.start;
+        updatePlaybackFromAudio(audioRef.current);
+      }
+      return;
     }
-  }, [content, dispatchPlaybackFromCurrentTime]);
+
+    const prepared = preparedChunksRef.current.get(targetChunkIndex);
+    const startAt = prepared?.timestamps.find((ts) => ts.line >= nextChunkLine)?.start ?? 0;
+    const sessionId = playbackSessionRef.current;
+    const playPromise = playChunkRef.current?.(targetChunkIndex, {
+      sessionId,
+      startAt,
+      force: forceRunRef.current,
+    });
+    if (playPromise) {
+      void playPromise.catch((err) => {
+        reportTtsClientError(
+          "audio_bar.skip_next_chunk",
+          "Skipping to next chunk failed",
+          err,
+          {
+            targetChunkIndex,
+            nextChunkLine,
+          }
+        );
+        setError(err instanceof Error ? err.message : "Playback failed");
+        setState("idle");
+        setActivity(null);
+      });
+    }
+  }, [content, reportTtsClientError, updatePlaybackFromAudio]);
 
   const seek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      const audio = audioRef.current;
-      if (!audio || !Number.isFinite(effectiveDuration) || !effectiveDuration) return;
+      if (!Number.isFinite(effectiveDuration) || !effectiveDuration) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const ratio = Math.max(
         0,
         Math.min(1, (e.clientX - rect.left) / rect.width)
       );
-      audio.currentTime = ratio * effectiveDuration;
-      dispatchPlaybackFromCurrentTime(audio);
+      seekToGlobalTime(ratio * effectiveDuration);
     },
-    [effectiveDuration, dispatchPlaybackFromCurrentTime]
+    [effectiveDuration, seekToGlobalTime]
   );
 
   const fmt = (s: number) => {
@@ -720,36 +1863,127 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
   };
 
   const downloadAudio = useCallback(async () => {
-    const audio = audioRef.current;
-    if (!audio?.src) return;
+    if (!content?.trim() || downloadBusy) return;
+    const voiceName = VOICES.find((v) => v.id === voiceId)?.name ?? "voice";
+    const baseName = (openFilePath?.split("/").pop() ?? "audio").replace(/\.[^.]+$/, "");
+    const chunks = buildTtsChunks(content, 1);
+    if (chunks.length === 0) return;
+
+    const samePlan =
+      chunkPlanRef.current.length === chunks.length &&
+      chunkPlanRef.current.every(
+        (chunk, idx) =>
+          chunk.key === chunks[idx].key &&
+          chunk.lineOffset === chunks[idx].lineOffset &&
+          chunk.lineCount === chunks[idx].lineCount
+      );
+    if (!samePlan) {
+      fullPrepRunIdRef.current += 1;
+      fullPrepPromiseRef.current = null;
+      fullPrepKeyRef.current = "";
+      chunkPlanRef.current = chunks;
+      preparedChunksRef.current.clear();
+      chunkAudioPrepRef.current.clear();
+      clearBlobUrls();
+      chunkDurationsRef.current = chunks.map(estimateChunkDurationSeconds);
+      chunkStatusRef.current = new Map(
+        chunks.map((chunk) => [
+          chunk.index,
+          { audio: "pending", timing: "pending", note: "queued" } as ChunkRuntimeStatus,
+        ])
+      );
+      bumpDetails();
+    }
+
+    setDownloadBusy(true);
+    setError(null);
+    setActivity(`Preparing full audio export (0/${chunks.length})...`);
+
     try {
-      const res = await fetch(audio.src);
-      const blob = await res.blob();
-      const voiceName = VOICES.find((v) => v.id === voiceId)?.name ?? "voice";
-      const baseName = (openFilePath?.split("/").pop() ?? "audio").replace(/\.[^.]+$/, "");
+      const buffers: ArrayBuffer[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        setChunkStatus(chunk.index, {
+          audio: "preparing",
+          note: `export ${i + 1}/${chunks.length}`,
+        });
+
+        const prepared = await ensurePreparedChunk(chunk.index, {
+          force: false,
+          waitForTimestamps: false,
+          reason: "export",
+        });
+
+        setChunkStatus(chunk.index, {
+          audio: prepared.streamId ? "ready-streaming" : "ready-cached",
+          timing: prepared.timestamps.length > 0 ? "ready" : "pending",
+          note: `export ${i + 1}/${chunks.length}`,
+        });
+
+        const res = await fetch(prepared.audioUrl);
+        if (!res.ok) {
+          throw new Error(`Failed to export chunk ${chunk.index + 1} (${res.status})`);
+        }
+        const bytes = await res.arrayBuffer();
+        buffers.push(bytes);
+
+        setActivity(`Preparing full audio export (${i + 1}/${chunks.length})...`);
+      }
+
+      const blob = new Blob(buffers, { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${baseName}-${voiceName}.mp3`;
       a.click();
-      URL.revokeObjectURL(url);
-    } catch {
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setActivity(null);
+    } catch (err) {
+      reportTtsClientError(
+        "audio_bar.download_audio",
+        "Full-document audio download failed",
+        err,
+        {
+          fileName: openFilePath || "",
+          chunkCount: chunks.length,
+        }
+      );
       setError("Download failed");
+      setActivity(null);
+    } finally {
+      setDownloadBusy(false);
     }
-  }, [voiceId, openFilePath]);
+  }, [
+    bumpDetails,
+    clearBlobUrls,
+    content,
+    downloadBusy,
+    ensurePreparedChunk,
+    openFilePath,
+    reportTtsClientError,
+    setChunkStatus,
+    voiceId,
+  ]);
 
   const regenerate = useCallback(() => {
     forceRegenRef.current = true;
     stop();
-    playFrom();
+    void playFrom();
   }, [stop, playFrom]);
 
   const hasContent = !!content?.trim();
   const isActive = state !== "idle";
   const hasDuration = Number.isFinite(effectiveDuration) && effectiveDuration > 0;
-  const hasAudio = !!audioRef.current?.src;
   const fileName = openFilePath?.split("/").pop() ?? "No file";
   const currentVoice = VOICES.find((v) => v.id === voiceId);
+  const chunkPlan = chunkPlanRef.current;
+  const currentChunkNumber = currentChunkRef.current ? currentChunkRef.current.index + 1 : 0;
+  const preparedChunkCount = Array.from(chunkStatusRef.current.values()).filter((status) =>
+    status.audio === "ready-cached" || status.audio === "ready-streaming" || status.audio === "playing"
+  ).length;
+  const timestampReadyCount = Array.from(chunkStatusRef.current.values()).filter(
+    (status) => status.timing === "ready"
+  ).length;
 
   return (
     <div className="h-16 bg-surface border-t border-border shrink-0 flex items-center px-4 gap-4">
@@ -883,11 +2117,15 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
       <div className="flex items-center gap-3 w-56 justify-end">
         <button
           onClick={downloadAudio}
-          disabled={!hasAudio}
+          disabled={!hasContent || downloadBusy}
           className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
-          title="Download audio"
+          title={downloadBusy ? "Preparing full MP3..." : "Download full MP3"}
         >
-          <DownloadSimple size={16} />
+          {downloadBusy ? (
+            <SpinnerGap size={16} className="animate-spin" />
+          ) : (
+            <DownloadSimple size={16} />
+          )}
         </button>
         <div className="flex items-center gap-2">
           <button
@@ -913,6 +2151,18 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
             className="w-20 h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
           />
         </div>
+        <button
+          onClick={() => setFollowAlong((v) => !v)}
+          aria-pressed={followAlong}
+          className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
+            followAlong
+              ? "border-accent/40 text-accent bg-accent/15 shadow-[inset_0_0_0_1px_rgba(196,149,106,0.15)]"
+              : "border-border/90 text-text-muted bg-surface-alt/50 opacity-70 hover:opacity-100 hover:text-text"
+          }`}
+          title={followAlong ? "Follow-along enabled (click to disable)" : "Follow-along disabled (click to enable)"}
+        >
+          Follow
+        </button>
 
         <div className="relative">
           <button
@@ -1080,6 +2330,87 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
                   />
                 </div>
               )}
+            </div>
+          )}
+        </div>
+        <div className="relative" ref={detailsRef}>
+          <button
+            onClick={() => setShowDetails((s) => !s)}
+            className={`text-text-muted hover:text-text transition-colors ${showDetails ? "text-accent" : ""}`}
+            title="Chunk details"
+          >
+            <ListBullets size={16} />
+          </button>
+          {showDetails && (
+            <div className="absolute right-0 bottom-full mb-2 w-80 bg-surface border border-border rounded-lg shadow-lg p-3 z-50 max-h-80 overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-medium text-text">Playback Details</div>
+                <button
+                  onClick={() => setShowDetails(false)}
+                  className="text-text-muted hover:text-text transition-colors"
+                  title="Close details"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] mb-2">
+                <div className="text-text-muted">
+                  Chunks: <span className="text-text">{chunkPlan.length}</span>
+                </div>
+                <div className="text-text-muted">
+                  Active: <span className="text-text">{currentChunkNumber || "-"}</span>
+                </div>
+                <div className="text-text-muted">
+                  Audio ready: <span className="text-text">{preparedChunkCount}/{chunkPlan.length}</span>
+                </div>
+                <div className="text-text-muted">
+                  Timestamps: <span className="text-text">{timestampReadyCount}/{chunkPlan.length}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                {chunkPlan.length === 0 ? (
+                  <div className="text-[10px] text-text-muted py-1">No chunk plan yet. Start playback to populate.</div>
+                ) : (
+                  chunkPlan.map((chunk) => {
+                    const status = chunkStatusRef.current.get(chunk.index) || {
+                      audio: "pending",
+                      timing: "pending",
+                    };
+                    const lineEnd = chunk.lineOffset + chunk.lineCount - 1;
+                    const duration = chunkDurationsRef.current[chunk.index] || 0;
+                    const timingLabel = status.timing === "pending" ? "pending" : status.timing;
+                    return (
+                      <div
+                        key={chunk.index}
+                        className={`rounded-md border px-2 py-1 ${currentChunkRef.current?.index === chunk.index ? "border-accent/50 bg-accent/10" : "border-border bg-surface-alt/40"}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-text font-medium">#{chunk.index + 1} · L{chunk.lineOffset}-{lineEnd}</div>
+                          <div className="text-[10px] text-text-muted">{duration > 0 ? fmt(duration) : "~"}</div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-[10px] mt-0.5">
+                          <div className={audioStatusTone(status.audio)}>
+                            audio: {audioStatusLabel(status.audio)}
+                          </div>
+                          <div className={timingStatusTone(status.timing)}>
+                            stt: {timingLabel}
+                          </div>
+                        </div>
+                        <div className="text-[10px] text-text-muted mt-0.5 truncate">
+                          {chunk.text.replace(/\s+/g, " ").trim().slice(0, 56) || "(empty chunk)"}
+                        </div>
+                        {status.note && (
+                          <div className="text-[10px] text-text-muted/90 truncate">
+                            {status.note}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -21,6 +21,21 @@ import { Play, ChatCircle, MagnifyingGlass, PencilLine } from "@phosphor-icons/r
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
 
+function isWordChar(ch: string): boolean {
+  return /[A-Za-z0-9'_’-]/.test(ch);
+}
+
+function getWordStartOffset(lineText: string, relativePos: number): number {
+  if (!lineText) return relativePos;
+  let i = Math.max(0, Math.min(relativePos, lineText.length - 1));
+  if (!isWordChar(lineText[i]) && i > 0 && isWordChar(lineText[i - 1])) {
+    i -= 1;
+  }
+  if (!isWordChar(lineText[i])) return relativePos;
+  while (i > 0 && isWordChar(lineText[i - 1])) i -= 1;
+  return i;
+}
+
 // CodeMirror effect + field for AI/TTS highlights (line decoration for full-line highlight)
 const setHighlightEffect = StateEffect.define<{ from: number; to: number } | null>();
 
@@ -103,7 +118,7 @@ export function Editor({ editorViewRef }: EditorProps) {
   const wrapCompartment = useRef(new Compartment());
   const [wordWrap, setWordWrap] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; line: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; line: number; fromChar: number } | null>(null);
   const lastWrittenContent = useRef<string>("");
   const lastBroadcastContent = useRef<string>("");
   const diskWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -177,8 +192,16 @@ export function Editor({ editorViewRef }: EditorProps) {
             const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
             if (pos === null) return false;
             const line = view.state.doc.lineAt(pos);
+            const relativePos = Math.max(0, Math.min(line.length, pos - line.from));
+            const wordStart = getWordStartOffset(line.text, relativePos);
+            const fromChar = line.from + wordStart;
             event.preventDefault();
-            setCtxMenu({ x: event.clientX, y: event.clientY, line: line.number });
+            setCtxMenu({
+              x: event.clientX,
+              y: event.clientY,
+              line: line.number,
+              fromChar,
+            });
             return true;
           },
         }),
@@ -408,7 +431,11 @@ export function Editor({ editorViewRef }: EditorProps) {
           <button
             className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
             onClick={() => {
-              dispatch({ type: "tts:play-from", fromLine: ctxMenu.line });
+              dispatch({
+                type: "tts:play-from",
+                fromLine: ctxMenu.line,
+                fromChar: ctxMenu.fromChar,
+              });
               setCtxMenu(null);
             }}
           >

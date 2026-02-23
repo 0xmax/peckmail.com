@@ -534,7 +534,12 @@ export class WorkspaceStore {
 
       // TTS
       case "tts:play-from": {
-        this.setState({ ttsFromLine: action.fromLine });
+        this.setState({
+          ttsFromLine: {
+            fromLine: action.fromLine,
+            fromChar: action.fromChar,
+          },
+        });
         break;
       }
 

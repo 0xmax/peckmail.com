@@ -28,6 +28,7 @@ export interface UserPreferences {
     voiceId?: string;
     model?: "v2" | "v3";
     simpleMode?: boolean;
+    followAlong?: boolean;
     v2?: {
       stability: number;
       similarityBoost: number;
@@ -44,6 +45,7 @@ export interface ProjectSettings {
     voiceId?: string;
     model?: "v2" | "v3";
     simpleMode?: boolean;
+    followAlong?: boolean;
     v2?: {
       stability: number;
       similarityBoost: number;
@@ -79,6 +81,11 @@ export interface IncomingEmail {
   created_at: string;
 }
 
+export interface TtsPlayFromTarget {
+  fromLine: number;
+  fromChar?: number;
+}
+
 export interface StoreState {
   projectId: string;
   projectName: string;
@@ -96,7 +103,7 @@ export interface StoreState {
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   chatError: string | null;
-  ttsFromLine: number | null;
+  ttsFromLine: TtsPlayFromTarget | null;
   chatPrompt: string | null;
   projectSettings: ProjectSettings;
   incomingEmails: IncomingEmail[];
@@ -140,7 +147,7 @@ export type StoreAction =
   | { type: "chat:prompt"; message: string }
   | { type: "chat:prompt-clear" }
   // TTS
-  | { type: "tts:play-from"; fromLine: number }
+  | { type: "tts:play-from"; fromLine: number; fromChar?: number }
   | { type: "tts:clear" }
   | { type: "tts:highlight"; line: number; fromChar?: number; toChar?: number }
   | { type: "tts:highlight-clear" }
