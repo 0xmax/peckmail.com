@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
+import { Monitor, Terminal, Plugs } from "@phosphor-icons/react";
 
 export function LoginPage({ banner }: { banner?: React.ReactNode }) {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
@@ -28,18 +29,48 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg px-4">
-      <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border">
-        <div className="text-center mb-8">
-          <img src="/assets/logo.png" alt="Perchpad" className="h-14 w-auto mx-auto mb-3" />
-          <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-4xl font-semibold text-text mb-2 -tracking-[0.01em]">
-            Perchpad
-          </h1>
-          <p className="text-text-muted">
-            Your friendly writing workspace
-          </p>
-        </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-bg px-4 py-12">
+      {/* Hero */}
+      <div className="w-full max-w-md text-center mb-6">
+        <img src="/assets/logo.png" alt="Perchpad" className="h-14 w-auto mx-auto mb-3" />
+        <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-4xl font-semibold text-text mb-2 -tracking-[0.01em]">
+          Perchpad
+        </h1>
+        <p className="text-text-muted mb-4">Your friendly writing workspace</p>
+        <p className="text-sm text-text-muted/80 leading-relaxed">
+          A calm space for your writing, notes, and ideas — with AI&nbsp;chat,
+          text&#8209;to&#8209;speech, version&nbsp;history, and real&#8209;time collaboration.
+        </p>
+      </div>
 
+      {/* Connect to Claude */}
+      <div className="w-full max-w-md bg-surface/60 border border-border rounded-xl p-4 mb-6">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+            <Plugs size={16} weight="duotone" className="text-accent" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-text mb-1">Connect to Claude</h3>
+            <p className="text-xs text-text-muted leading-relaxed">
+              Use Perchpad as an MCP server with Claude Desktop or Claude Code.
+              Let Claude read, edit, and manage your files directly.
+            </p>
+            <div className="flex items-center gap-4 mt-2.5">
+              <span className="flex items-center gap-1.5 text-xs text-text-muted">
+                <Monitor size={13} />
+                Claude Desktop
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-text-muted">
+                <Terminal size={13} />
+                Claude Code
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Login card */}
+      <div className="w-full max-w-md p-8 bg-surface rounded-2xl shadow-lg border border-border">
         {banner}
 
         <button
