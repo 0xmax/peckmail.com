@@ -120,7 +120,7 @@ export function EditorToolbar({
 
   return (
     <div className="relative">
-      <div className="flex items-center px-3 py-1 bg-surface border-b border-border gap-0.5">
+      <div className="flex items-center px-3 py-1 bg-card border-b border-border gap-0.5">
         {!showPreview && (
           <>
             <ToolbarButton
@@ -214,7 +214,7 @@ export function EditorToolbar({
           size="icon"
           className={`h-7 w-7 ${
             isRecording
-              ? "text-danger recording-pulse"
+              ? "text-destructive recording-pulse"
               : ""
           }`}
           onClick={() => {

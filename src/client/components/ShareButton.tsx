@@ -37,8 +37,8 @@ export function ShareButton({
       title={copied ? "Link copied!" : "Share"}
       className={`p-2 rounded-lg transition-colors ${
         copied
-          ? "text-accent bg-surface-alt"
-          : "text-text-muted hover:text-text hover:bg-surface-alt"
+          ? "text-primary bg-muted"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted"
       }`}
     >
       <LinkSimple size={16} />

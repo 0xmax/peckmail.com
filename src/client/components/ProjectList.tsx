@@ -4,7 +4,7 @@ import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
 import { ArrowRight, DotsThree, Envelope, File, GearSix, MagnifyingGlass, Notebook, PencilSimple, Plugs, SignOut, SortAscending, SpinnerGap, Trash, UserPlus, X } from "@phosphor-icons/react";
-import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import type { ItemColor } from "../store/types.js";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input.js";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog.js";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel } from "@/components/ui/dropdown-menu.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.js";
 import { ThemeToggle } from "./ThemeToggle.js";
 
 const WORKSPACE_COLOR_HEX: Record<ItemColor, string> = {
@@ -133,7 +134,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-accent/20 text-text rounded-sm px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      <mark className="bg-primary/20 text-foreground rounded-sm px-0.5">{text.slice(idx, idx + query.length)}</mark>
       {text.slice(idx + query.length)}
     </>
   );
@@ -270,12 +271,12 @@ export function ProjectList({
   }, [projects, search, sort, matchesByProject]);
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
+      <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src="/assets/logo.png" alt="Peckmail" className="h-7 w-auto" />
-          <h1 className="font-heading text-2xl font-semibold text-text -tracking-[0.01em]">Peckmail</h1>
+          <h1 className="text-2xl font-semibold text-foreground -tracking-[0.01em]">Peckmail</h1>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
@@ -293,29 +294,29 @@ export function ProjectList({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">
-                <div className="text-sm font-medium text-text truncate">
+                <div className="text-sm font-medium text-foreground truncate">
                   {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
                 </div>
                 {handle && (
-                  <div className="text-xs text-text-muted truncate mt-0.5">@{handle}</div>
+                  <div className="text-xs text-muted-foreground truncate mt-0.5">@{handle}</div>
                 )}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {onOpenSettings && (
                 <DropdownMenuItem onClick={() => onOpenSettings()}>
-                  <GearSix size={16} className="text-text-muted" />
+                  <GearSix size={16} className="text-muted-foreground" />
                   Settings
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem asChild>
                 <a href="/contact">
-                  <Envelope size={16} className="text-text-muted" />
+                  <Envelope size={16} className="text-muted-foreground" />
                   Contact
                 </a>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => signOut()}>
-                <SignOut size={16} className="text-text-muted" />
+                <SignOut size={16} className="text-muted-foreground" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -327,16 +328,16 @@ export function ProjectList({
         {/* Invitations */}
         {invitations.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-text mb-3">
+            <h2 className="text-lg font-semibold text-foreground mb-3">
               Pending invitations
             </h2>
             <div className="space-y-2">
               {invitations.map((inv) => (
                 <div
                   key={inv.id}
-                  className="flex items-center justify-between bg-surface rounded-xl p-4 border border-border"
+                  className="flex items-center justify-between bg-card rounded-xl p-4 border border-border"
                 >
-                  <span className="text-text">
+                  <span className="text-foreground">
                     You've been invited to{" "}
                     <strong>{inv.projects.name}</strong>
                   </span>
@@ -351,7 +352,7 @@ export function ProjectList({
 
         {/* Projects */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-text">
+          <h2 className="text-lg font-semibold text-foreground">
             Your workspaces
           </h2>
           <Button onClick={() => setShowCreate(true)}>
@@ -362,7 +363,7 @@ export function ProjectList({
         {projects.length > 0 && (
           <div className="flex items-center gap-2 mb-4">
             <div className="relative flex-1">
-              <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+              <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
                 placeholder="Search workspaces and files..."
@@ -371,23 +372,21 @@ export function ProjectList({
                 className="pl-9 pr-8"
               />
               {fileSearching && (
-                <SpinnerGap size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" />
+                <SpinnerGap size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
               )}
             </div>
-            <div className="relative">
-              <SortAscending size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as typeof sort)}
-                className="appearance-none pl-8 pr-7 py-2 bg-surface border border-border rounded-xl text-sm text-text focus:outline-none focus:border-accent/50 transition-colors cursor-pointer"
-              >
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-                <option value="a-z">A — Z</option>
-                <option value="z-a">Z — A</option>
-              </select>
-              <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted pointer-events-none" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5l3 3 3-3" /></svg>
-            </div>
+            <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+              <SelectTrigger className="w-auto gap-1.5">
+                <SortAscending size={15} className="text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Newest</SelectItem>
+                <SelectItem value="oldest">Oldest</SelectItem>
+                <SelectItem value="a-z">A — Z</SelectItem>
+                <SelectItem value="z-a">Z — A</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )}
 
@@ -396,33 +395,32 @@ export function ProjectList({
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="w-full flex items-center gap-4 bg-surface rounded-xl px-5 py-4 border border-border"
+                className="w-full flex items-center gap-4 bg-card rounded-xl px-5 py-4 border border-border"
               >
-                <SkeletonCircle size={40} />
+                <Skeleton className="h-10 w-10 rounded-full shrink-0" />
                 <div className="flex-1 space-y-2">
-                  <SkeletonLine className="w-1/3" />
-                  <SkeletonLine className="w-1/2" />
+                  <Skeleton className="h-3 w-1/3 rounded-full" />
+                  <Skeleton className="h-3 w-1/2 rounded-full" />
                 </div>
                 <div className="flex -space-x-1.5">
-                  <SkeletonCircle size={24} />
-                  <SkeletonCircle size={24} />
+                  <Skeleton className="h-6 w-6 rounded-full shrink-0" />
+                  <Skeleton className="h-6 w-6 rounded-full shrink-0" />
                 </div>
               </div>
             ))}
           </div>
         ) : projects.length === 0 ? (
           <div className="text-center py-16">
-            <Notebook size={48} weight="duotone" className="mx-auto mb-4 text-text-muted" />
-            <p className="text-text-muted text-lg mb-2">
+            <Notebook size={48} weight="duotone" className="mx-auto mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground text-lg mb-2">
               No workspaces yet
             </p>
-            <p className="text-text-muted text-sm mb-5">
+            <p className="text-muted-foreground text-sm mb-5">
               Create your first workspace to start writing!
             </p>
-            <button
+            <Button
               onClick={handleCreateSample}
               disabled={creatingSample}
-              className="px-5 py-2.5 bg-accent text-white rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium inline-flex items-center gap-2"
             >
               {creatingSample ? (
                 <>
@@ -432,19 +430,19 @@ export function ProjectList({
               ) : (
                 "Try the starter project"
               )}
-            </button>
+            </Button>
           </div>
         ) : (
           filteredProjects.length === 0 && !fileSearching ? (
             <div className="text-center py-12">
-              <p className="text-text-muted text-sm">No workspaces match "{search}"</p>
+              <p className="text-muted-foreground text-sm">No workspaces match "{search}"</p>
             </div>
           ) : (
           <>
           {fileSearching && (
             <div className="flex items-center gap-2 mb-3 px-1">
-              <SpinnerGap size={14} className="text-text-muted animate-spin" />
-              <span className="text-xs text-text-muted">Searching files across all workspaces…</span>
+              <SpinnerGap size={14} className="text-muted-foreground animate-spin" />
+              <span className="text-xs text-muted-foreground">Searching files across all workspaces…</span>
             </div>
           )}
           <div className="space-y-2">
@@ -458,7 +456,7 @@ export function ProjectList({
                       e.preventDefault();
                       setColorMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
                     }}
-                    className="w-full flex items-center gap-4 bg-surface rounded-xl px-5 py-4 border border-border hover:border-accent/50 hover:shadow-sm transition-all group text-left cursor-pointer"
+                    className="w-full flex items-center gap-4 bg-card rounded-xl px-5 py-4 border border-border hover:border-primary/50 hover:shadow-sm transition-all group text-left cursor-pointer"
                   >
                     <div
                       className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg font-semibold"
@@ -482,35 +480,37 @@ export function ProjectList({
                               if (e.key === "Escape") setRenamingId(null);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="font-semibold text-text bg-transparent border-b border-accent/50 outline-none py-0 px-0 min-w-0 flex-1"
+                            className="font-semibold text-foreground bg-transparent border-b border-primary/50 outline-none py-0 px-0 min-w-0 flex-1"
                             autoFocus
                           />
                         ) : (
                           <>
-                            <h3 className="font-semibold text-text group-hover:text-accent transition-colors">
+                            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
                               {project.name}
                             </h3>
                             {project.role === "owner" && (
-                              <button
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setRenamingId(project.id);
                                   setRenameValue(project.name);
                                   setTimeout(() => renameInputRef.current?.select(), 0);
                                 }}
-                                className="opacity-0 group-hover:opacity-100 p-0.5 text-text-muted hover:text-text transition-all"
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 text-muted-foreground hover:text-foreground"
                                 title="Rename"
                               >
                                 <PencilSimple size={13} />
-                              </button>
+                              </Button>
                             )}
                           </>
                         )}
                       </div>
                       {project.description ? (
-                        <p className="text-sm text-text-muted truncate">{project.description}</p>
+                        <p className="text-sm text-muted-foreground truncate">{project.description}</p>
                       ) : (
-                        <p className="text-xs text-text-muted">
+                        <p className="text-xs text-muted-foreground">
                           {project.role === "owner" ? "Owner" : project.role === "editor" ? "Editor" : "Viewer"}
                           {" · "}
                           Created{" "}
@@ -526,12 +526,12 @@ export function ProjectList({
                             src={m.avatar_url}
                             name={m.display_name}
                             size={24}
-                            className="ring-2 ring-surface"
+                            className="ring-2 ring-card"
                           />
                         ))}
                         {project.members.length > 4 && (
                           <div
-                            className="w-6 h-6 rounded-full bg-surface-alt text-text-muted flex items-center justify-center text-[10px] font-medium ring-2 ring-surface shrink-0"
+                            className="w-6 h-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-[10px] font-medium ring-2 ring-card shrink-0"
                           >
                             +{project.members.length - 4}
                           </div>
@@ -543,14 +543,14 @@ export function ProjectList({
                         <DropdownMenuTrigger asChild>
                           <button
                             onClick={(e) => e.stopPropagation()}
-                            className="p-1 rounded-lg text-text-muted opacity-0 group-hover:opacity-100 hover:bg-surface-alt hover:text-text transition-all"
+                            className="p-1 rounded-lg text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground transition-all"
                           >
                             <DotsThree size={20} weight="bold" />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenuItem onClick={() => setShareProjectId(project.id)}>
-                            <UserPlus size={15} className="text-text-muted" />
+                            <UserPlus size={15} className="text-muted-foreground" />
                             Share
                           </DropdownMenuItem>
                           {project.role === "owner" && (
@@ -560,7 +560,7 @@ export function ProjectList({
                                 setRenameValue(project.name);
                                 setTimeout(() => renameInputRef.current?.select(), 0);
                               }}>
-                                <PencilSimple size={15} className="text-text-muted" />
+                                <PencilSimple size={15} className="text-muted-foreground" />
                                 Rename
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
@@ -583,12 +583,12 @@ export function ProjectList({
                         <button
                           key={`${hit.path}:${hit.line}:${i}`}
                           onClick={() => onOpenProject(project.id)}
-                          className="w-full flex items-start gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-surface-alt transition-colors"
+                          className="w-full flex items-start gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-muted transition-colors"
                         >
-                          <File size={13} className="text-text-muted shrink-0 mt-0.5" />
+                          <File size={13} className="text-muted-foreground shrink-0 mt-0.5" />
                           <div className="min-w-0 flex-1">
-                            <span className="text-xs text-text-muted">{hit.path}:{hit.line}</span>
-                            <p className="text-xs text-text truncate">
+                            <span className="text-xs text-muted-foreground">{hit.path}:{hit.line}</span>
+                            <p className="text-xs text-foreground truncate">
                               <HighlightMatch text={hit.context} query={search.trim()} />
                             </p>
                           </div>
@@ -606,26 +606,23 @@ export function ProjectList({
 
         {onOpenSettings && (
           <section className="mt-8">
-            <div className="bg-surface border border-border rounded-2xl p-5">
+            <div className="bg-card border border-border rounded-2xl p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
-                    <Plugs size={18} weight="duotone" className="text-accent" />
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <Plugs size={18} weight="duotone" className="text-primary" />
                   </div>
                   <div>
-                    <h2 className="text-base font-semibold text-text mb-1">Connect with Claude</h2>
-                    <p className="text-sm text-text-muted">
+                    <h2 className="text-base font-semibold text-foreground mb-1">Connect with Claude</h2>
+                    <p className="text-sm text-muted-foreground">
                       Set up Claude Desktop or Claude Code from Settings to connect directly to your workspaces.
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={onOpenSettings}
-                  className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 bg-surface-alt border border-border rounded-lg text-sm text-text hover:bg-bg transition-colors"
-                >
+                <Button variant="outline" onClick={onOpenSettings} className="shrink-0">
                   Open settings
-                  <ArrowRight size={14} className="text-text-muted" />
-                </button>
+                  <ArrowRight size={14} className="text-muted-foreground" />
+                </Button>
               </div>
             </div>
           </section>
@@ -635,7 +632,7 @@ export function ProjectList({
       {/* Workspace color picker */}
       {colorMenu && (
         <div
-          className="fixed bg-surface border border-border rounded-xl shadow-lg py-2 px-3 z-50 flex items-center gap-1.5"
+          className="fixed bg-card border border-border rounded-xl shadow-lg py-2 px-3 z-50 flex items-center gap-1.5"
           style={{ left: colorMenu.x, top: colorMenu.y }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -659,7 +656,7 @@ export function ProjectList({
                 className="item-color-swatch"
                 style={{
                   backgroundColor: WORKSPACE_COLOR_HEX[c],
-                  boxShadow: isActive ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${WORKSPACE_COLOR_HEX[c]}` : undefined,
+                  boxShadow: isActive ? `0 0 0 2px var(--color-card), 0 0 0 3.5px ${WORKSPACE_COLOR_HEX[c]}` : undefined,
                 }}
               />
             );
@@ -674,7 +671,7 @@ export function ProjectList({
                 saveWorkspaceColors(next);
                 setColorMenu(null);
               }}
-              className="w-5 h-5 rounded-full flex items-center justify-center text-text-muted hover:text-text transition-colors"
+              className="w-5 h-5 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <X size={10} weight="bold" />
             </button>

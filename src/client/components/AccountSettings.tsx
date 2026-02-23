@@ -114,17 +114,14 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   };
 
   return (
-    <div className="min-h-screen bg-bg">
-      <header className="bg-surface border-b border-border px-6 py-4 flex items-center justify-between relative">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors"
-        >
+    <div className="min-h-screen bg-background">
+      <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between relative">
+        <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft size={14} weight="bold" className="inline" /> Back
-        </button>
+        </Button>
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
           <img src="/assets/logo.png" alt="Peckmail" className="h-6 w-auto" />
-          <span style={{ fontFamily: "'Playfair Display', serif" }} className="text-lg font-medium text-text -tracking-[0.01em]">
+          <span className="text-lg font-medium text-foreground -tracking-[0.01em]">
             Peckmail
           </span>
         </div>
@@ -144,33 +141,33 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <div className="px-2 py-1.5">
-                <div className="text-sm font-medium text-text truncate">
+                <div className="text-sm font-medium text-foreground truncate">
                   {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
                 </div>
                 {handle && (
-                  <div className="text-xs text-text-muted truncate mt-0.5">@{handle}</div>
+                  <div className="text-xs text-muted-foreground truncate mt-0.5">@{handle}</div>
                 )}
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onBack()}>
-                <ArrowLeft size={16} className="text-text-muted" />
+                <ArrowLeft size={16} className="text-muted-foreground" />
                 All workspaces
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href="/contact">
-                  <Envelope size={16} className="text-text-muted" />
+                  <Envelope size={16} className="text-muted-foreground" />
                   Contact
                 </a>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href="https://x.com/peckmail" target="_blank" rel="noopener">
-                  <XLogo size={16} className="text-text-muted" />
+                  <XLogo size={16} className="text-muted-foreground" />
                   Follow on X
                 </a>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => signOut()}>
-                <SignOut size={16} className="text-text-muted" />
+                <SignOut size={16} className="text-muted-foreground" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -181,16 +178,16 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
       <div className="max-w-2xl mx-auto p-8 space-y-8">
         {/* Account section */}
         <section>
-          <h2 className="text-base font-semibold text-text mb-4">Account</h2>
+          <h2 className="text-base font-semibold text-foreground mb-4">Account</h2>
           <Card>
             <CardContent className="p-5 space-y-4">
               <div>
-                <label className="text-xs font-medium text-text-muted block mb-1">Email</label>
-                <div className="text-sm text-text">{user?.email}</div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Email</label>
+                <div className="text-sm text-foreground">{user?.email}</div>
               </div>
               <div>
-                <label className="text-xs font-medium text-text-muted block mb-1">Display name</label>
-                <div className="text-sm text-text">
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Display name</label>
+                <div className="text-sm text-foreground">
                   {user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Not set"}
                 </div>
               </div>
@@ -200,23 +197,23 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
 
         {/* Credits section */}
         <section>
-          <h2 className="text-base font-semibold text-text mb-4">Credits</h2>
+          <h2 className="text-base font-semibold text-foreground mb-4">Credits</h2>
           <Card>
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-2xl font-bold text-text tabular-nums">
+                  <div className="text-2xl font-bold text-foreground tabular-nums">
                     {credits ? credits.available.toLocaleString() : "\u2014"}
                   </div>
-                  <div className="text-xs text-text-muted mt-0.5">
+                  <div className="text-xs text-muted-foreground mt-0.5">
                     available credits
                     {credits && credits.held > 0 && (
                       <span className="ml-1">({credits.held.toLocaleString()} held)</span>
                     )}
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                  <CurrencyDollar size={20} className="text-accent" />
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <CurrencyDollar size={20} className="text-primary" />
                 </div>
               </div>
 
@@ -229,7 +226,9 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
               )}
 
               <div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={async () => {
                     if (!showTransactions && transactions.length === 0) {
                       setLoadingTx(true);
@@ -241,34 +240,34 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
                     }
                     setShowTransactions(!showTransactions);
                   }}
-                  className="text-xs font-medium text-text-muted hover:text-text transition-colors flex items-center gap-1"
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground"
                 >
                   <span className={`transition-transform ${showTransactions ? "rotate-90" : ""}`}>&rsaquo;</span>
                   Usage history
-                </button>
+                </Button>
                 {showTransactions && (
                   <div className="mt-2 space-y-1">
                     {loadingTx ? (
-                      <div className="text-xs text-text-muted py-2">Loading...</div>
+                      <div className="text-xs text-muted-foreground py-2">Loading...</div>
                     ) : transactions.length === 0 ? (
-                      <div className="text-xs text-text-muted py-2">No transactions yet</div>
+                      <div className="text-xs text-muted-foreground py-2">No transactions yet</div>
                     ) : (
                       transactions.map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-3 py-2">
+                        <div key={tx.id} className="flex items-center justify-between bg-muted rounded-lg px-3 py-2">
                           <div className="min-w-0">
-                            <div className="text-sm text-text">
-                              <span className={`font-medium ${tx.amount > 0 ? "text-green-600" : "text-text"}`}>
+                            <div className="text-sm text-foreground">
+                              <span className={`font-medium ${tx.amount > 0 ? "text-green-600" : "text-foreground"}`}>
                                 {tx.amount > 0 ? "+" : ""}{tx.amount.toLocaleString()}
                               </span>
                               {tx.service && (
-                                <span className="ml-1.5 text-xs text-text-muted">{tx.service}</span>
+                                <span className="ml-1.5 text-xs text-muted-foreground">{tx.service}</span>
                               )}
                             </div>
-                            <div className="text-xs text-text-muted">
+                            <div className="text-xs text-muted-foreground">
                               {tx.type} · {new Date(tx.created_at).toLocaleDateString()}
                             </div>
                           </div>
-                          <div className="text-xs text-text-muted tabular-nums shrink-0 ml-3">
+                          <div className="text-xs text-muted-foreground tabular-nums shrink-0 ml-3">
                             {tx.balance_after.toLocaleString()}
                           </div>
                         </div>
@@ -283,51 +282,48 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
 
         {/* Connect to Claude section */}
         <section>
-          <h2 className="text-base font-semibold text-text mb-4">Connect to Claude</h2>
+          <h2 className="text-base font-semibold text-foreground mb-4">Connect to Claude</h2>
           <Card>
             <CardContent className="p-5 space-y-5">
-              <p className="text-xs text-text-muted">
+              <p className="text-xs text-muted-foreground">
                 Connect Claude to your Peckmail projects so it can read, write, and manage your files directly.
               </p>
 
               {/* MCP URL */}
               <div>
-                <label className="text-xs font-medium text-text-muted block mb-1.5">MCP Server URL</label>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">MCP Server URL</label>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-sm bg-surface-alt border border-border rounded-lg px-3 py-2 font-mono text-text select-all">
+                  <code className="flex-1 text-sm bg-muted border border-border rounded-lg px-3 py-2 font-mono text-foreground select-all">
                     {MCP_URL}
                   </code>
-                  <button
-                    onClick={handleCopyUrl}
-                    className="shrink-0 px-3 py-2 bg-surface-alt border border-border text-text-muted rounded-lg text-xs hover:text-text hover:border-text-muted transition-colors"
-                  >
+                  <Button variant="outline" size="sm" onClick={handleCopyUrl} className="shrink-0">
                     {urlCopied ? "Copied!" : "Copy"}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
               {/* Claude Desktop */}
-              <div className="bg-surface-alt rounded-lg p-4 space-y-2">
+              <div className="bg-muted rounded-lg p-4 space-y-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
-                    <Monitor size={12} className="text-accent" />
+                  <div className="w-5 h-5 rounded bg-primary/20 flex items-center justify-center">
+                    <Monitor size={12} className="text-primary" />
                   </div>
-                  <span className="text-sm font-medium text-text">Claude Desktop</span>
+                  <span className="text-sm font-medium text-foreground">Claude Desktop</span>
                 </div>
-                <p className="text-xs text-text-muted">
+                <p className="text-xs text-muted-foreground">
                   Add a remote MCP server in Claude Desktop with the URL above. OAuth sign-in handles authentication automatically — no API key needed.
                 </p>
               </div>
 
               {/* Claude Code */}
-              <div className="bg-surface-alt rounded-lg p-4 space-y-3">
+              <div className="bg-muted rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
-                    <Terminal size={12} className="text-accent" />
+                  <div className="w-5 h-5 rounded bg-primary/20 flex items-center justify-center">
+                    <Terminal size={12} className="text-primary" />
                   </div>
-                  <span className="text-sm font-medium text-text">Claude Code</span>
+                  <span className="text-sm font-medium text-foreground">Claude Code</span>
                 </div>
-                <p className="text-xs text-text-muted">
+                <p className="text-xs text-muted-foreground">
                   Create an API key, then use the one-liner below or download the config file.
                 </p>
 
@@ -341,12 +337,9 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
                       <code className="flex-1 text-xs bg-white dark:bg-green-900 border border-green-200 dark:border-green-700 rounded px-2 py-1.5 font-mono text-green-900 dark:text-green-100 break-all select-all">
                         {createdKey}
                       </code>
-                      <button
-                        onClick={handleCopyKey}
-                        className="shrink-0 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition-colors"
-                      >
+                      <Button variant="outline" size="sm" onClick={handleCopyKey} className="shrink-0 bg-green-600 hover:bg-green-700 text-white border-transparent">
                         {keyCopied ? "Copied!" : "Copy key"}
-                      </button>
+                      </Button>
                     </div>
 
                     {/* CLI one-liner */}
@@ -356,28 +349,19 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
                         <code className="flex-1 text-xs bg-white dark:bg-green-900 border border-green-200 dark:border-green-700 rounded px-2 py-1.5 font-mono text-green-900 dark:text-green-100 break-all select-all">
                           claude mcp add peckmail --url {MCP_URL} --header &quot;Authorization: Bearer {createdKey}&quot;
                         </code>
-                        <button
-                          onClick={() => handleCopyCliCommand(createdKey)}
-                          className="shrink-0 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition-colors"
-                        >
+                        <Button variant="outline" size="sm" onClick={() => handleCopyCliCommand(createdKey)} className="shrink-0 bg-green-600 hover:bg-green-700 text-white border-transparent">
                           {cliCopied ? "Copied!" : "Copy"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 pt-1">
-                      <button
-                        onClick={handleDownloadConfig}
-                        className="text-xs font-medium text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 transition-colors underline"
-                      >
+                      <Button variant="link" size="sm" onClick={handleDownloadConfig} className="text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100">
                         Download config file instead
-                      </button>
-                      <button
-                        onClick={() => { setCreatedKey(null); setKeyCopied(false); }}
-                        className="text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 transition-colors"
-                      >
+                      </Button>
+                      <Button variant="link" size="sm" onClick={() => { setCreatedKey(null); setKeyCopied(false); }} className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200">
                         Dismiss
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -407,23 +391,20 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
               {/* Existing keys */}
               {apiKeys.length > 0 && (
                 <div>
-                  <label className="text-xs font-medium text-text-muted block mb-2">Your API keys</label>
+                  <label className="text-xs font-medium text-muted-foreground block mb-2">Your API keys</label>
                   <div className="space-y-2">
                     {apiKeys.map((k) => (
-                      <div key={k.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-3 py-2">
+                      <div key={k.id} className="flex items-center justify-between bg-muted rounded-lg px-3 py-2">
                         <div className="min-w-0">
-                          <div className="text-sm font-medium text-text truncate">{k.name}</div>
-                          <div className="text-xs text-text-muted">
+                          <div className="text-sm font-medium text-foreground truncate">{k.name}</div>
+                          <div className="text-xs text-muted-foreground">
                             Created {new Date(k.created_at).toLocaleDateString()}
                             {k.last_used_at && ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}`}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDeleteKey(k.id)}
-                          className="shrink-0 text-xs text-red-500 hover:text-red-700 transition-colors ml-3"
-                        >
+                        <Button variant="link" size="sm" onClick={() => handleDeleteKey(k.id)} className="shrink-0 text-destructive ml-3">
                           Revoke
-                        </button>
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -437,12 +418,14 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
         <section className="pt-4 border-t border-border">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-medium text-text-muted">Starter project</h3>
-              <p className="text-xs text-text-muted/70 mt-0.5">
+              <h3 className="text-sm font-medium text-muted-foreground">Starter project</h3>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">
                 Create a new workspace with sample files, recipes, and guides.
               </p>
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={async () => {
                 setCreatingStarter(true);
                 try {
@@ -453,10 +436,10 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
                 }
               }}
               disabled={creatingStarter}
-              className="shrink-0 px-3 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg text-xs hover:text-text hover:border-text-muted transition-colors disabled:opacity-50"
+              className="shrink-0"
             >
               {creatingStarter ? "Creating..." : "Create"}
-            </button>
+            </Button>
           </div>
         </section>
       </div>

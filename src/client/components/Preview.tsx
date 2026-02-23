@@ -49,7 +49,7 @@ function CsvPreview({ content }: { content: string }) {
   if (headers.length === 0) {
     return (
       <div className="flex-1 overflow-y-auto bg-white">
-        <div className="max-w-[960px] mx-auto px-6 py-8 text-text-muted">
+        <div className="max-w-[960px] mx-auto px-6 py-8 text-muted-foreground">
           Empty CSV file
         </div>
       </div>
@@ -79,7 +79,7 @@ function CsvPreview({ content }: { content: string }) {
             ))}
           </tbody>
         </table>
-        <div className="mt-4 text-sm text-text-muted">
+        <div className="mt-4 text-sm text-muted-foreground">
           {rows.length} {rows.length === 1 ? "row" : "rows"} · {headers.length}{" "}
           {headers.length === 1 ? "column" : "columns"}
         </div>

@@ -54,7 +54,7 @@ export function ChatPanel() {
       {/* Chat header */}
       <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-text">Assistant</span>
+          <span className="text-sm font-medium text-foreground">Assistant</span>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -80,9 +80,9 @@ export function ChatPanel() {
 
       {/* Sessions dropdown */}
       {showSessions && (
-        <div className="border-b border-border bg-surface-alt max-h-48 overflow-y-auto">
+        <div className="border-b border-border bg-muted max-h-48 overflow-y-auto">
           {sessions.length === 0 ? (
-            <p className="text-xs text-text-muted p-3">No conversations yet</p>
+            <p className="text-xs text-muted-foreground p-3">No conversations yet</p>
           ) : (
             sessions.map((s) => (
               <div
@@ -96,13 +96,13 @@ export function ChatPanel() {
                     dispatch({ type: "chat:load-session", sessionId: s.id });
                     setShowSessions(false);
                   }}
-                  className="flex-1 text-left text-text truncate"
+                  className="flex-1 text-left text-foreground truncate"
                 >
                   {s.title}
                 </button>
                 <button
                   onClick={() => dispatch({ type: "chat:delete-session", sessionId: s.id })}
-                  className="text-text-muted hover:text-danger ml-2 shrink-0"
+                  className="text-muted-foreground hover:text-destructive ml-2 shrink-0"
                 >
                   ×
                 </button>
@@ -116,11 +116,11 @@ export function ChatPanel() {
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-8">
-            <ChatCircle size={32} weight="duotone" className="mx-auto mb-2 text-text-muted" />
-            <p className="text-text-muted text-sm">
+            <ChatCircle size={32} weight="duotone" className="mx-auto mb-2 text-muted-foreground" />
+            <p className="text-muted-foreground text-sm">
               Ask me anything about your writing!
             </p>
-            <p className="text-text-muted text-xs mt-1">
+            <p className="text-muted-foreground text-xs mt-1">
               I can help edit, brainstorm, outline, and more.
             </p>
           </div>
@@ -130,9 +130,9 @@ export function ChatPanel() {
         ))}
         {streaming && (
           <div className="flex gap-1 px-3 py-2">
-            <span className="w-2 h-2 rounded-full bg-accent pulse-dot" />
-            <span className="w-2 h-2 rounded-full bg-accent pulse-dot" />
-            <span className="w-2 h-2 rounded-full bg-accent pulse-dot" />
+            <span className="w-2 h-2 rounded-full bg-primary pulse-dot" />
+            <span className="w-2 h-2 rounded-full bg-primary pulse-dot" />
+            <span className="w-2 h-2 rounded-full bg-primary pulse-dot" />
           </div>
         )}
         {error && (
@@ -160,7 +160,7 @@ export function ChatPanel() {
             onKeyDown={handleKeyDown}
             placeholder="Ask something..."
             rows={1}
-            className="flex-1 resize-none py-2 px-3 bg-bg border border-border rounded-xl text-sm text-text placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            className="flex-1 resize-none py-2 px-3 bg-background border border-border rounded-xl text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             style={{
               minHeight: "38px",
               maxHeight: "120px",

@@ -54,9 +54,9 @@ function fileContentFromPath(path: string): string {
 
 function FileIcon({ type }: { type: "file" | "directory" }) {
   if (type === "directory") {
-    return <Folder size={16} weight="duotone" className="text-accent shrink-0" />;
+    return <Folder size={16} weight="duotone" className="text-primary shrink-0" />;
   }
-  return <File size={16} className="text-text-muted shrink-0" />;
+  return <File size={16} className="text-muted-foreground shrink-0" />;
 }
 
 function TreeItem({
@@ -140,16 +140,16 @@ function TreeItem({
         }}
         className={`w-full text-left flex items-center gap-2 py-1.5 px-2 rounded-lg text-sm transition-colors ${
           isSelected
-            ? "bg-surface-alt text-accent"
-            : "text-text hover:bg-surface-alt"
-        } ${isDropTarget ? "ring-1 ring-accent/40 bg-accent/10" : ""}`}
+            ? "bg-muted text-primary"
+            : "text-foreground hover:bg-muted"
+        } ${isDropTarget ? "ring-1 ring-primary/40 bg-primary/10" : ""}`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         {node.type === "directory" ? (
           <CaretRight
             size={12}
             weight="bold"
-            className={`text-text-muted transition-transform shrink-0 ${
+            className={`text-muted-foreground transition-transform shrink-0 ${
               expanded ? "rotate-90" : ""
             }`}
           />
@@ -170,7 +170,7 @@ function TreeItem({
               <span
                 key={u.userId}
                 title={u.displayName}
-                className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-surface"
+                className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-card"
                 style={{ backgroundColor: u.color }}
               >
                 {u.displayName[0]?.toUpperCase()}
@@ -304,7 +304,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
     >
       {/* Header with actions */}
       <div className="p-3 border-b border-border flex items-center justify-between">
-        <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Pages
         </span>
         <div className="flex gap-1">
@@ -312,7 +312,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
             onClick={() => {
               createNewFile(null);
             }}
-            className="text-text-muted hover:text-accent transition-colors p-1"
+            className="text-muted-foreground hover:text-primary transition-colors p-1"
             title="New page"
           >
             <Plus size={16} />
@@ -323,7 +323,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               setNewFolderParent(null);
               setNewName("");
             }}
-            className="text-text-muted hover:text-accent transition-colors p-1"
+            className="text-muted-foreground hover:text-primary transition-colors p-1"
             title="New folder"
           >
             <FolderPlus size={16} />
@@ -350,7 +350,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                 setNewFolderParent(null);
               }}
               placeholder="Folder name..."
-              className="w-full text-sm py-1.5 px-2 bg-bg border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-accent text-text placeholder-text-muted"
+              className="w-full text-sm py-1.5 px-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder-muted-foreground"
             />
           </form>
         </div>
@@ -372,7 +372,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               onChange={(e) => setRenameName(e.target.value)}
               onBlur={() => setShowRename(null)}
               placeholder="New name..."
-              className="w-full text-sm py-1.5 px-2 bg-bg border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-accent text-text placeholder-text-muted"
+              className="w-full text-sm py-1.5 px-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder-muted-foreground"
             />
           </form>
         </div>
@@ -387,7 +387,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
         }}
       >
         {tree.length === 0 && !treeLoading ? (
-          <div className="text-center py-6 text-text-muted text-sm">
+          <div className="text-center py-6 text-muted-foreground text-sm">
             <p>No pages yet</p>
             <p className="mt-1">Create your first one!</p>
           </div>
@@ -424,7 +424,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
       {/* Context menu */}
       {contextMenu && (
         <div
-          className="fixed bg-surface border border-border rounded-xl shadow-lg py-1 z-50"
+          className="fixed bg-card border border-border rounded-xl shadow-lg py-1 z-50"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -434,7 +434,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                 createNewFile(contextMenu.node?.path ?? null);
                 closeContextMenu();
               }}
-              className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
+              className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
             >
               New page
             </button>
@@ -447,7 +447,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                 setNewName("");
                 closeContextMenu();
               }}
-              className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
+              className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
             >
               New folder
             </button>
@@ -463,7 +463,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                   }, 300);
                   closeContextMenu();
                 }}
-                className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+                className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2"
               >
                 <Play size={14} weight="fill" className="shrink-0" />
                 Read aloud
@@ -473,7 +473,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                   dispatch({ type: "chat:prompt", message: `Summarize the ${contextMenu.node.name} file` });
                   closeContextMenu();
                 }}
-                className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+                className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2"
               >
                 <ChatCircle size={14} className="shrink-0" />
                 Quick summary
@@ -500,7 +500,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                       className="item-color-swatch"
                       style={{
                         backgroundColor: ITEM_COLOR_HEX[c],
-                        boxShadow: isActive ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${ITEM_COLOR_HEX[c]}` : undefined,
+                        boxShadow: isActive ? `0 0 0 2px var(--color-card), 0 0 0 3.5px ${ITEM_COLOR_HEX[c]}` : undefined,
                       }}
                     />
                   );
@@ -516,7 +516,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                       });
                       closeContextMenu();
                     }}
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-text-muted hover:text-text transition-colors"
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <X size={10} weight="bold" />
                   </button>
@@ -528,7 +528,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                   setRenameName(contextMenu.node!.name);
                   closeContextMenu();
                 }}
-                className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
+                className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
               >
                 Rename
               </button>
@@ -543,7 +543,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
                   }
                   closeContextMenu();
                 }}
-                className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-surface-alt transition-colors"
+                className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-muted transition-colors"
               >
                 Delete
               </button>

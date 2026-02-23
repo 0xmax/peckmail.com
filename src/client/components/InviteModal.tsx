@@ -37,7 +37,7 @@ export function InviteForm({ projectId }: { projectId: string }) {
 
   return (
     <form onSubmit={handleSubmit} className="p-6">
-      <p className="text-sm text-text-muted mb-3">
+      <p className="text-sm text-muted-foreground mb-3">
         Invite a collaborator by email
       </p>
       <Input
@@ -71,10 +71,10 @@ export function InviteForm({ projectId }: { projectId: string }) {
         ))}
       </div>
       {error && (
-        <p className="text-sm text-danger mt-2">{error}</p>
+        <p className="text-sm text-destructive mt-2">{error}</p>
       )}
       {success && (
-        <p className="text-sm text-success mt-2">
+        <p className="text-sm text-green-600 dark:text-green-400 mt-2">
           Invitation sent!
         </p>
       )}

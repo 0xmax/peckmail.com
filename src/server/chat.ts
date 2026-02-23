@@ -1245,7 +1245,12 @@ export async function runAgentHeadless(
   projectId: string,
   systemPrompt: string,
   userMessage: string,
-  opts?: { model?: string; maxTokens?: number; userId?: string }
+  opts?: {
+    model?: string;
+    maxTokens?: number;
+    userId?: string;
+    allowSendEmail?: boolean;
+  }
 ): Promise<{ sessionId: string; messages: ChatMessage[] }> {
   const session = await createSession(projectId);
   session.messages.push({ role: "user", content: userMessage });
@@ -1256,6 +1261,9 @@ export async function runAgentHeadless(
 
   const model = opts?.model ?? "claude-opus-4-6";
   const maxTokens = opts?.maxTokens ?? 16384;
+  const headlessTools = opts?.allowSendEmail
+    ? tools
+    : tools.filter((tool) => tool.name !== "send_email");
 
   // Place credit hold if we have a userId
   let holdId: string | null = null;
@@ -1287,7 +1295,7 @@ export async function runAgentHeadless(
         model,
         max_tokens: maxTokens,
         system: systemPrompt,
-        tools,
+        tools: headlessTools,
         messages,
       });
 

@@ -4,6 +4,7 @@ import {
   getProjectByEmail,
   getProjectMemberEmails,
   insertIncomingEmail,
+  updateIncomingEmailContent,
   updateEmailStatus,
 } from "./db.js";
 import { runAgentHeadless } from "./chat.js";
@@ -19,6 +20,7 @@ const resend = process.env.RESEND_API_KEY
   : null;
 
 const WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET;
+const INBOUND_AUTO_REPLY_ENABLED = process.env.INBOUND_AUTO_REPLY_ENABLED === "true";
 
 export function verifyWebhookSignature(
   rawBody: string,
@@ -43,6 +45,8 @@ export interface InboundEmailRecord {
   to_address: string;
   subject: string;
   body_text: string;
+  body_html: string;
+  raw_email: string;
   resend_email_id: string;
   date: string;
   cc: string[];
@@ -96,6 +100,7 @@ export async function receiveInboundEmail(
     subject,
     body_text: "",
     body_html: "",
+    raw_email: "",
     headers: data.headers ?? {},
     attachments: data.attachments ?? [],
   });
@@ -126,6 +131,8 @@ export async function receiveInboundEmail(
     to_address: matchedTo,
     subject,
     body_text: "",
+    body_html: "",
+    raw_email: "",
     resend_email_id: resendEmailId,
     date,
     cc,
@@ -165,26 +172,40 @@ export async function fetchEmailContentAndProcess(
             htmlLength: fetched.html?.length ?? 0,
             hasRaw: !!fetched.raw?.download_url,
           }));
-          if (fetched.text || fetched.html) {
-            record.body_text = extractBodyText(fetched.text ?? "", fetched.html ?? "");
-            break;
+
+          if (fetched.text) {
+            record.body_text = fetched.text;
           }
-          // If no body yet, try downloading from raw URL
+          if (fetched.html) {
+            record.body_html = fetched.html;
+          }
+
+          // Try downloading raw MIME (best effort) so we keep a full source copy.
           if (fetched.raw?.download_url) {
             try {
               const rawResp = await fetch(fetched.raw.download_url);
               if (rawResp.ok) {
                 const rawText = await rawResp.text();
                 console.log("[inbound] Downloaded raw email: %d chars", rawText.length);
+                record.raw_email = rawText;
                 const parsed = parseRawEmail(rawText);
-                if (parsed.text || parsed.html) {
-                  record.body_text = extractBodyText(parsed.text, parsed.html);
-                  break;
-                }
+                if (!record.body_text && parsed.text) record.body_text = parsed.text;
+                if (!record.body_html && parsed.html) record.body_html = parsed.html;
               }
             } catch (rawErr) {
               console.warn("[inbound] Failed to download raw email:", rawErr);
             }
+          }
+
+          if (!record.body_text && record.body_html) {
+            record.body_text = extractBodyText("", record.body_html);
+          }
+
+          const hasBody = Boolean(record.body_text || record.body_html);
+          const wantsRaw = Boolean(fetched.raw?.download_url);
+          const hasRaw = Boolean(record.raw_email);
+          if (hasBody && (!wantsRaw || hasRaw)) {
+            break;
           }
         }
       } catch (err) {
@@ -193,7 +214,9 @@ export async function fetchEmailContentAndProcess(
     }
   }
 
-  console.log(`[inbound] Email ${record.resend_email_id}: body_text=${record.body_text.length} chars`);
+  console.log(
+    `[inbound] Email ${record.resend_email_id}: body_text=${record.body_text.length} chars body_html=${record.body_html.length} chars raw_email=${record.raw_email.length} chars`
+  );
 
   // Now run the AI agent
   await processInboundEmail(record);
@@ -206,6 +229,12 @@ export async function fetchEmailContentAndProcess(
 export async function processInboundEmail(
   record: InboundEmailRecord
 ): Promise<void> {
+  await updateIncomingEmailContent(record.id, {
+    body_text: record.body_text,
+    body_html: record.body_html,
+    raw_email: record.raw_email,
+  });
+
   // Mark as processing
   await updateEmailStatus(record.id, "processing");
   broadcast(record.project_id, {
@@ -219,7 +248,8 @@ export async function processInboundEmail(
   const systemPrompt = await buildSystemPrompt(
     record.project_id,
     record.project_name,
-    record.from_address
+    record.from_address,
+    INBOUND_AUTO_REPLY_ENABLED
   );
 
   // Format user message
@@ -233,7 +263,10 @@ export async function processInboundEmail(
       record.project_id,
       systemPrompt,
       userMessage,
-      { userId: ownerId ?? undefined }
+      {
+        userId: ownerId ?? undefined,
+        allowSendEmail: INBOUND_AUTO_REPLY_ENABLED,
+      }
     );
     await updateEmailStatus(record.id, "processed", sessionId);
     broadcast(record.project_id, {
@@ -264,7 +297,7 @@ export async function processInboundEmail(
       .trim()
       .toLowerCase();
     const memberEmails = await getProjectMemberEmails(record.project_id);
-    if (memberEmails.includes(senderNormalized)) {
+    if (INBOUND_AUTO_REPLY_ENABLED && memberEmails.includes(senderNormalized)) {
       sendEmail({
         to: senderNormalized,
         subject: `Re: ${record.subject}`,
@@ -279,7 +312,8 @@ export async function processInboundEmail(
 async function buildSystemPrompt(
   projectId: string,
   projectName: string,
-  fromAddress: string
+  fromAddress: string,
+  allowReplies: boolean
 ): Promise<string> {
   const projectDir = join(PROJECTS_DIR, projectId);
   const instructionFiles = [
@@ -304,17 +338,23 @@ async function buildSystemPrompt(
   const senderIsMember = memberEmails.includes(senderNormalized);
 
   let replyInstructions: string;
-  if (senderIsMember) {
+  if (!allowReplies) {
+    replyInstructions = `Automatic email replies are disabled for inbound processing. Process this email silently and do not send any outbound email response.`;
+  } else if (senderIsMember) {
     replyInstructions = `The sender (${senderNormalized}) is a workspace member. You may reply to them using the send_email tool if appropriate.`;
   } else {
     replyInstructions = `The sender (${senderNormalized}) is not a workspace member. Process this email silently — do not send any replies.`;
   }
 
+  const emailToolLine = allowReplies
+    ? "You also have a send_email tool that can send emails to workspace members."
+    : "Email replies are disabled for inbound processing unless INBOUND_AUTO_REPLY_ENABLED=true.";
+
   const base = `You are a helpful AI assistant for the Peckmail workspace "${projectName}". You have just received an inbound email sent to this workspace's email address. Process it according to the instructions below.
 
 You have tools to read, create, and edit files in this workspace. Use them as needed to carry out the task.
 
-You also have a send_email tool that can send emails to workspace members.
+${emailToolLine}
 
 ## Workspace Members
 The following email addresses are workspace members: ${memberEmails.join(", ") || "(none)"}
@@ -323,7 +363,7 @@ The following email addresses are workspace members: ${memberEmails.join(", ") |
 ${replyInstructions}
 
 ## IMPORTANT: Forwarded Emails
-If the email contains a forwarded message (indicated by markers like "---------- Forwarded message ----------", "Begin forwarded message", "-------- Original Message --------", or similar), the sender's own text ABOVE the forwarded content is their instruction to you. That text tells you what to DO with the forwarded content — follow it as your primary task. The forwarded message below the marker is just reference material. Do NOT simply save the entire email as-is. Instead, carry out whatever the sender asked for (e.g. summarize it, extract data, add it to a specific file, reply, etc.). If there is no text above the forwarded marker, fall back to the default behavior below.`;
+If the email contains a forwarded message (indicated by markers like "---------- Forwarded message ----------", "Begin forwarded message", "-------- Original Message --------", or similar), the sender's own text ABOVE the forwarded content is their instruction to you. That text tells you what to DO with the forwarded content — follow it as your primary task. The forwarded message below the marker is just reference material. Do NOT simply save the entire email as-is. Instead, carry out whatever the sender asked for (e.g. summarize it, extract data, add it to a specific file). If there is no text above the forwarded marker, fall back to the default behavior below.`;
 
   if (instructions) {
     return `${base}

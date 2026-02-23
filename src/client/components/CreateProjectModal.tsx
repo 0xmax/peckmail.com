@@ -102,10 +102,10 @@ export function CreateProjectModal({
         {step === "pick" ? (
           <>
             <div className="px-6 pt-6 pb-4">
-              <h2 className="text-lg font-semibold text-text">
+              <h2 className="text-lg font-semibold text-foreground">
                 New workspace
               </h2>
-              <p className="text-sm text-text-muted mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Choose a starting point for your workspace
               </p>
             </div>
@@ -118,16 +118,16 @@ export function CreateProjectModal({
                     <button
                       key={t.id}
                       onClick={() => pickTemplate(t)}
-                      className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent/50 hover:bg-accent/5 transition-all text-left group"
+                      className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
                     >
-                      <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-alt flex items-center justify-center text-text-muted group-hover:text-accent transition-colors">
+                      <div className="shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors">
                         <Icon size={20} />
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-text truncate">
+                        <div className="text-sm font-medium text-foreground truncate">
                           {t.name}
                         </div>
-                        <div className="text-xs text-text-muted truncate">
+                        <div className="text-xs text-muted-foreground truncate">
                           {t.description}
                         </div>
                       </div>
@@ -141,14 +141,14 @@ export function CreateProjectModal({
               <div className="flex gap-2">
                 <button
                   onClick={pickEmpty}
-                  className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border hover:border-accent/50 hover:bg-accent/5 transition-all text-sm text-text-muted hover:text-text"
+                  className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-sm text-muted-foreground hover:text-foreground"
                 >
                   <FileText size={18} />
                   Empty workspace
                 </button>
                 <button
                   onClick={pickAi}
-                  className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border hover:border-accent/50 hover:bg-accent/5 transition-all text-sm text-text-muted hover:text-text"
+                  className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-sm text-muted-foreground hover:text-foreground"
                 >
                   <Sparkle size={18} />
                   Generate with AI
@@ -168,7 +168,7 @@ export function CreateProjectModal({
                 <ArrowLeft size={18} />
               </Button>
               <div>
-                <h2 className="text-lg font-semibold text-text">
+                <h2 className="text-lg font-semibold text-foreground">
                   {selection?.mode === "ai"
                     ? "Generate with AI"
                     : selection?.mode === "empty"
@@ -176,7 +176,7 @@ export function CreateProjectModal({
                       : selection?.template?.name}
                 </h2>
                 {selection?.template && (
-                  <p className="text-sm text-text-muted">
+                  <p className="text-sm text-muted-foreground">
                     {selection.template.description}
                   </p>
                 )}
@@ -212,7 +212,7 @@ export function CreateProjectModal({
               )}
 
               {error && (
-                <p className="text-sm text-danger mt-3">{error}</p>
+                <p className="text-sm text-destructive mt-3">{error}</p>
               )}
 
               <div className="flex justify-end gap-3 mt-5">

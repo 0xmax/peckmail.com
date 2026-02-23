@@ -2,139 +2,92 @@
 @import "tw-animate-css";
 @source "../server/index.ts";
 
-/* ── Stone light palette ─────────────────────────── */
+/* ── Neutral light palette ────────────────────────── */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 24 10% 10%;
-  --card: 0 0% 100%;
-  --card-foreground: 24 10% 10%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 24 10% 10%;
-  --primary: 25 40% 59%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 30 10% 95%;
-  --secondary-foreground: 24 10% 10%;
-  --muted: 30 10% 95%;
-  --muted-foreground: 24 5% 46%;
-  --accent: 25 40% 59%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 59% 57%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 20 6% 90%;
-  --input: 20 6% 90%;
-  --ring: 25 40% 59%;
-  --radius: 0.5rem;
-  --sidebar-background: 0 0% 100%;
-  --sidebar-foreground: 24 10% 10%;
-  --sidebar-primary: 25 40% 59%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 30 10% 95%;
-  --sidebar-accent-foreground: 24 10% 10%;
-  --sidebar-border: 20 6% 90%;
-  --sidebar-ring: 25 40% 59%;
-  --chart-1: 25 40% 59%;
-  --chart-2: 28 33% 72%;
-  --chart-3: 24 20% 40%;
-  --chart-4: 0 59% 57%;
-  --chart-5: 120 25% 63%;
+  --background: 1 0 0;
+  --foreground: 0.145 0 0;
+  --card: 1 0 0;
+  --card-foreground: 0.145 0 0;
+  --popover: 1 0 0;
+  --popover-foreground: 0.145 0 0;
+  --primary: 0.205 0 0;
+  --primary-foreground: 0.985 0 0;
+  --secondary: 0.97 0 0;
+  --secondary-foreground: 0.205 0 0;
+  --muted: 0.97 0 0;
+  --muted-foreground: 0.556 0 0;
+  --accent: 0.97 0 0;
+  --accent-foreground: 0.205 0 0;
+  --destructive: 0.577 0.245 27.325;
+  --destructive-foreground: 0.985 0 0;
+  --border: 0.922 0 0;
+  --input: 0.922 0 0;
+  --ring: 0.708 0 0;
+  --radius: 0.625rem;
+  --chart-1: 0.646 0.222 41.116;
+  --chart-2: 0.6 0.118 184.704;
+  --chart-3: 0.398 0.07 227.392;
+  --chart-4: 0.828 0.189 84.429;
+  --chart-5: 0.769 0.188 70.08;
 }
 
-/* ── Stone dark palette ──────────────────────────── */
+/* ── Neutral dark palette ────────────────────────── */
 .dark {
-  --background: 24 10% 10%;
-  --foreground: 30 10% 90%;
-  --card: 24 8% 14%;
-  --card-foreground: 30 10% 90%;
-  --popover: 24 8% 14%;
-  --popover-foreground: 30 10% 90%;
-  --primary: 25 40% 59%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 24 6% 18%;
-  --secondary-foreground: 30 10% 90%;
-  --muted: 24 6% 18%;
-  --muted-foreground: 24 5% 60%;
-  --accent: 25 40% 59%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 55% 50%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 24 6% 22%;
-  --input: 24 6% 22%;
-  --ring: 25 40% 59%;
-  --sidebar-background: 24 8% 14%;
-  --sidebar-foreground: 30 10% 90%;
-  --sidebar-primary: 25 40% 59%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 24 6% 18%;
-  --sidebar-accent-foreground: 30 10% 90%;
-  --sidebar-border: 24 6% 22%;
-  --sidebar-ring: 25 40% 59%;
-  --chart-1: 25 45% 65%;
-  --chart-2: 28 33% 55%;
-  --chart-3: 24 20% 60%;
-  --chart-4: 0 55% 60%;
-  --chart-5: 120 25% 55%;
+  --background: 0.145 0 0;
+  --foreground: 0.985 0 0;
+  --card: 0.205 0 0;
+  --card-foreground: 0.985 0 0;
+  --popover: 0.205 0 0;
+  --popover-foreground: 0.985 0 0;
+  --primary: 0.922 0 0;
+  --primary-foreground: 0.205 0 0;
+  --secondary: 0.269 0 0;
+  --secondary-foreground: 0.985 0 0;
+  --muted: 0.269 0 0;
+  --muted-foreground: 0.708 0 0;
+  --accent: 0.269 0 0;
+  --accent-foreground: 0.985 0 0;
+  --destructive: 0.704 0.191 22.216;
+  --destructive-foreground: 0.985 0 0;
+  --border: 1 0 0 / 10%;
+  --input: 1 0 0 / 15%;
+  --ring: 0.556 0 0;
+  --chart-1: 0.488 0.243 264.376;
+  --chart-2: 0.696 0.17 162.48;
+  --chart-3: 0.769 0.188 70.08;
+  --chart-4: 0.627 0.265 303.9;
+  --chart-5: 0.645 0.246 16.439;
 }
 
 @theme inline {
-  /* shadcn tokens */
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent-shadcn: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-sidebar-background: hsl(var(--sidebar-background));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-primary: hsl(var(--sidebar-primary));
-  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
-  --color-sidebar-accent: hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-border: hsl(var(--sidebar-border));
-  --color-sidebar-ring: hsl(var(--sidebar-ring));
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
+  --color-background: oklch(var(--background));
+  --color-foreground: oklch(var(--foreground));
+  --color-card: oklch(var(--card));
+  --color-card-foreground: oklch(var(--card-foreground));
+  --color-popover: oklch(var(--popover));
+  --color-popover-foreground: oklch(var(--popover-foreground));
+  --color-primary: oklch(var(--primary));
+  --color-primary-foreground: oklch(var(--primary-foreground));
+  --color-secondary: oklch(var(--secondary));
+  --color-secondary-foreground: oklch(var(--secondary-foreground));
+  --color-muted: oklch(var(--muted));
+  --color-muted-foreground: oklch(var(--muted-foreground));
+  --color-accent: oklch(var(--accent));
+  --color-accent-foreground: oklch(var(--accent-foreground));
+  --color-destructive: oklch(var(--destructive));
+  --color-destructive-foreground: oklch(var(--destructive-foreground));
+  --color-border: oklch(var(--border));
+  --color-input: oklch(var(--input));
+  --color-ring: oklch(var(--ring));
+  --color-chart-1: oklch(var(--chart-1));
+  --color-chart-2: oklch(var(--chart-2));
+  --color-chart-3: oklch(var(--chart-3));
+  --color-chart-4: oklch(var(--chart-4));
+  --color-chart-5: oklch(var(--chart-5));
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-
-  /* Legacy tokens mapped to shadcn vars for migration */
-  --color-bg: hsl(var(--background));
-  --color-surface: hsl(var(--card));
-  --color-surface-alt: hsl(var(--muted));
-  --color-accent: hsl(var(--primary));
-  --color-accent-hover: hsl(25 40% 50%);
-  --color-text: hsl(var(--foreground));
-  --color-text-body: hsl(var(--foreground));
-  --color-text-secondary: hsl(var(--muted-foreground));
-  --color-text-muted: hsl(var(--muted-foreground));
-  --color-dark: hsl(var(--foreground));
-  --color-chat-user: hsl(var(--secondary));
-  --color-chat-ai: hsl(var(--muted));
-  --color-success: hsl(120 40% 55%);
-  --color-danger: hsl(var(--destructive));
-  --color-danger-hover: hsl(0 59% 47%);
-  --color-footer-bg: hsl(24 10% 8%);
-  --color-footer-text: hsl(24 5% 60%);
-  --color-footer-muted: hsl(24 5% 45%);
-  --color-footer-dim: hsl(24 5% 35%);
-  --font-heading: 'Playfair Display', Georgia, serif;
 }
 
 /* Base styles */
@@ -154,12 +107,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
+  background: oklch(var(--border));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: oklch(var(--muted-foreground));
 }
 
 /* CodeMirror pastel theme overrides */
@@ -181,29 +134,29 @@ body {
 
 .cm-editor .cm-gutters {
   min-width: 3rem;
-  background: hsl(var(--card));
-  border-right: 1px solid hsl(var(--border));
-  color: hsl(var(--muted-foreground));
+  background: oklch(var(--card));
+  border-right: 1px solid oklch(var(--border));
+  color: oklch(var(--muted-foreground));
 }
 
 .cm-editor .cm-activeLineGutter {
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
 }
 
 .cm-editor .cm-activeLine {
-  background: hsl(var(--muted) / 0.3);
+  background: oklch(var(--muted) / 0.3);
 }
 
 .cm-editor .cm-selectionBackground {
-  background: hsl(var(--primary) / 0.15) !important;
+  background: oklch(var(--primary) / 0.15) !important;
 }
 
 .cm-editor.cm-focused .cm-selectionBackground {
-  background: hsl(var(--primary) / 0.25) !important;
+  background: oklch(var(--primary) / 0.25) !important;
 }
 
 .cm-editor .cm-cursor {
-  border-left-color: hsl(var(--primary));
+  border-left-color: oklch(var(--primary));
 }
 
 /* Toast animation */
@@ -240,7 +193,7 @@ body {
   font-family: 'Georgia', 'Times New Roman', serif;
   font-size: 16px;
   line-height: 1.75;
-  color: hsl(var(--foreground));
+  color: oklch(var(--foreground));
 }
 
 .rendered-markdown h1,
@@ -251,7 +204,7 @@ body {
 .rendered-markdown h6 {
   font-family: 'Georgia', 'Times New Roman', serif;
   font-weight: 700;
-  color: hsl(var(--foreground));
+  color: oklch(var(--foreground));
   line-height: 1.35;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
@@ -276,7 +229,7 @@ body {
 
 .rendered-markdown strong {
   font-weight: 700;
-  color: hsl(var(--foreground));
+  color: oklch(var(--foreground));
 }
 
 .rendered-markdown em {
@@ -285,26 +238,26 @@ body {
 
 .rendered-markdown del {
   text-decoration: line-through;
-  color: hsl(var(--muted-foreground));
+  color: oklch(var(--muted-foreground));
 }
 
 .rendered-markdown a {
-  color: hsl(var(--primary));
+  color: oklch(var(--primary));
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .rendered-markdown a:hover {
-  color: hsl(25 40% 50%);
+  color: oklch(var(--primary));
 }
 
 .rendered-markdown blockquote {
-  border-left: 3px solid hsl(var(--primary));
+  border-left: 3px solid oklch(var(--primary));
   padding: 0.25em 1em;
   margin: 1em 0;
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
   border-radius: 0 0.4rem 0.4rem 0;
-  color: hsl(var(--muted-foreground));
+  color: oklch(var(--muted-foreground));
 }
 
 .rendered-markdown blockquote p {
@@ -314,19 +267,19 @@ body {
 .rendered-markdown code {
   font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Menlo', monospace;
   font-size: 0.875em;
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
   padding: 0.15em 0.4em;
   border-radius: 0.25em;
-  color: hsl(var(--foreground));
+  color: oklch(var(--foreground));
 }
 
 .rendered-markdown pre {
   margin: 1em 0;
   padding: 1em;
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
   border-radius: 0.5em;
   overflow-x: auto;
-  border: 1px solid hsl(var(--border));
+  border: 1px solid oklch(var(--border));
 }
 
 .rendered-markdown pre code {
@@ -361,7 +314,7 @@ body {
 
 .rendered-markdown hr {
   border: none;
-  border-top: 1px solid hsl(var(--border));
+  border-top: 1px solid oklch(var(--border));
   margin: 1.5em 0;
 }
 
@@ -376,16 +329,16 @@ body {
 .rendered-markdown td {
   padding: 0.5em 0.75em;
   text-align: left;
-  border-bottom: 1px solid hsl(var(--border));
+  border-bottom: 1px solid oklch(var(--border));
 }
 
 .rendered-markdown th {
   font-weight: 600;
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
 }
 
 .rendered-markdown tbody tr:hover {
-  background: hsl(var(--primary) / 0.06);
+  background: oklch(var(--primary) / 0.06);
 }
 
 .rendered-markdown img {
@@ -397,7 +350,7 @@ body {
 
 .rendered-markdown input[type="checkbox"] {
   margin-right: 0.5em;
-  accent-color: hsl(var(--primary));
+  accent-color: oklch(var(--primary));
 }
 
 /* Chat markdown — compact version for chat bubbles */
@@ -406,18 +359,18 @@ body {
 .chat-markdown p:last-child { margin-bottom: 0; }
 .chat-markdown strong { font-weight: 600; }
 .chat-markdown em { font-style: italic; }
-.chat-markdown a { color: hsl(var(--primary)); text-decoration: underline; }
+.chat-markdown a { color: oklch(var(--primary)); text-decoration: underline; }
 .chat-markdown code {
   font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
   font-size: 0.85em;
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
   padding: 0.15em 0.35em;
   border-radius: 4px;
 }
 .chat-markdown pre {
   margin: 0.5em 0;
   padding: 0.6em 0.8em;
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
   border-radius: 6px;
   overflow-x: auto;
   font-size: 0.85em;
@@ -434,15 +387,15 @@ body {
 }
 .chat-markdown h1:first-child, .chat-markdown h2:first-child, .chat-markdown h3:first-child { margin-top: 0; }
 .chat-markdown blockquote {
-  border-left: 2px solid hsl(var(--primary));
+  border-left: 2px solid oklch(var(--primary));
   padding-left: 0.75em;
   margin: 0.4em 0;
-  color: hsl(var(--muted-foreground));
+  color: oklch(var(--muted-foreground));
 }
-.chat-markdown hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 0.6em 0; }
+.chat-markdown hr { border: none; border-top: 1px solid oklch(var(--border)); margin: 0.6em 0; }
 .chat-markdown table { border-collapse: collapse; margin: 0.4em 0; font-size: 0.9em; }
-.chat-markdown th, .chat-markdown td { padding: 0.3em 0.5em; border: 1px solid hsl(var(--border)); }
-.chat-markdown th { font-weight: 600; background: hsl(var(--muted)); }
+.chat-markdown th, .chat-markdown td { padding: 0.3em 0.5em; border: 1px solid oklch(var(--border)); }
+.chat-markdown th { font-weight: 600; background: oklch(var(--muted)); }
 
 /* CSV table preview */
 .csv-table {
@@ -457,7 +410,7 @@ body {
 .csv-table td {
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid hsl(var(--border));
+  border-bottom: 1px solid oklch(var(--border));
   white-space: nowrap;
   max-width: 320px;
   overflow: hidden;
@@ -466,23 +419,23 @@ body {
 
 .csv-table th {
   font-weight: 600;
-  color: hsl(var(--foreground));
-  background: hsl(var(--muted));
+  color: oklch(var(--foreground));
+  background: oklch(var(--muted));
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
 .csv-table tbody tr:hover {
-  background: hsl(var(--primary) / 0.06);
+  background: oklch(var(--primary) / 0.06);
 }
 
 .csv-table td {
-  color: hsl(var(--foreground));
+  color: oklch(var(--foreground));
 }
 
 .csv-row-num {
-  color: hsl(var(--muted-foreground));
+  color: oklch(var(--muted-foreground));
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   width: 3rem;
@@ -497,8 +450,8 @@ body {
   top: 0;
   left: 0;
   width: 2px;
-  background: hsl(var(--primary));
-  box-shadow: 0 0 8px hsl(var(--primary)), 0 0 20px hsl(var(--primary) / 0.4);
+  background: oklch(var(--primary));
+  box-shadow: 0 0 8px oklch(var(--primary)), 0 0 20px oklch(var(--primary) / 0.4);
   border-radius: 1px;
   pointer-events: none;
   z-index: 10;
@@ -513,7 +466,7 @@ body {
   top: 0;
   width: 40px;
   height: 100%;
-  background: linear-gradient(to right, transparent, hsl(var(--primary) / 0.25));
+  background: linear-gradient(to right, transparent, oklch(var(--primary) / 0.25));
   border-radius: 2px;
   pointer-events: none;
 }
@@ -526,24 +479,6 @@ body {
 
 .activity-pulse {
   animation: activity-pulse 1.5s ease-in-out infinite;
-}
-
-/* Skeleton shimmer animation */
-@keyframes shimmer {
-  0% { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
-
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    hsl(var(--muted)) 0%,
-    hsl(var(--card)) 40%,
-    hsl(var(--muted)) 80%
-  );
-  background-size: 800px 100%;
-  animation: shimmer 1.8s ease-in-out infinite;
-  border-radius: 0.5rem;
 }
 
 /* Recording pulse for dictation mic button */
@@ -561,14 +496,14 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: hsl(var(--destructive));
+  background: oklch(var(--destructive));
   animation: recording-pulse 1.2s ease-in-out infinite;
   flex-shrink: 0;
 }
 
 /* Dictation ghost text — partial transcript preview */
 .dictation-ghost {
-  color: hsl(var(--muted-foreground));
+  color: oklch(var(--muted-foreground));
   opacity: 0.6;
   font-style: italic;
   pointer-events: none;
@@ -586,11 +521,11 @@ body {
   right: 0;
   width: 320px;
   padding: 0.75rem 1rem;
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
+  background: oklch(var(--card));
+  border: 1px solid oklch(var(--border));
   border-top: none;
   border-radius: 0 0 0.75rem 0.75rem;
-  box-shadow: 0 4px 16px hsl(var(--foreground) / 0.08);
+  box-shadow: 0 4px 16px oklch(var(--foreground) / 0.08);
   z-index: 30;
   animation: overlay-slide-in 0.15s ease-out;
 }
@@ -605,7 +540,7 @@ body {
   display: flex;
   position: relative;
   width: 100%;
-  background: hsl(var(--muted));
+  background: oklch(var(--muted));
   border-radius: 0.5rem;
   padding: 2px;
 }
@@ -616,7 +551,7 @@ body {
   font-size: 11px;
   font-weight: 500;
   padding: 0.25rem 0;
-  color: hsl(var(--muted-foreground));
+  color: oklch(var(--muted-foreground));
   cursor: pointer;
   position: relative;
   z-index: 1;
@@ -626,16 +561,16 @@ body {
 }
 
 .dictation-mode-stop.active {
-  color: hsl(var(--foreground));
+  color: oklch(var(--foreground));
 }
 
 .dictation-mode-indicator {
   position: absolute;
   top: 2px;
   bottom: 2px;
-  background: hsl(var(--card));
+  background: oklch(var(--card));
   border-radius: 0.375rem;
-  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.08);
+  box-shadow: 0 1px 3px oklch(var(--foreground) / 0.08);
   transition: left 0.2s ease, width 0.2s ease;
   z-index: 0;
 }

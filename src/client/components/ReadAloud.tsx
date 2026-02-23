@@ -246,26 +246,26 @@ function audioStatusLabel(status: ChunkAudioStatus): string {
 function audioStatusTone(status: ChunkAudioStatus): string {
   switch (status) {
     case "playing":
-      return "text-accent";
+      return "text-primary";
     case "ready-cached":
-      return "text-success";
+      return "text-green-600 dark:text-green-400";
     case "ready-streaming":
-      return "text-text";
+      return "text-foreground";
     case "error":
-      return "text-danger";
+      return "text-destructive";
     default:
-      return "text-text-muted";
+      return "text-muted-foreground";
   }
 }
 
 function timingStatusTone(status: ChunkTimingStatus): string {
   switch (status) {
     case "ready":
-      return "text-success";
+      return "text-green-600 dark:text-green-400";
     case "missing":
-      return "text-danger";
+      return "text-destructive";
     case "pending":
-      return "text-text-muted";
+      return "text-muted-foreground";
   }
 }
 
@@ -1986,31 +1986,31 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
   ).length;
 
   return (
-    <div className="h-16 bg-surface border-t border-border shrink-0 flex items-center px-4 gap-4">
+    <div className="h-16 bg-card border-t border-border shrink-0 flex items-center px-4 gap-4">
       {/* Left: file info */}
       <div className="flex items-center gap-3 w-56 min-w-0">
         <div className="relative">
           <AlbumArt text={content || ""} />
           {activity && (
-            <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent activity-pulse" />
+            <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary activity-pulse" />
           )}
         </div>
         <div className="min-w-0">
-          <div className="text-sm text-text font-medium truncate">
+          <div className="text-sm text-foreground font-medium truncate">
             {fileName}
           </div>
           <div className="text-xs truncate">
             {error ? (
               <button
                 onClick={() => setError(null)}
-                className="text-danger hover:underline"
+                className="text-destructive hover:underline"
               >
                 Error &middot; Click to dismiss
               </button>
             ) : activity ? (
-              <span className="text-accent">{activity}</span>
+              <span className="text-primary">{activity}</span>
             ) : (
-              <span className="text-text-muted">
+              <span className="text-muted-foreground">
                 {currentVoice?.name ?? "Rachel"} &middot;{" "}
                 {model === "v3" ? "v3" : "v2"}
               </span>
@@ -2026,7 +2026,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
           <button
             onClick={skipBack15}
             disabled={!isActive}
-            className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             title="Back 15 seconds"
           >
             <Rewind size={16} />
@@ -2035,7 +2035,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
           <button
             onClick={stop}
             disabled={!isActive}
-            className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             title="Stop"
           >
             <Stop size={14} weight="fill" />
@@ -2067,7 +2067,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
           <button
             onClick={skipNextChunk}
             disabled={!isActive}
-            className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             title="Skip to next paragraph"
           >
             <SkipForward size={14} weight="fill" />
@@ -2076,7 +2076,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
 
         {/* Progress bar row: time — bar — time */}
         <div className="flex items-center gap-2 w-full">
-          <span className="text-[10px] text-text-muted tabular-nums w-8 text-right shrink-0">
+          <span className="text-[10px] text-muted-foreground tabular-nums w-8 text-right shrink-0">
             {isActive ? fmt(currentTime) : "0:00"}
           </span>
           <div
@@ -2086,7 +2086,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
             {state === "loading" ? (
               <div className="h-full w-full overflow-hidden rounded-full">
                 <div
-                  className="h-full w-1/3 bg-accent rounded-full"
+                  className="h-full w-1/3 bg-primary rounded-full"
                   style={{
                     animation: "indeterminate-slide 1.5s ease-in-out infinite",
                   }}
@@ -2095,19 +2095,19 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
             ) : (
               <>
                 <div
-                  className="h-full bg-accent rounded-full transition-[width] duration-100"
+                  className="h-full bg-primary rounded-full transition-[width] duration-100"
                   style={{ width: `${progress * 100}%` }}
                 />
                 {isActive && (
                   <div
-                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-accent rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow"
                     style={{ left: `${progress * 100}%`, marginLeft: "-5px" }}
                   />
                 )}
               </>
             )}
           </div>
-          <span className="text-[10px] text-text-muted tabular-nums w-8 shrink-0">
+          <span className="text-[10px] text-muted-foreground tabular-nums w-8 shrink-0">
             {hasDuration ? fmt(effectiveDuration) : "0:00"}
           </span>
         </div>
@@ -2118,7 +2118,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         <button
           onClick={downloadAudio}
           disabled={!hasContent || downloadBusy}
-          className="text-text-muted hover:text-text transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
           title={downloadBusy ? "Preparing full MP3..." : "Download full MP3"}
         >
           {downloadBusy ? (
@@ -2130,7 +2130,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setVolume(volume > 0 ? 0 : 1)}
-            className="text-text-muted hover:text-text transition-colors"
+            className="text-muted-foreground hover:text-foreground transition-colors"
             title={volume > 0 ? "Mute" : "Unmute"}
           >
             {volume === 0 ? (
@@ -2156,8 +2156,8 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
           aria-pressed={followAlong}
           className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
             followAlong
-              ? "border-accent/40 text-accent bg-accent/15 shadow-[inset_0_0_0_1px_rgba(196,149,106,0.15)]"
-              : "border-border/90 text-text-muted bg-surface-alt/50 opacity-70 hover:opacity-100 hover:text-text"
+              ? "border-primary/40 text-primary bg-primary/15 shadow-[inset_0_0_0_1px_rgba(196,149,106,0.15)]"
+              : "border-border/90 text-muted-foreground bg-muted/50 opacity-70 hover:opacity-100 hover:text-foreground"
           }`}
           title={followAlong ? "Follow-along enabled (click to disable)" : "Follow-along disabled (click to enable)"}
         >
@@ -2167,7 +2167,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         <div className="relative">
           <button
             onClick={() => setShowSettings((s) => !s)}
-            className={`text-text-muted hover:text-text transition-colors ${showSettings ? "text-accent" : ""}`}
+            className={`text-muted-foreground hover:text-foreground transition-colors ${showSettings ? "text-primary" : ""}`}
             title="Voice settings"
           >
             <GearSix size={16} />
@@ -2175,16 +2175,16 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
 
           {/* Error popup */}
           {error && (
-            <div className="absolute right-0 bottom-full mb-2 w-72 bg-surface border border-danger/30 rounded-lg shadow-lg p-4 z-50">
+            <div className="absolute right-0 bottom-full mb-2 w-72 bg-card border border-danger/30 rounded-lg shadow-lg p-4 z-50">
               <div className="flex items-start gap-3">
-                <Warning size={20} className="text-danger shrink-0 mt-0.5" />
+                <Warning size={20} className="text-destructive shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-text mb-1">Playback Error</div>
-                  <div className="text-xs text-text-muted break-words">{error}</div>
+                  <div className="text-sm font-medium text-foreground mb-1">Playback Error</div>
+                  <div className="text-xs text-muted-foreground break-words">{error}</div>
                 </div>
                 <button
                   onClick={() => setError(null)}
-                  className="text-text-muted hover:text-text transition-colors shrink-0"
+                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
                 >
                   <X size={14} />
                 </button>
@@ -2195,10 +2195,10 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
           {showSettings && (
             <div
               ref={settingsRef}
-              className="absolute right-0 bottom-full mb-2 w-64 bg-surface border border-border rounded-lg shadow-lg p-3 z-50 max-h-80 overflow-y-auto"
+              className="absolute right-0 bottom-full mb-2 w-64 bg-card border border-border rounded-lg shadow-lg p-3 z-50 max-h-80 overflow-y-auto"
             >
               {/* Voice selector */}
-              <div className="text-xs font-medium text-text mb-1.5">Voice</div>
+              <div className="text-xs font-medium text-foreground mb-1.5">Voice</div>
               <div className="grid grid-cols-2 gap-1 mb-3 max-h-36 overflow-y-auto">
                 {VOICES.map((v) => (
                   <button
@@ -2206,8 +2206,8 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
                     onClick={() => setVoiceId(v.id)}
                     className={`text-left text-xs px-2 py-1.5 rounded-md transition-colors flex items-center justify-between gap-1 ${
                       voiceId === v.id
-                        ? "bg-accent text-white"
-                        : "bg-surface-alt text-text-muted hover:text-text"
+                        ? "bg-primary text-white"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                     title={v.desc}
                   >
@@ -2232,14 +2232,14 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
               </div>
 
               {/* Model selector */}
-              <div className="text-xs font-medium text-text mb-1.5">Model</div>
+              <div className="text-xs font-medium text-foreground mb-1.5">Model</div>
               <div className="flex gap-1 mb-3">
                 <button
                   onClick={() => setModel("v3")}
                   className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-colors ${
                     model === "v3"
-                      ? "bg-accent text-white"
-                      : "bg-surface-alt text-text-muted hover:text-text"
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   v3 + AI Tags
@@ -2248,8 +2248,8 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
                   onClick={() => setModel("v2")}
                   className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-colors ${
                     model === "v2"
-                      ? "bg-accent text-white"
-                      : "bg-surface-alt text-text-muted hover:text-text"
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   v2 Classic
@@ -2259,8 +2259,8 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
               {/* Reading mode */}
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="text-xs font-medium text-text">Simple mode</div>
-                  <div className="text-[10px] text-text-muted">
+                  <div className="text-xs font-medium text-foreground">Simple mode</div>
+                  <div className="text-[10px] text-muted-foreground">
                     Highlight only the current sentence
                   </div>
                 </div>
@@ -2268,8 +2268,8 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
                   onClick={() => setSimpleMode((s) => !s)}
                   className={`text-xs px-2 py-1 rounded-md transition-colors ${
                     simpleMode
-                      ? "bg-accent text-white"
-                      : "bg-surface-alt text-text-muted hover:text-text"
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {simpleMode ? "On" : "Off"}
@@ -2283,14 +2283,14 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
                   regenerate();
                 }}
                 disabled={!hasContent}
-                className="w-full text-xs py-1.5 px-2 rounded-md bg-surface-alt text-text-muted hover:text-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-3 flex items-center justify-center gap-1.5"
+                className="w-full text-xs py-1.5 px-2 rounded-md bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-3 flex items-center justify-center gap-1.5"
               >
                 <ArrowsClockwise size={12} />
                 Regenerate audio
               </button>
 
               {model === "v3" && (
-                <p className="text-[10px] text-text-muted leading-relaxed">
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
                   Uses Claude to add expressive audio tags before synthesis.
                 </p>
               )}
@@ -2336,18 +2336,18 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         <div className="relative" ref={detailsRef}>
           <button
             onClick={() => setShowDetails((s) => !s)}
-            className={`text-text-muted hover:text-text transition-colors ${showDetails ? "text-accent" : ""}`}
+            className={`text-muted-foreground hover:text-foreground transition-colors ${showDetails ? "text-primary" : ""}`}
             title="Chunk details"
           >
             <ListBullets size={16} />
           </button>
           {showDetails && (
-            <div className="absolute right-0 bottom-full mb-2 w-80 bg-surface border border-border rounded-lg shadow-lg p-3 z-50 max-h-80 overflow-y-auto">
+            <div className="absolute right-0 bottom-full mb-2 w-80 bg-card border border-border rounded-lg shadow-lg p-3 z-50 max-h-80 overflow-y-auto">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs font-medium text-text">Playback Details</div>
+                <div className="text-xs font-medium text-foreground">Playback Details</div>
                 <button
                   onClick={() => setShowDetails(false)}
-                  className="text-text-muted hover:text-text transition-colors"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
                   title="Close details"
                 >
                   <X size={12} />
@@ -2355,23 +2355,23 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
               </div>
 
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] mb-2">
-                <div className="text-text-muted">
-                  Chunks: <span className="text-text">{chunkPlan.length}</span>
+                <div className="text-muted-foreground">
+                  Chunks: <span className="text-foreground">{chunkPlan.length}</span>
                 </div>
-                <div className="text-text-muted">
-                  Active: <span className="text-text">{currentChunkNumber || "-"}</span>
+                <div className="text-muted-foreground">
+                  Active: <span className="text-foreground">{currentChunkNumber || "-"}</span>
                 </div>
-                <div className="text-text-muted">
-                  Audio ready: <span className="text-text">{preparedChunkCount}/{chunkPlan.length}</span>
+                <div className="text-muted-foreground">
+                  Audio ready: <span className="text-foreground">{preparedChunkCount}/{chunkPlan.length}</span>
                 </div>
-                <div className="text-text-muted">
-                  Timestamps: <span className="text-text">{timestampReadyCount}/{chunkPlan.length}</span>
+                <div className="text-muted-foreground">
+                  Timestamps: <span className="text-foreground">{timestampReadyCount}/{chunkPlan.length}</span>
                 </div>
               </div>
 
               <div className="space-y-1">
                 {chunkPlan.length === 0 ? (
-                  <div className="text-[10px] text-text-muted py-1">No chunk plan yet. Start playback to populate.</div>
+                  <div className="text-[10px] text-muted-foreground py-1">No chunk plan yet. Start playback to populate.</div>
                 ) : (
                   chunkPlan.map((chunk) => {
                     const status = chunkStatusRef.current.get(chunk.index) || {
@@ -2384,11 +2384,11 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
                     return (
                       <div
                         key={chunk.index}
-                        className={`rounded-md border px-2 py-1 ${currentChunkRef.current?.index === chunk.index ? "border-accent/50 bg-accent/10" : "border-border bg-surface-alt/40"}`}
+                        className={`rounded-md border px-2 py-1 ${currentChunkRef.current?.index === chunk.index ? "border-primary/50 bg-primary/10" : "border-border bg-muted/40"}`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div className="text-[10px] text-text font-medium">#{chunk.index + 1} · L{chunk.lineOffset}-{lineEnd}</div>
-                          <div className="text-[10px] text-text-muted">{duration > 0 ? fmt(duration) : "~"}</div>
+                          <div className="text-[10px] text-foreground font-medium">#{chunk.index + 1} · L{chunk.lineOffset}-{lineEnd}</div>
+                          <div className="text-[10px] text-muted-foreground">{duration > 0 ? fmt(duration) : "~"}</div>
                         </div>
                         <div className="flex items-center justify-between gap-2 text-[10px] mt-0.5">
                           <div className={audioStatusTone(status.audio)}>
@@ -2398,11 +2398,11 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
                             stt: {timingLabel}
                           </div>
                         </div>
-                        <div className="text-[10px] text-text-muted mt-0.5 truncate">
+                        <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
                           {chunk.text.replace(/\s+/g, " ").trim().slice(0, 56) || "(empty chunk)"}
                         </div>
                         {status.note && (
-                          <div className="text-[10px] text-text-muted/90 truncate">
+                          <div className="text-[10px] text-muted-foreground/90 truncate">
                             {status.note}
                           </div>
                         )}
@@ -2416,7 +2416,7 @@ export function AudioBar({ onClose }: { onClose: () => void }) {
         </div>
         <button
           onClick={() => { stop(); onClose(); }}
-          className="text-text-muted hover:text-text transition-colors ml-1"
+          className="text-muted-foreground hover:text-foreground transition-colors ml-1"
           title="Close player"
         >
           <X size={14} />
@@ -2443,7 +2443,7 @@ function SliderSetting({
 }) {
   return (
     <div>
-      <div className="flex justify-between text-[10px] text-text-muted mb-0.5">
+      <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
         <span>{label}</span>
         <span>{value.toFixed(2)}</span>
       </div>

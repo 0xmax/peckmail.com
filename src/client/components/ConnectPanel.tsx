@@ -85,18 +85,18 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 border-b border-border">
-        <h3 className="text-sm font-semibold text-text">Connect</h3>
+        <h3 className="text-sm font-semibold text-foreground">Connect</h3>
       </div>
       <div className="p-4 space-y-5 overflow-y-auto text-xs">
         {/* ── MCP ──────────────────────────────── */}
         <section className="space-y-3">
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide">MCP Server</h4>
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">MCP Server</h4>
 
           {/* MCP URL */}
           <div>
-            <label className="font-medium text-text-muted block mb-1">Server URL</label>
+            <label className="font-medium text-muted-foreground block mb-1">Server URL</label>
             <div className="flex items-center gap-1.5">
-              <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text select-all">
+              <code className="flex-1 bg-muted border border-border rounded-lg px-2.5 py-1.5 font-mono text-foreground select-all">
                 {MCP_URL}
               </code>
               <Button
@@ -110,27 +110,27 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
           </div>
 
           {/* Claude Desktop */}
-          <div className="bg-surface-alt rounded-lg p-3 space-y-1.5">
+          <div className="bg-muted rounded-lg p-3 space-y-1.5">
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
-                <Monitor size={12} className="text-accent" />
+              <div className="w-5 h-5 rounded bg-primary/20 flex items-center justify-center">
+                <Monitor size={12} className="text-primary" />
               </div>
-              <span className="font-medium text-text">Claude Desktop</span>
+              <span className="font-medium text-foreground">Claude Desktop</span>
             </div>
-            <p className="text-text-muted">
+            <p className="text-muted-foreground">
               Add a remote MCP server in Claude Desktop with the URL above. OAuth sign-in handles authentication automatically.
             </p>
           </div>
 
           {/* Claude Code */}
-          <div className="bg-surface-alt rounded-lg p-3 space-y-3">
+          <div className="bg-muted rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center">
-                <Terminal size={12} className="text-accent" />
+              <div className="w-5 h-5 rounded bg-primary/20 flex items-center justify-center">
+                <Terminal size={12} className="text-primary" />
               </div>
-              <span className="font-medium text-text">Claude Code</span>
+              <span className="font-medium text-foreground">Claude Code</span>
             </div>
-            <p className="text-text-muted">
+            <p className="text-muted-foreground">
               Create an API key, then use the one-liner below or download the config file.
             </p>
 
@@ -214,11 +214,11 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
           {/* Existing keys */}
           {apiKeys.length > 0 && (
             <div className="space-y-1">
-              <label className="font-medium text-text-muted block mb-1">Existing keys</label>
+              <label className="font-medium text-muted-foreground block mb-1">Existing keys</label>
               {apiKeys.map((k) => (
-                <div key={k.id} className="flex items-center justify-between bg-surface-alt rounded-lg px-2.5 py-1.5">
-                  <span className="text-text truncate">{k.name}</span>
-                  <span className="text-text-muted shrink-0 ml-2">
+                <div key={k.id} className="flex items-center justify-between bg-muted rounded-lg px-2.5 py-1.5">
+                  <span className="text-foreground truncate">{k.name}</span>
+                  <span className="text-muted-foreground shrink-0 ml-2">
                     {new Date(k.created_at).toLocaleDateString()}
                   </span>
                 </div>
@@ -231,18 +231,18 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
 
         {/* ── Email ────────────────────────────── */}
         <section className="space-y-3">
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide">Email</h4>
-          <p className="text-text-muted">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Email</h4>
+          <p className="text-muted-foreground">
             Forward documents and instructions to this workspace.
           </p>
 
           {emailLoading ? (
-            <div className="h-8 bg-surface-alt rounded-lg animate-pulse" />
+            <div className="h-8 bg-muted rounded-lg animate-pulse" />
           ) : email ? (
             <div>
-              <label className="font-medium text-text-muted block mb-1">Workspace email</label>
+              <label className="font-medium text-muted-foreground block mb-1">Workspace email</label>
               <div className="flex items-center gap-1.5">
-                <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text break-all select-all">
+                <code className="flex-1 bg-muted border border-border rounded-lg px-2.5 py-1.5 font-mono text-foreground break-all select-all">
                   {email}
                 </code>
                 <Button
@@ -255,7 +255,7 @@ export function ConnectPanel({ projectId }: { projectId: string }) {
               </div>
             </div>
           ) : (
-            <p className="text-text-muted">
+            <p className="text-muted-foreground">
               Could not load email address.
             </p>
           )}

@@ -32,17 +32,17 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-bg px-4 py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-12">
       <div className="fixed top-4 right-4 z-50"><ThemeToggle /></div>
 
       {/* Hero */}
       <div className="w-full max-w-md text-center mb-6">
         <img src="/assets/logo.png" alt="Peckmail" className="h-14 w-auto mx-auto mb-3" />
-        <h1 style={{ fontFamily: "'Playfair Display', serif" }} className="text-4xl font-semibold text-text mb-2 -tracking-[0.01em]">
+        <h1 className="text-4xl font-semibold text-foreground mb-2 -tracking-[0.01em]">
           Peckmail
         </h1>
-        <p className="text-text-muted mb-4">Your friendly writing workspace</p>
-        <p className="text-sm text-text-muted/80 leading-relaxed">
+        <p className="text-muted-foreground mb-4">Your friendly writing workspace</p>
+        <p className="text-sm text-muted-foreground/80 leading-relaxed">
           A calm space for your writing, notes, and ideas — with AI&nbsp;chat,
           text&#8209;to&#8209;speech, version&nbsp;history, and real&#8209;time collaboration.
         </p>
@@ -80,7 +80,7 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-surface text-text-muted">or</span>
+              <span className="px-4 bg-card text-muted-foreground">or</span>
             </div>
           </div>
 
@@ -113,7 +113,7 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
             />
 
             {error && (
-              <p className="text-sm text-danger text-center">{error}</p>
+              <p className="text-sm text-destructive text-center">{error}</p>
             )}
 
             <Button className="w-full h-12" disabled={loading}>
@@ -125,7 +125,7 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-text-muted">
+          <p className="mt-6 text-center text-sm text-muted-foreground">
             {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
             <Button
               variant="link"

@@ -101,7 +101,7 @@ export function DictationOverlay({
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5">
           <span className="recording-dot" />
-          <span className="text-xs text-danger tabular-nums font-medium">
+          <span className="text-xs text-destructive tabular-nums font-medium">
             {formatElapsed(elapsed)}
           </span>
         </div>
@@ -115,7 +115,7 @@ export function DictationOverlay({
         <button
           onClick={onStop}
           title="Stop recording"
-          className="p-1 rounded-full text-danger hover:bg-surface-alt transition-colors"
+          className="p-1 rounded-full text-destructive hover:bg-muted transition-colors"
         >
           <StopCircle size={22} weight="fill" />
         </button>

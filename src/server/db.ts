@@ -401,6 +401,7 @@ export async function insertIncomingEmail(record: {
   subject?: string;
   body_text?: string;
   body_html?: string;
+  raw_email?: string;
   headers?: Record<string, any>;
   attachments?: any[];
 }): Promise<{ id: string } | null> {
@@ -415,6 +416,26 @@ export async function insertIncomingEmail(record: {
     throw error;
   }
   return data;
+}
+
+export async function updateIncomingEmailContent(
+  emailId: string,
+  updates: {
+    body_text?: string;
+    body_html?: string;
+    raw_email?: string;
+  }
+): Promise<void> {
+  const update: Record<string, any> = {};
+  if (updates.body_text !== undefined) update.body_text = updates.body_text;
+  if (updates.body_html !== undefined) update.body_html = updates.body_html;
+  if (updates.raw_email !== undefined) update.raw_email = updates.raw_email;
+  if (!Object.keys(update).length) return;
+
+  await supabaseAdmin
+    .from("incoming_emails")
+    .update(update)
+    .eq("id", emailId);
 }
 
 export async function updateEmailStatus(

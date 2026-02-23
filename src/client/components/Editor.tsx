@@ -417,12 +417,12 @@ export function Editor({ editorViewRef }: EditorProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Status bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-surface border-b border-border text-xs">
-        <span className="text-text-muted">{openFilePath}</span>
+      <div className="flex items-center justify-between px-4 py-1.5 bg-card border-b border-border text-xs">
+        <span className="text-muted-foreground">{openFilePath}</span>
         <button
           onClick={() => setWordWrap((w) => !w)}
           className={`px-2 py-0.5 rounded transition-colors ${
-            wordWrap ? "text-accent" : "text-text-muted hover:text-text"
+            wordWrap ? "text-primary" : "text-muted-foreground hover:text-foreground"
           }`}
           title={wordWrap ? "Disable word wrap" : "Enable word wrap"}
         >
@@ -446,14 +446,14 @@ export function Editor({ editorViewRef }: EditorProps) {
                 if (openFilePath) loadFileContent(openFilePath);
                 setToast(null);
               }}
-              className="text-accent font-medium hover:underline"
+              className="text-primary font-medium hover:underline"
             >
               Reload
             </button>
           )}
           <button
             onClick={() => setToast(null)}
-            className="text-text-muted hover:text-surface ml-1"
+            className="text-muted-foreground hover:text-card ml-1"
           >
             ×
           </button>
@@ -463,12 +463,12 @@ export function Editor({ editorViewRef }: EditorProps) {
       {/* Context menu */}
       {ctxMenu && (
         <div
-          className="fixed z-50 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[180px]"
+          className="fixed z-50 bg-card border border-border rounded-lg shadow-lg py-1 min-w-[180px]"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <button
-            className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+            className="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2"
             onClick={() => {
               const lineText = editorViewRef.current?.state.doc.line(ctxMenu.line).text.trim();
               const snippet = lineText && lineText.length > 60 ? lineText.slice(0, 60) + "..." : lineText;
@@ -480,7 +480,7 @@ export function Editor({ editorViewRef }: EditorProps) {
             Fact check this
           </button>
           <button
-            className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
+            className="w-full text-left px-3 py-1.5 text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2"
             onClick={() => {
               const fileName = openFilePath?.split("/").pop() ?? "this file";
               dispatch({ type: "chat:prompt", message: `Review the writing in ${fileName} around line ${ctxMenu.line}. Suggest improvements for clarity and style.` });

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { useIncomingEmails, useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
-import { Skeleton, SkeletonLine } from "./Skeleton.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
+import { Button } from "@/components/ui/button.js";
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -59,73 +60,71 @@ export function EmailPanel({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 border-b border-border">
-        <h3 className="text-sm font-semibold text-text">Email</h3>
+        <h3 className="text-sm font-semibold text-foreground">Email</h3>
       </div>
       <div className="p-4 space-y-4 overflow-y-auto flex-1 text-xs">
-        <p className="text-text-muted">
+        <p className="text-muted-foreground">
           Send emails to this address and the AI assistant will process them.
-          Add an <code className="bg-surface-alt px-1 py-0.5 rounded text-text">AGENTS.md</code> file for custom instructions.
+          Add an <code className="bg-muted px-1 py-0.5 rounded text-foreground">AGENTS.md</code> file for custom instructions.
         </p>
 
         {loading ? (
           <div className="space-y-2">
-            <SkeletonLine className="w-1/3" />
+            <Skeleton className="h-3 w-1/3 rounded-full" />
             <Skeleton className="h-9 w-full" />
           </div>
         ) : email ? (
           <div>
-            <label className="font-medium text-text-muted block mb-1">
+            <label className="font-medium text-muted-foreground block mb-1">
               Workspace email
             </label>
             <div className="flex items-center gap-1.5">
-              <code className="flex-1 bg-surface-alt border border-border rounded-lg px-2.5 py-1.5 font-mono text-text break-all select-all">
+              <code className="flex-1 bg-muted border border-border rounded-lg px-2.5 py-1.5 font-mono text-foreground break-all select-all">
                 {email}
               </code>
-              <button
-                onClick={copy}
-                className="shrink-0 px-2.5 py-1.5 bg-surface-alt border border-border text-text-muted rounded-lg hover:text-text hover:border-text-muted transition-colors"
-              >
+              <Button variant="outline" size="sm" onClick={copy} className="shrink-0">
                 {copied ? "Copied!" : "Copy"}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
-          <p className="text-text-muted">
+          <p className="text-muted-foreground">
             Could not load email address.
           </p>
         )}
 
         {/* Send test email button */}
         {email && (
-          <button
+          <Button
+            variant="outline"
+            className="w-full"
             onClick={sendTestEmail}
             disabled={sendingTest}
-            className="w-full px-3 py-2 bg-surface-alt border border-border text-text rounded-lg hover:border-text-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {sendingTest ? (
               <>
-                <span className="inline-block w-3 h-3 border-2 border-text-muted border-t-transparent rounded-full animate-spin" />
+                <span className="inline-block w-3 h-3 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
                 Sending...
               </>
             ) : (
               "Send test email"
             )}
-          </button>
+          </Button>
         )}
 
         {/* Recent emails */}
         <div className="border-t border-border pt-3">
-          <label className="font-medium text-text-muted block mb-2">
+          <label className="font-medium text-muted-foreground block mb-2">
             Recent emails
           </label>
           {emails.length === 0 ? (
-            <p className="text-text-muted italic">No emails yet</p>
+            <p className="text-muted-foreground italic">No emails yet</p>
           ) : (
             <div className="space-y-1.5">
               {emails.map((e) => (
                 <div
                   key={e.id}
-                  className="bg-surface-alt rounded-lg px-2.5 py-2 flex items-start gap-2"
+                  className="bg-muted rounded-lg px-2.5 py-2 flex items-start gap-2"
                 >
                   {/* Status dot */}
                   <div className="mt-1 shrink-0" title={
@@ -146,9 +145,9 @@ export function EmailPanel({ projectId }: { projectId: string }) {
                   </div>
                   {/* Content */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-text truncate">{e.subject || "(no subject)"}</p>
-                    <p className="text-text-muted truncate">{e.from_address}</p>
-                    <p className="text-text-muted">{formatDate(e.created_at)}</p>
+                    <p className="text-foreground truncate">{e.subject || "(no subject)"}</p>
+                    <p className="text-muted-foreground truncate">{e.from_address}</p>
+                    <p className="text-muted-foreground">{formatDate(e.created_at)}</p>
                   </div>
                 </div>
               ))}

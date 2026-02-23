@@ -71,19 +71,19 @@ export function OAuthConsent() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <SpinnerGap size={28} className="text-text-muted animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <SpinnerGap size={28} className="text-muted-foreground animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
-            <h1 className="text-lg font-semibold text-text mb-2">Authorization Error</h1>
-            <p className="text-sm text-text-muted">{error}</p>
+            <h1 className="text-lg font-semibold text-foreground mb-2">Authorization Error</h1>
+            <p className="text-sm text-muted-foreground">{error}</p>
           </CardContent>
         </Card>
       </div>
@@ -91,27 +91,27 @@ export function OAuthConsent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="max-w-md w-full">
         <CardContent className="p-8">
           <div className="text-center mb-6">
-            <div className="text-2xl font-bold text-text mb-1">Peckmail</div>
-            <p className="text-sm text-text-muted">Authorize access to your account</p>
+            <div className="text-2xl font-bold text-foreground mb-1">Peckmail</div>
+            <p className="text-sm text-muted-foreground">Authorize access to your account</p>
           </div>
 
-          <div className="bg-surface-alt rounded-lg p-4 mb-6">
-            <div className="text-sm font-medium text-text mb-1">
+          <div className="bg-muted rounded-lg p-4 mb-6">
+            <div className="text-sm font-medium text-foreground mb-1">
               {details?.client?.name || "An application"}
             </div>
             {details?.client?.description && (
-              <p className="text-xs text-text-muted">{details.client.description}</p>
+              <p className="text-xs text-muted-foreground">{details.client.description}</p>
             )}
-            <p className="text-xs text-text-muted mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               wants to access your Peckmail account as <strong>{user?.email}</strong>
             </p>
             {details?.scopes && details.scopes.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border">
-                <div className="text-xs font-medium text-text-muted mb-1">Requested access:</div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">Requested access:</div>
                 <div className="flex flex-wrap gap-1">
                   {details.scopes.map((s) => (
                     <Badge key={s} variant="secondary">

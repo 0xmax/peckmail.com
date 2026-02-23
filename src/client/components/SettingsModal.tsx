@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
+import { Button } from "@/components/ui/button.js";
 
 export function SettingsModal({
   projectId,
@@ -26,12 +27,9 @@ export function SettingsModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border">
           <DialogTitle>Share</DialogTitle>
-          <button
-            onClick={onClose}
-            className="text-text-muted hover:text-text transition-colors text-xl leading-none"
-          >
+          <Button variant="ghost" size="icon" onClick={onClose}>
             &times;
-          </button>
+          </Button>
         </div>
 
         {/* Content */}

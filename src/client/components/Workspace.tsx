@@ -200,9 +200,9 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
   };
 
   return (
-    <div className="h-screen flex flex-col bg-bg">
+    <div className="h-screen flex flex-col bg-background">
       {/* Top bar */}
-      <header className="bg-surface border-b border-border px-4 py-2 flex items-center justify-between shrink-0 relative">
+      <header className="bg-card border-b border-border px-4 py-2 flex items-center justify-between shrink-0 relative">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onBack}>
             <ArrowLeft size={14} weight="bold" className="inline" /> Back
@@ -223,12 +223,12 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                 if (e.key === "Escape") setEditingName(false);
               }}
-              className="text-sm font-medium text-text bg-transparent border-b border-accent/50 outline-none text-center px-1 py-0.5 min-w-[120px]"
+              className="text-sm font-medium text-foreground bg-transparent border-b border-primary/50 outline-none text-center px-1 py-0.5 min-w-[120px]"
             />
           ) : (
             <button
               onClick={() => { setDraftName(projectName); setEditingName(true); setTimeout(() => nameInputRef.current?.select(), 0); }}
-              className="text-sm font-medium text-text-muted hover:text-text transition-colors truncate max-w-[200px]"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors truncate max-w-[200px]"
               title="Click to rename workspace"
             >
               {projectName || "Untitled"}
@@ -237,7 +237,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
         </div>
         <div className="flex items-center gap-2">
           {!connected && (
-            <span className="text-xs text-danger px-2 py-1 bg-red-50 dark:bg-red-950 rounded-full">
+            <span className="text-xs text-destructive px-2 py-1 bg-red-50 dark:bg-red-950 rounded-full">
               Reconnecting...
             </span>
           )}
@@ -252,14 +252,14 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
           </Button>
           <PresenceAvatars users={onlineUsers} />
           {/* Panel toggle buttons */}
-          <div className="flex items-center gap-px bg-surface-alt/50 rounded-xl p-0.5">
+          <div className="flex items-center gap-px bg-muted/50 rounded-xl p-0.5">
             <Button
               variant="ghost"
               size="icon"
               className={`h-8 w-8 rounded-lg ${
                 activePanel === "connect"
-                  ? "text-accent hover:text-accent"
-                  : "text-text-muted hover:text-text"
+                  ? "text-primary hover:text-primary"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
               onClick={() => togglePanel("connect")}
               title="Connect"
@@ -271,8 +271,8 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
               size="icon"
               className={`h-8 w-8 rounded-lg ${
                 activePanel === "chat"
-                  ? "text-accent hover:text-accent"
-                  : "text-text-muted hover:text-text"
+                  ? "text-primary hover:text-primary"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
               onClick={() => togglePanel("chat")}
               title="Assistant"
@@ -293,37 +293,37 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
-                <div className="text-sm font-medium text-text truncate">
+                <div className="text-sm font-medium text-foreground truncate">
                   {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
                 </div>
                 {handle && (
-                  <div className="text-xs text-text-muted truncate mt-0.5 font-normal">@{handle}</div>
+                  <div className="text-xs text-muted-foreground truncate mt-0.5 font-normal">@{handle}</div>
                 )}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onBack()}>
-                <ArrowLeft size={16} className="text-text-muted" />
+                <ArrowLeft size={16} className="text-muted-foreground" />
                 All workspaces
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onOpenSettings()}>
-                <GearSix size={16} className="text-text-muted" />
+                <GearSix size={16} className="text-muted-foreground" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href="/contact">
-                  <Envelope size={16} className="text-text-muted" />
+                  <Envelope size={16} className="text-muted-foreground" />
                   Contact
                 </a>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href="https://x.com/peckmail" target="_blank" rel="noopener">
-                  <XLogo size={16} className="text-text-muted" />
+                  <XLogo size={16} className="text-muted-foreground" />
                   Follow on X
                 </a>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => signOut()}>
-                <SignOut size={16} className="text-text-muted" />
+                <SignOut size={16} className="text-muted-foreground" />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -354,10 +354,10 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <img src="/assets/logo.png" alt="Peckmail" className="h-10 w-auto mx-auto mb-3 opacity-40" />
-                <p className="text-text-muted">
+                <p className="text-muted-foreground">
                   Select a page to start editing
                 </p>
-                <p className="text-text-muted text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   create a page from chat or project settings
                 </p>
               </div>
@@ -368,11 +368,11 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
         {/* Side panels — only one at a time */}
         {activePanel && (
           <div
-            className="border-l border-border bg-surface flex flex-col shrink-0 relative"
+            className="border-l border-border bg-card flex flex-col shrink-0 relative"
             style={{ width: panelWidth }}
           >
             <div
-              className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10"
+              className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-primary/30 transition-colors z-10"
               onMouseDown={startResize(setPanelWidth, "peckmail:panel-w", 260, 600, "left")}
             />
             {activePanel === "chat" && <ChatPanel />}

@@ -58,8 +58,8 @@ export function ChatMessage({ message }: { message: Message }) {
       <div
         className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
           isUser
-            ? "bg-chat-user text-text rounded-br-md"
-            : "bg-chat-ai text-text rounded-bl-md"
+            ? "bg-secondary text-foreground rounded-br-md"
+            : "bg-muted text-foreground rounded-bl-md"
         }`}
       >
         {/* Tool use cards */}
@@ -71,7 +71,7 @@ export function ChatMessage({ message }: { message: Message }) {
                 className="flex items-center gap-2 text-xs bg-card/60 rounded-lg px-2.5 py-1.5 border border-border"
               >
                 <span>{toolIcon(tu.tool)}</span>
-                <span className="text-text-muted">
+                <span className="text-muted-foreground">
                   {toolLabel(tu.tool, tu.input)}
                 </span>
               </div>

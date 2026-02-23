@@ -90,14 +90,14 @@ export function InvitePage({
 
   if (state.step === "loading" || state.step === "accepting" || state.step === "declining") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
-          <SpinnerGap size={28} className="text-text-muted animate-spin" />
+          <SpinnerGap size={28} className="text-muted-foreground animate-spin" />
           {state.step === "accepting" && (
-            <div className="text-text-muted text-sm">Joining project...</div>
+            <div className="text-muted-foreground text-sm">Joining project...</div>
           )}
           {state.step === "declining" && (
-            <div className="text-text-muted text-sm">Declining invitation...</div>
+            <div className="text-muted-foreground text-sm">Declining invitation...</div>
           )}
         </div>
       </div>
@@ -106,12 +106,12 @@ export function InvitePage({
 
   if (state.step === "error") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md">
           <CardContent className="p-8 text-center">
-            <h1 className="text-xl font-semibold text-text mb-3">Invitation Error</h1>
-            <p className="text-text-muted mb-6">{state.message}</p>
-            <a href="/" className="text-accent hover:underline font-medium">
+            <h1 className="text-xl font-semibold text-foreground mb-3">Invitation Error</h1>
+            <p className="text-muted-foreground mb-6">{state.message}</p>
+            <a href="/" className="text-primary hover:underline font-medium">
               Go to Peckmail
             </a>
           </CardContent>
@@ -122,12 +122,12 @@ export function InvitePage({
 
   if (state.step === "declined") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md">
           <CardContent className="p-8 text-center">
-            <h1 className="text-xl font-semibold text-text mb-3">Invitation Declined</h1>
-            <p className="text-text-muted mb-6">You've declined this invitation.</p>
-            <a href="/" className="text-accent hover:underline font-medium">
+            <h1 className="text-xl font-semibold text-foreground mb-3">Invitation Declined</h1>
+            <p className="text-muted-foreground mb-6">You've declined this invitation.</p>
+            <a href="/" className="text-primary hover:underline font-medium">
               Go to Peckmail
             </a>
           </CardContent>
@@ -138,17 +138,17 @@ export function InvitePage({
 
   if (state.step === "mismatch") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md">
           <CardContent className="p-8 text-center">
-            <h1 className="text-xl font-semibold text-text mb-3">Email Mismatch</h1>
-            <p className="text-text-muted mb-2">
+            <h1 className="text-xl font-semibold text-foreground mb-3">Email Mismatch</h1>
+            <p className="text-muted-foreground mb-2">
               This invitation was sent to <strong>{state.info.email}</strong>.
             </p>
-            <p className="text-text-muted mb-6">
+            <p className="text-muted-foreground mb-6">
               Please sign in with that email address to accept.
             </p>
-            <a href="/" className="text-accent hover:underline font-medium">
+            <a href="/" className="text-primary hover:underline font-medium">
               Go to Peckmail
             </a>
           </CardContent>
@@ -159,11 +159,11 @@ export function InvitePage({
 
   if (state.step === "confirm") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md">
           <CardContent className="p-8 text-center">
-            <h1 className="text-xl font-semibold text-text mb-3">You're Invited</h1>
-            <p className="text-text-muted mb-6">
+            <h1 className="text-xl font-semibold text-foreground mb-3">You're Invited</h1>
+            <p className="text-muted-foreground mb-6">
               Join <strong>{state.info.projectName}</strong>?
             </p>
             <div className="flex gap-3 justify-center">
@@ -182,12 +182,12 @@ export function InvitePage({
 
   // state.step === "login"
   const banner = (
-    <div className="mb-6 p-4 bg-bg rounded-xl border border-border text-center">
-      <p className="text-text text-sm">
+    <div className="mb-6 p-4 bg-background rounded-xl border border-border text-center">
+      <p className="text-foreground text-sm">
         You've been invited to join{" "}
         <strong>{state.info.projectName}</strong>
       </p>
-      <p className="text-text-muted text-xs mt-1">
+      <p className="text-muted-foreground text-xs mt-1">
         Sign in or create an account to accept
       </p>
     </div>
