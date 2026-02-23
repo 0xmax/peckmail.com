@@ -16,7 +16,6 @@ import {
   Eye,
   PencilSimple,
   LinkSimple,
-  SpeakerHigh,
   Microphone,
 } from "@phosphor-icons/react";
 import {
@@ -29,7 +28,6 @@ import {
 } from "../lib/editorFormatting.js";
 import { api } from "../lib/api.js";
 import { useToast } from "../context/ToastContext.js";
-import { useStoreDispatch } from "../store/StoreContext.js";
 import { useDictation } from "../hooks/useDictation.js";
 import { DictationOverlay } from "./DictationOverlay.js";
 
@@ -39,7 +37,6 @@ interface EditorToolbarProps {
   onTogglePreview: () => void;
   projectId: string;
   filePath: string;
-  onPlay: () => void;
 }
 
 function ToolbarButton({
@@ -72,11 +69,9 @@ export function EditorToolbar({
   onTogglePreview,
   projectId,
   filePath,
-  onPlay,
 }: EditorToolbarProps) {
   const getView = () => editorViewRef.current;
   const toast = useToast();
-  const dispatch = useStoreDispatch();
   const [shareLoading, setShareLoading] = useState(false);
   const {
     isRecording,
@@ -219,17 +214,6 @@ export function EditorToolbar({
         )}
 
         <div className="flex-1" />
-
-        <button
-          onClick={() => {
-            onPlay();
-            dispatch({ type: "tts:play-from", fromLine: 0 });
-          }}
-          title="Read aloud"
-          className="p-1.5 rounded transition-colors text-text-muted hover:text-text hover:bg-surface-alt"
-        >
-          <SpeakerHigh size={16} />
-        </button>
 
         <button
           onClick={() => {

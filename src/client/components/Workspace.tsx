@@ -8,25 +8,22 @@ import {
   useRenameProject,
   useLoadFileContent,
   useTree,
-  useTtsFromLine,
   useChatPrompt,
 } from "../store/StoreContext.js";
 import type { FileNode } from "../store/types.js";
-import { FileTree } from "./FileTree.js";
 import { Editor } from "./Editor.js";
 import { Preview } from "./Preview.js";
 import { EditorToolbar } from "./EditorToolbar.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { Revisions } from "./Revisions.js";
 import { ConnectPanel } from "./ConnectPanel.js";
-import { AudioBar } from "./ReadAloud.js";
 import { SaveIndicator } from "./SaveIndicator.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { PresenceAvatars } from "./PresenceAvatars.js";
 import { useAuth } from "../context/AuthContext.js";
 import { usePresence } from "../hooks/usePresence.js";
-import { ArrowLeft, Sidebar, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope, XLogo } from "@phosphor-icons/react";
+import { ArrowLeft, ClockCounterClockwise, ChatCircle, Plugs, GearSix, SignOut, Users, Envelope, XLogo } from "@phosphor-icons/react";
 
 function fileExistsInTree(tree: FileNode[], path: string): boolean {
   for (const node of tree) {
@@ -55,8 +52,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [showShare, setShowShare] = useState(false);
-  const [showAudioBar, setShowAudioBar] = useState(false);
-  const ttsFromLine = useTtsFromLine();
   const chatPrompt = useChatPrompt();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -74,10 +69,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
       return false;
     }
   });
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    try { return Number(localStorage.getItem("peckmail:sidebar-w")) || 240; } catch { return 240; }
-  });
   const [panelWidth, setPanelWidth] = useState(() => {
     try { return Number(localStorage.getItem("peckmail:panel-w")) || 320; } catch { return 320; }
   });
@@ -86,11 +77,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
 
   const togglePanel = (panel: Panel) =>
     setActivePanel((prev) => (prev === panel ? null : panel));
-
-  // Show audio bar when TTS is triggered from any source
-  useEffect(() => {
-    if (ttsFromLine !== null) setShowAudioBar(true);
-  }, [ttsFromLine]);
 
   // Open chat panel when a prompt is dispatched from context menus
   useEffect(() => {
@@ -245,17 +231,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
             <ArrowLeft size={14} weight="bold" className="inline" /> Back
           </button>
           <div className="w-px h-5 bg-border" />
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            title="Pages"
-            className={`p-2 rounded-lg transition-colors ${
-              showSidebar
-                ? "text-accent hover:text-accent"
-                : "text-text-muted hover:text-text"
-            }`}
-          >
-            <Sidebar size={16} />
-          </button>
           <SaveIndicator projectId={projectId} />
         </div>
         <div className="absolute left-1/2 -translate-x-1/2">
@@ -389,29 +364,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
 
       {/* Main area */}
       <div className="flex flex-1 min-h-0">
-        {/* Sidebar - File tree */}
-        {showSidebar && (
-          <div
-            className="bg-surface border-r border-border flex flex-col shrink-0 relative"
-            style={{ width: sidebarWidth }}
-          >
-            <FileTree presenceUsers={onlineUsers} />
-            <div className="border-t border-border px-3 py-2 shrink-0">
-              <button
-                onClick={() => setShowShare(true)}
-                className="flex items-center gap-2 w-full text-sm px-2 py-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-alt transition-colors"
-              >
-                <GearSix size={15} />
-                Settings
-              </button>
-            </div>
-            <div
-              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors z-10"
-              onMouseDown={startResize(setSidebarWidth, "peckmail:sidebar-w", 180, 400, "right")}
-            />
-          </div>
-        )}
-
         {/* Editor / Preview area */}
         <div className="flex-1 min-w-0 flex flex-col">
           {openFilePath ? (
@@ -422,7 +374,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
                 onTogglePreview={() => setShowPreview(!showPreview)}
                 projectId={projectId}
                 filePath={openFilePath}
-                onPlay={() => setShowAudioBar(true)}
               />
               {showPreview ? (
                 <Preview content={fileContent ?? ""} filePath={openFilePath} />
@@ -438,7 +389,7 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
                   Select a page to start editing
                 </p>
                 <p className="text-text-muted text-sm mt-1">
-                  or create a new one from the sidebar
+                  create a page from chat or project settings
                 </p>
               </div>
             </div>
@@ -462,9 +413,6 @@ export function Workspace({ onBack, onOpenSettings }: { onBack: () => void; onOp
         )}
 
       </div>
-
-      {/* Audio player bar */}
-      {showAudioBar && <AudioBar onClose={() => setShowAudioBar(false)} />}
 
       {showShare && (
         <SettingsModal

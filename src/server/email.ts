@@ -26,7 +26,7 @@ export async function sendInvitationEmail({
 
   try {
     await resend.emails.send({
-      from: "Peckmail <noreply@chirp.peckmail.com>",
+      from: "Peckmail <noreply@inbox.peckmail.com>",
       to,
       subject: `${inviterName} invited you to "${projectName}" on Peckmail`,
       html: `
@@ -77,7 +77,7 @@ export async function sendEmail(params: {
   const { to, subject, body, replyTo } = params;
 
   await resend.emails.send({
-    from: "Peckmail <noreply@chirp.peckmail.com>",
+    from: "Peckmail <noreply@inbox.peckmail.com>",
     to,
     subject,
     ...(replyTo ? { reply_to: replyTo } : {}),

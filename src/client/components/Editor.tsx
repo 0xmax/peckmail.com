@@ -16,7 +16,7 @@ import {
   useProjectSettings,
   useTtsPlayback,
 } from "../store/StoreContext.js";
-import { Play, ChatCircle, MagnifyingGlass, PencilLine } from "@phosphor-icons/react";
+import { ChatCircle, MagnifyingGlass, PencilLine } from "@phosphor-icons/react";
 
 const LIVE_BROADCAST_DELAY = 30;  // ms — broadcast to other clients
 const DISK_WRITE_DELAY = 500;     // ms — persist to disk
@@ -428,21 +428,6 @@ export function Editor({ editorViewRef }: EditorProps) {
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <button
-            className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
-            onClick={() => {
-              dispatch({
-                type: "tts:play-from",
-                fromLine: ctxMenu.line,
-                fromChar: ctxMenu.fromChar,
-              });
-              setCtxMenu(null);
-            }}
-          >
-            <Play size={14} weight="fill" className="shrink-0" />
-            Read from here
-          </button>
-          <div className="my-1 border-t border-border" />
           <button
             className="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
             onClick={() => {

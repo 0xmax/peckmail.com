@@ -427,7 +427,7 @@ Every project is a git repository. Git Smart HTTP endpoints let you clone, push,
 Multiple users can work on the same project simultaneously. File changes, cursor positions, and chat messages sync in real time over WebSockets.
 
 ## Email Integration
-Each workspace gets a unique email address (e.g. robin-willow-42@in.peckmail.com). Emails sent to this address are processed by an AI agent that reads the content and updates project files. Configure agent behavior via an AGENTS.md file in the project root.
+Each workspace gets a unique email address (e.g. robin-willow-42@inbox.peckmail.com). Emails sent to this address are processed by an AI agent that reads the content and updates project files. Configure agent behavior via an AGENTS.md file in the project root.
 
 ## Text-to-Speech
 Read documents aloud using ElevenLabs or OpenAI TTS. The current sentence is highlighted in the editor during playback. Choose your preferred provider and voice in account settings.
