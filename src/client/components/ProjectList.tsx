@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
 import { InviteModal } from "./InviteModal.js";
-import { DotsThree, Envelope, File, GearSix, MagnifyingGlass, Notebook, PencilSimple, SignOut, SortAscending, SpinnerGap, Trash, UserPlus, X } from "@phosphor-icons/react";
+import { ArrowRight, DotsThree, Envelope, File, GearSix, MagnifyingGlass, Notebook, PencilSimple, Plugs, SignOut, SortAscending, SpinnerGap, Trash, UserPlus, X } from "@phosphor-icons/react";
 import { Skeleton, SkeletonLine, SkeletonCircle } from "./Skeleton.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { SettingsModal } from "./SettingsModal.js";
@@ -653,6 +653,33 @@ export function ProjectList({
           </div>
           </>
           )
+        )}
+
+        {onOpenSettings && (
+          <section className="mt-8">
+            <div className="bg-surface border border-border rounded-2xl p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+                    <Plugs size={18} weight="duotone" className="text-accent" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-text mb-1">Connect with Claude</h2>
+                    <p className="text-sm text-text-muted">
+                      Set up Claude Desktop or Claude Code from Settings to connect directly to your workspaces.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={onOpenSettings}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 bg-surface-alt border border-border rounded-lg text-sm text-text hover:bg-bg transition-colors"
+                >
+                  Open settings
+                  <ArrowRight size={14} className="text-text-muted" />
+                </button>
+              </div>
+            </div>
+          </section>
         )}
       </div>
 

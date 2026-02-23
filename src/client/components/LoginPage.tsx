@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext.js";
-import { Monitor, Terminal, Plugs } from "@phosphor-icons/react";
 
 export function LoginPage({ banner }: { banner?: React.ReactNode }) {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
@@ -41,32 +40,6 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
           A calm space for your writing, notes, and ideas — with AI&nbsp;chat,
           text&#8209;to&#8209;speech, version&nbsp;history, and real&#8209;time collaboration.
         </p>
-      </div>
-
-      {/* Connect to Claude */}
-      <div className="w-full max-w-md bg-surface/60 border border-border rounded-xl p-4 mb-6">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-            <Plugs size={16} weight="duotone" className="text-accent" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-text mb-1">Connect to Claude</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Use Perchpad as an MCP server with Claude Desktop or Claude Code.
-              Let Claude read, edit, and manage your files directly.
-            </p>
-            <div className="flex items-center gap-4 mt-2.5">
-              <span className="flex items-center gap-1.5 text-xs text-text-muted">
-                <Monitor size={13} />
-                Claude Desktop
-              </span>
-              <span className="flex items-center gap-1.5 text-xs text-text-muted">
-                <Terminal size={13} />
-                Claude Code
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Login card */}

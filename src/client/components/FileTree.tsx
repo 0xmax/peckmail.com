@@ -16,6 +16,42 @@ const ITEM_COLOR_HEX: Record<ItemColor, string> = {
 
 const ITEM_COLORS: ItemColor[] = ["red", "orange", "yellow", "green", "blue", "purple", "gray"];
 
+function joinPath(parent: string | null, name: string): string {
+  return parent ? `${parent}/${name}` : name;
+}
+
+function pathExists(tree: FileNode[], path: string): boolean {
+  return findNodeByPath(tree, path) !== null;
+}
+
+function findNodeByPath(tree: FileNode[], path: string): FileNode | null {
+  for (const node of tree) {
+    if (node.path === path) return node;
+    if (node.type === "directory" && node.children) {
+      const found = findNodeByPath(node.children, path);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function makeUniqueFilePath(tree: FileNode[], parentDir: string | null): string {
+  let index = 1;
+  while (true) {
+    const fileName = index === 1 ? "new.md" : `new-${index}.md`;
+    const candidate = joinPath(parentDir, fileName);
+    if (!pathExists(tree, candidate)) return candidate;
+    index += 1;
+  }
+}
+
+function fileContentFromPath(path: string): string {
+  const fileName = path.split("/").pop() || "new.md";
+  const baseName = fileName.replace(/\.[^.]+$/, "");
+  const title = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+  return `# ${title}\n\n`;
+}
+
 function FileIcon({ type }: { type: "file" | "directory" }) {
   if (type === "directory") {
     return <Folder size={16} weight="duotone" className="text-accent shrink-0" />;
@@ -29,6 +65,11 @@ function TreeItem({
   onSelect,
   selectedPath,
   onContextMenu,
+  onDragFileStart,
+  onDragFileEnd,
+  onDragOverDirectory,
+  onDropOnDirectory,
+  dragOverDirectoryPath,
   presencesByFile,
   itemColors,
 }: {
@@ -37,11 +78,17 @@ function TreeItem({
   onSelect: (path: string) => void;
   selectedPath: string | null;
   onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
+  onDragFileStart: (path: string) => void;
+  onDragFileEnd: () => void;
+  onDragOverDirectory: (path: string | null) => void;
+  onDropOnDirectory: (toDirPath: string) => void;
+  dragOverDirectoryPath: string | null;
   presencesByFile: Map<string, PresenceUser[]>;
   itemColors: Record<string, ItemColor>;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isSelected = node.path === selectedPath;
+  const isDropTarget = node.type === "directory" && dragOverDirectoryPath === node.path;
   const itemColor = itemColors[node.path];
 
   const handleClick = () => {
@@ -63,11 +110,39 @@ function TreeItem({
       <button
         onClick={handleClick}
         onContextMenu={(e) => onContextMenu(e, node)}
+        draggable={node.type === "file"}
+        onDragStart={(e) => {
+          if (node.type !== "file") return;
+          e.dataTransfer.setData("text/plain", node.path);
+          e.dataTransfer.effectAllowed = "move";
+          onDragFileStart(node.path);
+        }}
+        onDragEnd={() => {
+          onDragFileEnd();
+          onDragOverDirectory(null);
+        }}
+        onDragOver={(e) => {
+          if (node.type !== "directory") return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          onDragOverDirectory(node.path);
+        }}
+        onDragLeave={() => {
+          if (node.type !== "directory") return;
+          onDragOverDirectory(null);
+        }}
+        onDrop={(e) => {
+          if (node.type !== "directory") return;
+          e.preventDefault();
+          e.stopPropagation();
+          onDropOnDirectory(node.path);
+          onDragOverDirectory(null);
+        }}
         className={`w-full text-left flex items-center gap-2 py-1.5 px-2 rounded-lg text-sm transition-colors ${
           isSelected
             ? "bg-surface-alt text-accent"
             : "text-text hover:bg-surface-alt"
-        }`}
+        } ${isDropTarget ? "ring-1 ring-accent/40 bg-accent/10" : ""}`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         {node.type === "directory" ? (
@@ -114,6 +189,11 @@ function TreeItem({
               onSelect={onSelect}
               selectedPath={selectedPath}
               onContextMenu={onContextMenu}
+              onDragFileStart={onDragFileStart}
+              onDragFileEnd={onDragFileEnd}
+              onDragOverDirectory={onDragOverDirectory}
+              onDropOnDirectory={onDropOnDirectory}
+              dragOverDirectoryPath={dragOverDirectoryPath}
               presencesByFile={presencesByFile}
               itemColors={itemColors}
             />
@@ -148,11 +228,13 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
     y: number;
     node: FileNode | null;
   } | null>(null);
-  const [showNewFile, setShowNewFile] = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [showRename, setShowRename] = useState<FileNode | null>(null);
   const [renameName, setRenameName] = useState("");
+  const [draggingFilePath, setDraggingFilePath] = useState<string | null>(null);
+  const [dragOverDirectoryPath, setDragOverDirectoryPath] = useState<string | null>(null);
 
   const openFile = useCallback(
     (path: string) => {
@@ -164,6 +246,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, node: FileNode) => {
       e.preventDefault();
+      e.stopPropagation();
       setContextMenu({ x: e.clientX, y: e.clientY, node });
     },
     []
@@ -171,23 +254,18 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
 
   const closeContextMenu = () => setContextMenu(null);
 
-  const handleNewFile = () => {
-    if (!newName.trim()) return;
-    const name = newName.trim().endsWith(".md")
-      ? newName.trim()
-      : `${newName.trim()}.md`;
-    const content = `# ${newName.trim().replace(/\.md$/, "")}\n\n`;
-    dispatch({ type: "file:create", path: name, content });
-    setShowNewFile(false);
-    setNewName("");
-    // Open the newly created file
-    dispatch({ type: "file:open", path: name, content });
+  const createNewFile = (parentDir: string | null) => {
+    const path = makeUniqueFilePath(tree, parentDir);
+    const content = fileContentFromPath(path);
+    dispatch({ type: "file:create", path, content });
+    dispatch({ type: "file:open", path, content });
   };
 
   const handleNewFolder = () => {
     if (!newName.trim()) return;
-    dispatch({ type: "file:mkdir", path: newName.trim() });
+    dispatch({ type: "file:mkdir", path: joinPath(newFolderParent, newName.trim()) });
     setShowNewFolder(false);
+    setNewFolderParent(null);
     setNewName("");
   };
 
@@ -206,6 +284,19 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
     dispatch({ type: "file:delete", path });
   };
 
+  const handleMoveFileToDirectory = (fromPath: string, toDirPath: string) => {
+    const fileName = fromPath.split("/").pop();
+    if (!fileName) return;
+
+    const targetPath = joinPath(toDirPath, fileName);
+    if (targetPath === fromPath) return;
+    if (pathExists(tree, targetPath)) {
+      alert(`A file named "${fileName}" already exists in that folder.`);
+      return;
+    }
+    dispatch({ type: "file:rename", from: fromPath, to: targetPath });
+  };
+
   return (
     <div
       className="flex flex-col h-full"
@@ -219,9 +310,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
         <div className="flex gap-1">
           <button
             onClick={() => {
-              setShowNewFile(true);
-              setShowNewFolder(false);
-              setNewName("");
+              createNewFile(null);
             }}
             className="text-text-muted hover:text-accent transition-colors p-1"
             title="New page"
@@ -231,7 +320,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
           <button
             onClick={() => {
               setShowNewFolder(true);
-              setShowNewFile(false);
+              setNewFolderParent(null);
               setNewName("");
             }}
             className="text-text-muted hover:text-accent transition-colors p-1"
@@ -242,13 +331,13 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
         </div>
       </div>
 
-      {/* New file/folder input */}
-      {(showNewFile || showNewFolder) && (
+      {/* New folder input */}
+      {showNewFolder && (
         <div className="p-2 border-b border-border">
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              showNewFile ? handleNewFile() : handleNewFolder();
+              handleNewFolder();
             }}
           >
             <input
@@ -257,10 +346,10 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onBlur={() => {
-                setShowNewFile(false);
                 setShowNewFolder(false);
+                setNewFolderParent(null);
               }}
-              placeholder={showNewFile ? "Page name..." : "Folder name..."}
+              placeholder="Folder name..."
               className="w-full text-sm py-1.5 px-2 bg-bg border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-accent text-text placeholder-text-muted"
             />
           </form>
@@ -290,7 +379,13 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
       )}
 
       {/* File tree */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div
+        className="flex-1 overflow-y-auto p-2"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setContextMenu({ x: e.clientX, y: e.clientY, node: null });
+        }}
+      >
         {tree.length === 0 && !treeLoading ? (
           <div className="text-center py-6 text-text-muted text-sm">
             <p>No pages yet</p>
@@ -305,6 +400,20 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               onSelect={openFile}
               selectedPath={openFilePath}
               onContextMenu={handleContextMenu}
+              onDragFileStart={(path) => setDraggingFilePath(path)}
+              onDragFileEnd={() => {
+                setDraggingFilePath(null);
+                setDragOverDirectoryPath(null);
+              }}
+              onDragOverDirectory={setDragOverDirectoryPath}
+              onDropOnDirectory={(toDirPath) => {
+                if (draggingFilePath) {
+                  handleMoveFileToDirectory(draggingFilePath, toDirPath);
+                }
+                setDraggingFilePath(null);
+                setDragOverDirectoryPath(null);
+              }}
+              dragOverDirectoryPath={dragOverDirectoryPath}
               presencesByFile={presencesByFile}
               itemColors={itemColors}
             />
@@ -313,16 +422,41 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
       </div>
 
       {/* Context menu */}
-      {contextMenu && contextMenu.node && (
+      {contextMenu && (
         <div
           className="fixed bg-surface border border-border rounded-xl shadow-lg py-1 z-50"
           style={{ left: contextMenu.x, top: contextMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
         >
-          {contextMenu.node!.type === "file" && (
+          {(contextMenu.node === null || contextMenu.node.type === "directory") && (
+            <button
+              onClick={() => {
+                createNewFile(contextMenu.node?.path ?? null);
+                closeContextMenu();
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
+            >
+              New page
+            </button>
+          )}
+          {(contextMenu.node === null || contextMenu.node.type === "directory") && (
+            <button
+              onClick={() => {
+                setShowNewFolder(true);
+                setNewFolderParent(contextMenu.node?.path ?? null);
+                setNewName("");
+                closeContextMenu();
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
+            >
+              New folder
+            </button>
+          )}
+          {contextMenu.node?.type === "file" && (
             <>
               <button
                 onClick={() => {
-                  openFile(contextMenu.node!.path);
+                  openFile(contextMenu.node.path);
                   // Small delay so file content loads before TTS triggers
                   setTimeout(() => {
                     dispatch({ type: "tts:play-from", fromLine: 1 });
@@ -336,7 +470,7 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               </button>
               <button
                 onClick={() => {
-                  dispatch({ type: "chat:prompt", message: `Summarize the ${contextMenu.node!.name} file` });
+                  dispatch({ type: "chat:prompt", message: `Summarize the ${contextMenu.node.name} file` });
                   closeContextMenu();
                 }}
                 className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors flex items-center gap-2"
@@ -346,71 +480,75 @@ export function FileTree({ presenceUsers = [] }: { presenceUsers?: PresenceUser[
               </button>
             </>
           )}
-          <div className="px-3 py-2 flex items-center gap-1.5 border-b border-border">
-            {ITEM_COLORS.map((c) => {
-              const isActive = itemColors[contextMenu.node!.path] === c;
-              return (
-                <button
-                  key={c}
-                  title={c}
-                  onClick={() => {
-                    dispatch({
-                      type: "settings:set-item-color",
-                      path: contextMenu.node!.path,
-                      color: isActive ? null : c,
-                    });
-                    closeContextMenu();
-                  }}
-                  className="item-color-swatch"
-                  style={{
-                    backgroundColor: ITEM_COLOR_HEX[c],
-                    boxShadow: isActive ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${ITEM_COLOR_HEX[c]}` : undefined,
-                  }}
-                />
-              );
-            })}
-            {itemColors[contextMenu.node!.path] && (
+          {contextMenu.node && (
+            <>
+              <div className="px-3 py-2 flex items-center gap-1.5 border-b border-border">
+                {ITEM_COLORS.map((c) => {
+                  const isActive = itemColors[contextMenu.node.path] === c;
+                  return (
+                    <button
+                      key={c}
+                      title={c}
+                      onClick={() => {
+                        dispatch({
+                          type: "settings:set-item-color",
+                          path: contextMenu.node!.path,
+                          color: isActive ? null : c,
+                        });
+                        closeContextMenu();
+                      }}
+                      className="item-color-swatch"
+                      style={{
+                        backgroundColor: ITEM_COLOR_HEX[c],
+                        boxShadow: isActive ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${ITEM_COLOR_HEX[c]}` : undefined,
+                      }}
+                    />
+                  );
+                })}
+                {itemColors[contextMenu.node.path] && (
+                  <button
+                    title="Clear color"
+                    onClick={() => {
+                      dispatch({
+                        type: "settings:set-item-color",
+                        path: contextMenu.node!.path,
+                        color: null,
+                      });
+                      closeContextMenu();
+                    }}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-text-muted hover:text-text transition-colors"
+                  >
+                    <X size={10} weight="bold" />
+                  </button>
+                )}
+              </div>
               <button
-                title="Clear color"
                 onClick={() => {
-                  dispatch({
-                    type: "settings:set-item-color",
-                    path: contextMenu.node!.path,
-                    color: null,
-                  });
+                  setShowRename(contextMenu.node);
+                  setRenameName(contextMenu.node!.name);
                   closeContextMenu();
                 }}
-                className="w-5 h-5 rounded-full flex items-center justify-center text-text-muted hover:text-text transition-colors"
+                className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
               >
-                <X size={10} weight="bold" />
+                Rename
               </button>
-            )}
-          </div>
-          <button
-            onClick={() => {
-              setShowRename(contextMenu.node);
-              setRenameName(contextMenu.node!.name);
-              closeContextMenu();
-            }}
-            className="w-full text-left px-4 py-2 text-sm text-text hover:bg-surface-alt transition-colors"
-          >
-            Rename
-          </button>
-          <button
-            onClick={() => {
-              if (
-                confirm(
-                  `Delete "${contextMenu.node!.name}"?`
-                )
-              ) {
-                handleDelete(contextMenu.node!.path);
-              }
-              closeContextMenu();
-            }}
-            className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-surface-alt transition-colors"
-          >
-            Delete
-          </button>
+              <button
+                onClick={() => {
+                  if (
+                    confirm(
+                      `Delete "${contextMenu.node!.name}"?`
+                    )
+                  ) {
+                    handleDelete(contextMenu.node.path);
+                  }
+                  closeContextMenu();
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-surface-alt transition-colors"
+              >
+                Delete
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
