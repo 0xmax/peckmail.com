@@ -134,6 +134,7 @@ make deploy      # fly deploy
 - **profiles** — extends auth.users with display_name, avatar_url
 - **projects** — id, name, created_at, deleted_at (soft delete)
 - **project_members** — project_id, user_id, role (`owner` | `editor` | `viewer`)
+- **project_emails** — project_id, email (unique), type (`peckmail` | `imap`)
 - **invitations** — project_id, email, invited_by, role, status (`pending` | `accepted`)
 - **share_links** — token, project_id, file_path, created_by
 - **api_keys** — id, user_id, key_hash (SHA-256), name, last_used_at
@@ -185,6 +186,8 @@ Auth via HTTP Basic Auth: password is a `pp_` API key, username is ignored. Repo
 
 ### Inbound Email
 - `GET /api/projects/:id/email` — get workspace email address (lazy backfill)
+- `GET /api/projects/:id/email-addresses` — list all workspace-attached email addresses
+- `POST /api/projects/:id/email-addresses` — attach an email address (`peckmail` or `imap`) to workspace
 - `POST /api/webhooks/resend` — Resend inbound email webhook (no auth, svix-verified)
 
 ### Other

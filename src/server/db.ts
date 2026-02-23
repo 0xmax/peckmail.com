@@ -3,6 +3,20 @@ import { generateEmailAddress } from "./emailAddress.js";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
+const PROJECT_EMAIL_TYPES = ["peckmail", "imap"] as const;
+const PROJECT_EMAIL_TYPE_SET = new Set<string>(PROJECT_EMAIL_TYPES);
+
+export type ProjectEmailType = (typeof PROJECT_EMAIL_TYPES)[number];
+
+function normalizeEmailAddress(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function isUniqueViolation(error: any): boolean {
+  return error?.code === "23505"
+    || error?.message?.toLowerCase?.().includes("unique")
+    || error?.message?.toLowerCase?.().includes("duplicate");
+}
 
 // Server-side client with service role key (bypasses RLS)
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
@@ -231,16 +245,50 @@ export async function getShareLink(token: string) {
 // --- Inbound Email Helpers ---
 
 export async function assignProjectEmail(projectId: string): Promise<string> {
+  const existing = await getProjectEmailByType(projectId, "peckmail");
+  if (existing) {
+    await syncLegacyProjectEmail(projectId, existing);
+    return existing;
+  }
+
+  const legacy = await getLegacyProjectEmail(projectId);
+  if (legacy) {
+    const normalized = normalizeEmailAddress(legacy);
+    const { error } = await supabaseAdmin
+      .from("project_emails")
+      .insert({ project_id: projectId, email: normalized, type: "peckmail" });
+    if (!error) {
+      await syncLegacyProjectEmail(projectId, normalized);
+      return normalized;
+    }
+    if (!isUniqueViolation(error)) throw error;
+
+    // If the legacy email is already linked to this project, we can reuse it.
+    const { data: existing, error: existingErr } = await supabaseAdmin
+      .from("project_emails")
+      .select("project_id")
+      .eq("email", normalized)
+      .maybeSingle();
+    if (existingErr) throw existingErr;
+    if (existing?.project_id === projectId) {
+      await syncLegacyProjectEmail(projectId, normalized);
+      return normalized;
+    }
+    // Else: collision with another project (case-insensitive). Fall through and generate a fresh one.
+  }
+
   const MAX_ATTEMPTS = 5;
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    const email = generateEmailAddress();
+    const email = normalizeEmailAddress(generateEmailAddress());
     const { error } = await supabaseAdmin
-      .from("projects")
-      .update({ email })
-      .eq("id", projectId);
-    if (!error) return email;
+      .from("project_emails")
+      .insert({ project_id: projectId, email, type: "peckmail" });
+    if (!error) {
+      await syncLegacyProjectEmail(projectId, email);
+      return email;
+    }
     // Unique constraint collision — retry
-    if (!error.message?.includes("unique") && !error.code?.includes("23505")) {
+    if (!isUniqueViolation(error)) {
       throw error;
     }
   }
@@ -250,14 +298,99 @@ export async function assignProjectEmail(projectId: string): Promise<string> {
 export async function getProjectByEmail(
   email: string
 ): Promise<{ id: string; name: string } | null> {
+  const normalized = normalizeEmailAddress(email);
+  const { data: linkedEmail, error: linkedErr } = await supabaseAdmin
+    .from("project_emails")
+    .select("project_id")
+    .eq("email", normalized)
+    .maybeSingle();
+  if (linkedErr) throw linkedErr;
+
+  if (linkedEmail?.project_id) {
+    const { data: project, error: projErr } = await supabaseAdmin
+      .from("projects")
+      .select("id, name")
+      .eq("id", linkedEmail.project_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (projErr) throw projErr;
+    if (project) return project;
+  }
+
+  // Legacy fallback (for rows not migrated yet).
   const { data, error } = await supabaseAdmin
     .from("projects")
     .select("id, name")
-    .eq("email", email)
+    .eq("email", normalized)
     .is("deleted_at", null)
-    .single();
-  if (error) return null;
+    .maybeSingle();
+  if (error) throw error;
   return data;
+}
+
+export async function listProjectEmails(projectId: string): Promise<Array<{
+  id: string;
+  email: string;
+  type: ProjectEmailType;
+  created_at: string;
+}>> {
+  const { data, error } = await supabaseAdmin
+    .from("project_emails")
+    .select("id, email, type, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Array<{
+    id: string;
+    email: string;
+    type: ProjectEmailType;
+    created_at: string;
+  }>;
+}
+
+export async function addProjectEmail(params: {
+  projectId: string;
+  email: string;
+  type: ProjectEmailType;
+}): Promise<{
+  id: string;
+  email: string;
+  type: ProjectEmailType;
+  created_at: string;
+}> {
+  const { projectId, email, type } = params;
+  if (!PROJECT_EMAIL_TYPE_SET.has(type)) {
+    throw new Error(`Invalid project email type: ${type}`);
+  }
+
+  const normalized = normalizeEmailAddress(email);
+  const { data, error } = await supabaseAdmin
+    .from("project_emails")
+    .insert({
+      project_id: projectId,
+      email: normalized,
+      type,
+    })
+    .select("id, email, type, created_at")
+    .single();
+
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new Error("Email address is already attached to a workspace");
+    }
+    throw error;
+  }
+
+  if (type === "peckmail") {
+    await syncLegacyProjectEmail(projectId, normalized);
+  }
+
+  return data as {
+    id: string;
+    email: string;
+    type: ProjectEmailType;
+    created_at: string;
+  };
 }
 
 export async function insertIncomingEmail(record: {
@@ -333,11 +466,45 @@ export async function updateProjectDescription(
 export async function getProjectEmail(
   projectId: string
 ): Promise<string | null> {
+  const linked = await getProjectEmailByType(projectId, "peckmail");
+  if (linked) {
+    await syncLegacyProjectEmail(projectId, linked);
+    return linked;
+  }
+
+  // Legacy fallback (for rows not migrated yet).
+  return getLegacyProjectEmail(projectId);
+}
+
+async function getLegacyProjectEmail(projectId: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin
     .from("projects")
     .select("email")
     .eq("id", projectId)
     .single();
   if (error) return null;
+  return data?.email ? normalizeEmailAddress(data.email) : null;
+}
+
+async function getProjectEmailByType(
+  projectId: string,
+  type: ProjectEmailType
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("project_emails")
+    .select("email")
+    .eq("project_id", projectId)
+    .eq("type", type)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
   return data?.email ?? null;
+}
+
+async function syncLegacyProjectEmail(projectId: string, email: string): Promise<void> {
+  await supabaseAdmin
+    .from("projects")
+    .update({ email: normalizeEmailAddress(email) })
+    .eq("id", projectId);
 }

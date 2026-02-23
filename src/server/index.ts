@@ -24,6 +24,8 @@ import {
   getShareLink,
   getProjectEmail,
   assignProjectEmail,
+  listProjectEmails,
+  addProjectEmail,
   getUserHandle,
   supabaseAdmin,
 } from "./db.js";
@@ -714,6 +716,51 @@ api.post("/projects/:id/emails/test", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// Project attached email addresses (multiple)
+api.get("/projects/:id/email-addresses", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  const emails = await listProjectEmails(projectId);
+  return c.json({ emails });
+});
+
+api.post("/projects/:id/email-addresses", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || membership.role !== "owner") {
+    return c.json({ error: "Only owners can attach project email addresses" }, 403);
+  }
+
+  const body = await c.req.json<{ email?: unknown; type?: unknown }>();
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const type =
+    typeof body.type === "string" ? body.type.trim().toLowerCase() : "imap";
+  if (!email || !email.includes("@")) {
+    return c.json({ error: "Valid email is required" }, 400);
+  }
+  if (!["peckmail", "imap"].includes(type)) {
+    return c.json({ error: "Invalid email type" }, 400);
+  }
+
+  try {
+    const record = await addProjectEmail({
+      projectId,
+      email,
+      type: type as "peckmail" | "imap",
+    });
+    return c.json({ email: record });
+  } catch (err: any) {
+    const message = err?.message || "Failed to attach email address";
+    if (message.includes("already attached")) {
+      return c.json({ error: message }, 409);
+    }
+    return c.json({ error: message }, 400);
+  }
 });
 
 // Project email address
