@@ -1,4 +1,5 @@
 import * as esbuild from "esbuild";
+import * as path from "path";
 import { mkdirSync, copyFileSync, readdirSync } from "fs";
 
 mkdirSync("dist/public/assets", { recursive: true });
@@ -21,6 +22,9 @@ const ctx = await esbuild.context({
   jsx: "automatic",
   jsxImportSource: "react",
   sourcemap: true,
+  alias: {
+    "@": path.resolve("src/client"),
+  },
   define: {
     "process.env.NODE_ENV": isWatch ? '"development"' : '"production"',
   },

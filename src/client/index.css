@@ -1,7 +1,83 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @source "../server/index.ts";
 
-@theme {
+:root {
+  --background: 34 45% 97%;
+  --foreground: 24 20% 20%;
+  --card: 0 0% 100%;
+  --card-foreground: 24 20% 20%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 24 20% 20%;
+  --primary: 25 40% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 28 33% 92%;
+  --secondary-foreground: 24 20% 20%;
+  --muted: 28 33% 92%;
+  --muted-foreground: 25 14% 54%;
+  --accent: 25 40% 59%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 59% 57%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 28 30% 87%;
+  --input: 28 30% 87%;
+  --ring: 25 40% 59%;
+  --radius: 0.5rem;
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 24 20% 20%;
+  --sidebar-primary: 25 40% 59%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 28 33% 92%;
+  --sidebar-accent-foreground: 24 20% 20%;
+  --sidebar-border: 28 30% 87%;
+  --sidebar-ring: 25 40% 59%;
+  --chart-1: 25 40% 59%;
+  --chart-2: 28 33% 72%;
+  --chart-3: 24 20% 40%;
+  --chart-4: 0 59% 57%;
+  --chart-5: 120 25% 63%;
+}
+
+@theme inline {
+  /* shadcn tokens */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent-shadcn: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-sidebar-background: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Existing custom tokens (preserved) */
   --color-bg: #faf6f1;
   --color-surface: #ffffff;
   --color-surface-alt: #f5ebe0;
@@ -11,7 +87,6 @@
   --color-text-body: #544840;
   --color-text-secondary: #6b5d50;
   --color-text-muted: #9a8b7a;
-  --color-border: #e8ddd0;
   --color-dark: #2a211a;
   --color-chat-user: #e5eed8;
   --color-chat-ai: #f5ebe0;

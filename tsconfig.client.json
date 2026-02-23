@@ -7,7 +7,9 @@
     "strict": true,
     "skipLibCheck": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/client/*"] }
   },
   "include": ["src/client/**/*"],
   "exclude": ["node_modules"]
