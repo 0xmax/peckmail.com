@@ -234,7 +234,7 @@ function EmailDetailPanel({
       </div>
 
       {/* Scrollable email content: header + body together */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
         {/* Email header */}
         <div className="px-6 py-5 border-b border-border">
           {/* Subject + delete */}
@@ -554,7 +554,7 @@ export function InboxView() {
           </div>
 
           {/* Email list */}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
             {filteredEmails.length === 0 ? (
               <div className="text-center py-16 px-4">
                 <Tray
