@@ -1,13 +1,10 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
-import { Monitor, Terminal, CurrencyDollar, Envelope, SignOut, ArrowLeft, XLogo } from "@phosphor-icons/react";
-import { UserAvatar } from "./UserAvatar.js";
+import { Monitor, Terminal, CurrencyDollar } from "@phosphor-icons/react";
 import { Button } from "./ui/button.js";
 import { Input } from "./ui/input.js";
 import { Card, CardContent } from "./ui/card.js";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu.js";
-import { ThemeToggle } from "./ThemeToggle.js";
 
 interface ApiKey {
   id: string;
@@ -27,8 +24,8 @@ interface CreditTransaction {
   created_at: string;
 }
 
-export function AccountSettings({ onBack }: { onBack: () => void }) {
-  const { user, credits, refreshCredits, signOut, handle } = useAuth();
+export function AccountSettings() {
+  const { user, credits, refreshCredits } = useAuth();
 
   // API Keys / Connect state
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -113,68 +110,7 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between relative">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft size={14} weight="bold" className="inline" /> Back
-        </Button>
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-none">
-          <img src="/assets/logo.png" alt="Peckmail" className="h-6 w-auto" />
-          <span className="text-lg font-medium text-foreground -tracking-[0.01em]">
-            Peckmail
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="flex items-center gap-2 rounded-full hover:opacity-80 transition-opacity"
-              >
-                <UserAvatar
-                  src={user?.user_metadata?.avatar_url || user?.user_metadata?.picture}
-                  name={user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-                  size={32}
-                />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="px-2 py-1.5">
-                <div className="text-sm font-medium text-foreground truncate">
-                  {user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email}
-                </div>
-                {handle && (
-                  <div className="text-xs text-muted-foreground truncate mt-0.5">@{handle}</div>
-                )}
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onBack()}>
-                <ArrowLeft size={16} className="text-muted-foreground" />
-                Back to app
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <a href="/contact">
-                  <Envelope size={16} className="text-muted-foreground" />
-                  Contact
-                </a>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <a href="https://x.com/peckmail" target="_blank" rel="noopener">
-                  <XLogo size={16} className="text-muted-foreground" />
-                  Follow on X
-                </a>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => signOut()}>
-                <SignOut size={16} className="text-muted-foreground" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-
-      <div className="max-w-2xl mx-auto p-8 space-y-8">
+    <div className="max-w-2xl mx-auto p-8 space-y-8">
         {/* Account section */}
         <section>
           <h2 className="text-base font-semibold text-foreground mb-4">Account</h2>
@@ -413,7 +349,6 @@ export function AccountSettings({ onBack }: { onBack: () => void }) {
           </Card>
         </section>
 
-      </div>
     </div>
   );
 }

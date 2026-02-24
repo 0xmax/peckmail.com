@@ -4,6 +4,8 @@ import { DashboardView } from "./DashboardView.js";
 import { InboxView } from "./InboxView.js";
 import { ChatView } from "./ChatView.js";
 import { DataView } from "./DataView.js";
+import { AccountSettings } from "./AccountSettings.js";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar.js";
 
 const PATH_TO_NAV: Record<string, NavItem> = {
   "/app": "dashboard",
@@ -11,6 +13,7 @@ const PATH_TO_NAV: Record<string, NavItem> = {
   "/app/inbox": "inbox",
   "/app/chat": "chat",
   "/app/data": "data",
+  "/settings": "settings",
 };
 
 const NAV_TO_PATH: Record<NavItem, string> = {
@@ -18,20 +21,17 @@ const NAV_TO_PATH: Record<NavItem, string> = {
   inbox: "/app/inbox",
   chat: "/app/chat",
   data: "/app/data",
+  settings: "/settings",
 };
 
 function navFromPath(): NavItem {
   return PATH_TO_NAV[window.location.pathname] || "dashboard";
 }
 
-export function AppShell({
-  initialView,
-  onNavigateSettings,
-}: {
-  initialView?: NavItem;
-  onNavigateSettings: () => void;
-}) {
-  const [activeNav, setActiveNav] = useState<NavItem>(initialView || navFromPath);
+export function AppShell({ initialView }: { initialView?: NavItem }) {
+  const [activeNav, setActiveNav] = useState<NavItem>(
+    initialView || navFromPath
+  );
 
   useEffect(() => {
     const handler = () => setActiveNav(navFromPath());
@@ -45,18 +45,17 @@ export function AppShell({
   };
 
   return (
-    <div className="h-screen flex bg-background">
-      <AppSidebar
-        activeNav={activeNav}
-        onNavigate={handleNavigate}
-        onOpenSettings={onNavigateSettings}
-      />
-      <main className="flex-1 flex flex-col min-w-0">
-        {activeNav === "dashboard" && <DashboardView />}
-        {activeNav === "inbox" && <InboxView />}
-        {activeNav === "chat" && <ChatView />}
-        {activeNav === "data" && <DataView />}
-      </main>
-    </div>
+    <SidebarProvider defaultOpen={false}>
+      <AppSidebar activeNav={activeNav} onNavigate={handleNavigate} />
+      <SidebarInset>
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          {activeNav === "dashboard" && <DashboardView />}
+          {activeNav === "inbox" && <InboxView />}
+          {activeNav === "chat" && <ChatView />}
+          {activeNav === "data" && <DataView />}
+          {activeNav === "settings" && <AccountSettings />}
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

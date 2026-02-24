@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./context/AuthContext.js";
 import { LoginPage } from "./components/LoginPage.js";
-import { AccountSettings } from "./components/AccountSettings.js";
 import { OAuthConsent } from "./components/OAuthConsent.js";
 import { InvitePage } from "./components/InvitePage.js";
 import { ContactPage } from "./components/ContactPage.js";
@@ -111,14 +110,6 @@ export function App() {
     return <LoginPage />;
   }
 
-  if (route.page === "settings") {
-    return (
-      <AccountSettings
-        onBack={() => navigate({ page: "app", view: "dashboard" })}
-      />
-    );
-  }
-
   // App view — need an active project
   if (!activeProjectId) {
     // Show onboarding — create first project
@@ -144,8 +135,7 @@ export function App() {
   return (
     <StoreProvider projectId={activeProjectId}>
       <AppShell
-        initialView={route.page === "app" ? route.view : "dashboard"}
-        onNavigateSettings={() => navigate({ page: "settings" })}
+        initialView={route.page === "settings" ? "settings" : route.page === "app" ? route.view : "dashboard"}
       />
     </StoreProvider>
   );

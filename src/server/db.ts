@@ -5,11 +5,65 @@ const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
 const PROJECT_EMAIL_TYPES = ["peckmail", "imap"] as const;
 const PROJECT_EMAIL_TYPE_SET = new Set<string>(PROJECT_EMAIL_TYPES);
+const INCOMING_EMAIL_STATUSES = ["received", "processing", "processed", "failed"] as const;
+const INCOMING_EMAIL_STATUS_SET = new Set<string>(INCOMING_EMAIL_STATUSES);
 
 export type ProjectEmailType = (typeof PROJECT_EMAIL_TYPES)[number];
+export type IncomingEmailStatus = (typeof INCOMING_EMAIL_STATUSES)[number];
+
+export interface IncomingEmailSearchResult {
+  id: string;
+  from_address: string;
+  to_address: string;
+  subject: string | null;
+  status: IncomingEmailStatus;
+  error: string | null;
+  created_at: string;
+  snippet: string;
+}
+
+export interface ProjectIncomingEmail {
+  id: string;
+  project_id: string;
+  resend_email_id: string;
+  from_address: string;
+  to_address: string;
+  subject: string | null;
+  status: IncomingEmailStatus;
+  error: string | null;
+  created_at: string;
+  body_text: string | null;
+  body_html: string | null;
+  raw_email: string | null;
+  headers: Record<string, any> | null;
+  attachments: any[] | null;
+  agent_session_id: string | null;
+}
 
 function normalizeEmailAddress(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function normalizeSearchTerm(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.toLowerCase() : null;
+}
+
+function toIncomingEmailStatus(value: string): IncomingEmailStatus {
+  if (INCOMING_EMAIL_STATUS_SET.has(value)) {
+    return value as IncomingEmailStatus;
+  }
+  return "received";
+}
+
+function extractSnippet(bodyText: string | null, bodyHtml: string | null): string {
+  const source = (bodyText?.trim().length ? bodyText : bodyHtml ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!source) return "";
+  return source.length > 220 ? `${source.slice(0, 220)}...` : source;
 }
 
 function isUniqueViolation(error: any): boolean {
@@ -451,6 +505,108 @@ export async function updateEmailStatus(
     .from("incoming_emails")
     .update(update)
     .eq("id", emailId);
+}
+
+export async function searchProjectIncomingEmails(params: {
+  projectId: string;
+  query?: string;
+  from?: string;
+  to?: string;
+  subject?: string;
+  status?: IncomingEmailStatus;
+  limit?: number;
+}): Promise<IncomingEmailSearchResult[]> {
+  const limit = Math.min(Math.max(Math.floor(params.limit ?? 10), 1), 50);
+  const fetchLimit = Math.min(Math.max(limit * 4, 40), 200);
+  const from = normalizeSearchTerm(params.from);
+  const to = normalizeSearchTerm(params.to);
+  const subject = normalizeSearchTerm(params.subject);
+  const query = normalizeSearchTerm(params.query);
+
+  let queryBuilder = supabaseAdmin
+    .from("incoming_emails")
+    .select(
+      "id, from_address, to_address, subject, status, error, created_at, body_text, body_html"
+    )
+    .eq("project_id", params.projectId)
+    .order("created_at", { ascending: false })
+    .limit(fetchLimit);
+
+  if (from) {
+    queryBuilder = queryBuilder.ilike("from_address", `%${from}%`);
+  }
+  if (to) {
+    queryBuilder = queryBuilder.ilike("to_address", `%${to}%`);
+  }
+  if (subject) {
+    queryBuilder = queryBuilder.ilike("subject", `%${subject}%`);
+  }
+  if (params.status) {
+    queryBuilder = queryBuilder.eq("status", params.status);
+  }
+
+  const { data, error } = await queryBuilder;
+  if (error) throw error;
+
+  type IncomingEmailSearchRow = {
+    id: string;
+    from_address: string;
+    to_address: string;
+    subject: string | null;
+    status: string;
+    error: string | null;
+    created_at: string;
+    body_text: string | null;
+    body_html: string | null;
+  };
+
+  const rows = (data ?? []) as IncomingEmailSearchRow[];
+  const filtered = rows.filter((row) => {
+    if (!query) return true;
+    const haystack = [
+      row.from_address,
+      row.to_address,
+      row.subject ?? "",
+      row.body_text ?? "",
+      row.body_html ?? "",
+    ]
+      .join("\n")
+      .toLowerCase();
+    return haystack.includes(query);
+  });
+
+  return filtered.slice(0, limit).map((row) => ({
+    id: row.id,
+    from_address: row.from_address,
+    to_address: row.to_address,
+    subject: row.subject,
+    status: toIncomingEmailStatus(row.status),
+    error: row.error,
+    created_at: row.created_at,
+    snippet: extractSnippet(row.body_text, row.body_html),
+  }));
+}
+
+export async function getProjectIncomingEmail(
+  projectId: string,
+  emailId: string
+): Promise<ProjectIncomingEmail | null> {
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .select(
+      "id, project_id, resend_email_id, from_address, to_address, subject, status, error, created_at, body_text, body_html, raw_email, headers, attachments, agent_session_id"
+    )
+    .eq("project_id", projectId)
+    .eq("id", emailId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as Omit<ProjectIncomingEmail, "status"> & { status: string };
+  return {
+    ...row,
+    status: toIncomingEmailStatus(row.status),
+  };
 }
 
 export async function getProjectMemberEmails(

@@ -6,7 +6,16 @@ import type { WebSocket } from "ws";
 import { PROJECTS_DIR, safePath } from "./files.js";
 import { broadcast, sendTo } from "./ws.js";
 import * as fileOps from "./fileOps.js";
-import { getProjectMemberEmails, getProjectMembers, getProjectEmail, getProjectMembership, createInvitation, supabaseAdmin } from "./db.js";
+import {
+  getProjectMemberEmails,
+  getProjectMembers,
+  getProjectEmail,
+  getProjectMembership,
+  createInvitation,
+  searchProjectIncomingEmails,
+  getProjectIncomingEmail,
+  supabaseAdmin,
+} from "./db.js";
 import { sendEmail, sendInvitationEmail } from "./email.js";
 import { placeHold, settleHold, releaseHold, calculateOpusCost } from "./credits.js";
 
@@ -15,6 +24,45 @@ const anthropic = new Anthropic();
 const MAX_MESSAGES_PER_SESSION = 200;
 const CHAT_DIR = ".peckmail";
 const LEGACY_CHAT_DIR = ".perchpad";
+const EMAIL_SEARCH_STATUSES = new Set([
+  "received",
+  "processing",
+  "processed",
+  "failed",
+]);
+const FILESYSTEM_TOOL_NAMES = new Set([
+  "read_file",
+  "edit_file",
+  "create_file",
+  "list_files",
+  "open_file",
+  "highlight",
+  "grep",
+  "find",
+  "head",
+  "tail",
+  "wc",
+  "sort_lines",
+  "sed",
+  "uniq",
+  "diff",
+  "append",
+  "slice",
+  "delete_lines",
+  "outline",
+  "move_file",
+  "copy_file",
+  "delete_file",
+]);
+const INTERACTIVE_CHAT_TOOL_NAMES = new Set([
+  "search_emails",
+  "get_email",
+  "send_email",
+  "get_workspace_info",
+  "invite_member",
+  "web_search",
+  "fetch_page",
+]);
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -154,6 +202,27 @@ async function saveSession(projectId: string, session: ChatSession) {
     sessionPath(dir, session.id),
     JSON.stringify(session, null, 2)
   );
+}
+
+function clampEmailContentChars(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 12000;
+  return Math.min(Math.max(Math.floor(value), 1000), 50000);
+}
+
+function truncateEmailField(
+  value: string | null | undefined,
+  maxChars: number
+): { value: string | null; truncated: boolean } {
+  if (!value) return { value: null, truncated: false };
+  if (value.length <= maxChars) return { value, truncated: false };
+  return {
+    value: `${value.slice(0, maxChars)}\n\n...[truncated]`,
+    truncated: true,
+  };
+}
+
+function getInteractiveChatTools(): Anthropic.Tool[] {
+  return tools.filter((tool) => INTERACTIVE_CHAT_TOOL_NAMES.has(tool.name));
 }
 
 // Tool definitions for the AI
@@ -595,6 +664,65 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "search_emails",
+    description:
+      "Search inbound workspace emails by sender, recipient, subject, or content. Returns matching emails with IDs and snippets.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "General search text matched across sender, recipient, subject, and body",
+        },
+        from: {
+          type: "string",
+          description: "Filter sender email/name fragment",
+        },
+        to: {
+          type: "string",
+          description: "Filter recipient email fragment",
+        },
+        subject: {
+          type: "string",
+          description: "Filter subject text",
+        },
+        status: {
+          type: "string",
+          enum: ["received", "processing", "processed", "failed"],
+          description: "Optional processing status filter",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of results to return (1-50, default 10)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_email",
+    description:
+      "Fetch a single inbound workspace email by ID, including body text/html and optional raw MIME content.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        email_id: {
+          type: "string",
+          description: "ID of the email to fetch (use search_emails first if needed)",
+        },
+        include_raw: {
+          type: "boolean",
+          description: "Whether to include raw MIME source. Defaults to false.",
+        },
+        max_chars: {
+          type: "number",
+          description: "Maximum characters for body/raw fields (1000-50000, default 12000)",
+        },
+      },
+      required: ["email_id"],
+    },
+  },
+  {
     name: "send_email",
     description:
       "Send an email to a workspace member. Can only send to email addresses of people who are members of this workspace.",
@@ -714,9 +842,14 @@ async function executeTool(
   toolName: string,
   input: any,
   ws: WebSocket,
-  userId?: string
+  userId?: string,
+  opts?: { allowFilesystemTools?: boolean }
 ): Promise<string> {
   const dir = join(PROJECTS_DIR, projectId);
+  const allowFilesystemTools = opts?.allowFilesystemTools !== false;
+  if (!allowFilesystemTools && FILESYSTEM_TOOL_NAMES.has(toolName)) {
+    return `Error: Tool "${toolName}" is disabled in this chat mode.`;
+  }
 
   switch (toolName) {
     case "read_file": {
@@ -1066,6 +1199,78 @@ async function executeTool(
       }
     }
 
+    case "search_emails": {
+      try {
+        if (!userId) return "Error: Email search requires a logged-in user.";
+        const membership = await getProjectMembership(projectId, userId);
+        if (!membership) return "Error: Access denied.";
+
+        const status = typeof input.status === "string" && EMAIL_SEARCH_STATUSES.has(input.status)
+          ? input.status as "received" | "processing" | "processed" | "failed"
+          : undefined;
+
+        const emails = await searchProjectIncomingEmails({
+          projectId,
+          query: typeof input.query === "string" ? input.query : undefined,
+          from: typeof input.from === "string" ? input.from : undefined,
+          to: typeof input.to === "string" ? input.to : undefined,
+          subject: typeof input.subject === "string" ? input.subject : undefined,
+          status,
+          limit: typeof input.limit === "number" ? input.limit : undefined,
+        });
+
+        if (emails.length === 0) return "No matching emails found.";
+        return JSON.stringify({ count: emails.length, emails }, null, 2);
+      } catch (err: any) {
+        return `Error: Could not search emails — ${err.message || "unknown error"}`;
+      }
+    }
+
+    case "get_email": {
+      try {
+        if (!userId) return "Error: Email fetching requires a logged-in user.";
+        const membership = await getProjectMembership(projectId, userId);
+        if (!membership) return "Error: Access denied.";
+
+        const emailId = typeof input.email_id === "string" ? input.email_id.trim() : "";
+        if (!emailId) return "Error: email_id is required.";
+
+        const record = await getProjectIncomingEmail(projectId, emailId);
+        if (!record) return `No email found with id "${emailId}".`;
+
+        const includeRaw = input.include_raw === true;
+        const maxChars = clampEmailContentChars(input.max_chars);
+        const bodyText = truncateEmailField(record.body_text, maxChars);
+        const bodyHtml = truncateEmailField(record.body_html, maxChars);
+        const rawEmail = includeRaw
+          ? truncateEmailField(record.raw_email, maxChars)
+          : { value: null, truncated: false };
+
+        return JSON.stringify({
+          id: record.id,
+          resend_email_id: record.resend_email_id,
+          from_address: record.from_address,
+          to_address: record.to_address,
+          subject: record.subject,
+          status: record.status,
+          error: record.error,
+          created_at: record.created_at,
+          attachments_count: Array.isArray(record.attachments) ? record.attachments.length : 0,
+          body_text: bodyText.value,
+          body_html: bodyHtml.value,
+          raw_email: rawEmail.value,
+          raw_email_included: includeRaw,
+          truncated: {
+            body_text: bodyText.truncated,
+            body_html: bodyHtml.truncated,
+            raw_email: rawEmail.truncated,
+          },
+        }, null, 2);
+      } catch (err: any) {
+        return `Error: Could not fetch email — ${err.message || "unknown error"}`;
+      }
+    }
+
     case "send_email": {
       try {
         const memberEmails = await getProjectMemberEmails(projectId);
@@ -1261,9 +1466,15 @@ export async function runAgentHeadless(
 
   const model = opts?.model ?? "claude-opus-4-6";
   const maxTokens = opts?.maxTokens ?? 16384;
-  const headlessTools = opts?.allowSendEmail
-    ? tools
-    : tools.filter((tool) => tool.name !== "send_email");
+  let headlessTools = tools;
+  if (!opts?.allowSendEmail) {
+    headlessTools = headlessTools.filter((tool) => tool.name !== "send_email");
+  }
+  if (!opts?.userId) {
+    headlessTools = headlessTools.filter(
+      (tool) => tool.name !== "search_emails" && tool.name !== "get_email"
+    );
+  }
 
   // Place credit hold if we have a userId
   let holdId: string | null = null;
@@ -1313,7 +1524,14 @@ export async function runAgentHeadless(
           fullContent.push(block);
         }
         if (block.type === "tool_use") {
-          const result = await executeTool(projectId, block.name, block.input, noopWs, opts?.userId);
+          const result = await executeTool(
+            projectId,
+            block.name,
+            block.input,
+            noopWs,
+            opts?.userId,
+            { allowFilesystemTools: true }
+          );
           toolResults.push({
             role: "user",
             content: [
@@ -1383,6 +1601,7 @@ export async function handleChatMessage(
     };
   }
 ) {
+  const interactiveTools = getInteractiveChatTools();
   let session = await getSession(projectId, msg.sessionId);
   if (!session) {
     session = await createSession(projectId);
@@ -1474,32 +1693,24 @@ export async function handleChatMessage(
       const systemBlocks: Anthropic.TextBlockParam[] = [
         {
           type: "text",
-          text: `You are a friendly writing assistant in Peckmail, a collaborative workspace for markdown and CSV files. Help users with their writing — editing, brainstorming, outlining, proofreading, and more. You can read and edit their files using the provided tools. You can also use the highlight tool to draw attention to specific lines in the editor. Be warm, helpful, and concise. When making edits, explain what you changed and why. Never use technical jargon — speak in plain, friendly language.
+          text: `You are a friendly email assistant in Peckmail, an AI inbox workspace for newsletters and inbound email.
 
-When you create or edit a file, use the open_file tool to open it in the user's editor so they can see the result. Always open files you are actively working on — the user should be able to watch your changes happen in real time.
+Your default job is to help users find, filter, summarize, and analyze inbound emails, and answer questions about senders, topics, and trends.
 
-Peckmail primarily works with two file formats:
-- **Markdown (.md)** — rich text documents, notes, outlines, and prose.
-- **CSV (.csv)** — structured tabular data such as lists, trackers, logs, and datasets.
-
-When working with CSV files, be especially careful to preserve the structure (consistent column counts, proper quoting of fields that contain commas or newlines). When users ask you to add, remove, or modify rows/columns, always read the file first to understand the existing structure before making edits.${userSection}`,
+Important constraints for this chat mode:
+- You do not have filesystem tools here. Do not claim to read or edit files in this mode.
+- For email discovery, use search_emails first and then get_email for full details.
+- Use send_email only when the user explicitly asks to send an email.
+- Keep responses concise and practical.${userSection}`,
           cache_control: { type: "ephemeral" },
         },
       ];
-
-      if (msg.context?.openFilePath && msg.context.fileContent !== null) {
-        let contextText = `\n\nThe user currently has "${msg.context.openFilePath}" open in their editor. Here is its content:\n\`\`\`\n${msg.context.fileContent}\n\`\`\``;
-        if (msg.context.cursorPosition) {
-          contextText += `\n\nTheir cursor is at line ${msg.context.cursorPosition.line}, column ${msg.context.cursorPosition.col}.`;
-        }
-        systemBlocks.push({ type: "text", text: contextText });
-      }
 
       const streamParams: any = {
         model: "claude-opus-4-6",
         max_tokens: 16384,
         system: systemBlocks,
-        tools,
+        tools: interactiveTools,
         messages,
       };
       if (msg.thinking) {
@@ -1561,7 +1772,8 @@ When working with CSV files, be especially careful to preserve the structure (co
             block.name,
             block.input,
             ws,
-            userId
+            userId,
+            { allowFilesystemTools: false }
           );
 
           toolResults.push({

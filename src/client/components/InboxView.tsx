@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { useIncomingEmails, useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
@@ -11,13 +11,15 @@ import {
   WarningCircle,
   CheckCircle,
   EnvelopeSimple,
+  MagnifyingGlass,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button.js";
+import { Input } from "@/components/ui/input.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
-import { Separator } from "@/components/ui/separator.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import type { IncomingEmail } from "../store/types.js";
+import { EmailIframe } from "./EmailIframe.js";
 
 interface EmailDetail extends IncomingEmail {
   body_text: string | null;
@@ -161,13 +163,10 @@ function EmailDetailPanel({
       </div>
 
       {/* Email body */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-auto min-h-0">
         <div className="px-6 py-4">
           {email.body_html ? (
-            <div
-              className="prose prose-sm dark:prose-invert max-w-none text-foreground"
-              dangerouslySetInnerHTML={{ __html: email.body_html }}
-            />
+            <EmailIframe html={email.body_html} />
           ) : email.body_text ? (
             <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
               {email.body_text}
@@ -178,7 +177,7 @@ function EmailDetailPanel({
             </p>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -195,6 +194,7 @@ export function InboxView() {
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [search, setSearch] = useState("");
 
   // Fetch project email address
   useEffect(() => {
@@ -250,10 +250,20 @@ export function InboxView() {
     }
   };
 
-  const filteredEmails =
-    filter === "unread"
+  const filteredEmails = useMemo(() => {
+    let list = filter === "unread"
       ? emails.filter((e) => e.status === "received")
       : emails;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (e) =>
+          e.subject?.toLowerCase().includes(q) ||
+          e.from_address?.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [emails, filter, search]);
 
   const unreadCount = emails.filter((e) => e.status === "received").length;
 
@@ -300,8 +310,17 @@ export function InboxView() {
             selectedId ? "hidden md:flex" : "flex"
           }`}
         >
-          {/* Filter tabs */}
-          <div className="px-3 py-2 border-b border-border">
+          {/* Search + filter */}
+          <div className="px-3 py-2 border-b border-border space-y-2">
+            <div className="relative">
+              <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search emails..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 text-xs pl-8"
+              />
+            </div>
             <Tabs
               value={filter}
               onValueChange={(v) => setFilter(v as "all" | "unread")}
@@ -348,7 +367,7 @@ export function InboxView() {
 
         {/* Detail panel */}
         <div
-          className={`flex-1 flex flex-col min-h-0 min-w-0 ${
+          className={`flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden ${
             selectedId ? "flex" : "hidden md:flex"
           }`}
         >
