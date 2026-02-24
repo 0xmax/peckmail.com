@@ -41,13 +41,14 @@ import {
   getActiveProjectId,
   setActiveProjectId,
   deleteProject,
+  listInsufficientCreditRetryEmails,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail, reprocessEmailTags } from "./inbound.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
-import { getAvailableBalance, getTransactions, releaseStaleHolds } from "./credits.js";
+import { getAvailableBalance, getProjectOwner, getTransactions, releaseStaleHolds } from "./credits.js";
 import { createHash, randomBytes } from "crypto";
 import { promises as fs } from "fs";
 import { join } from "path";
@@ -59,6 +60,22 @@ const ASSET_VERSION =
   process.env.RELEASE_VERSION ||
   Date.now().toString();
 const GOOGLE_TAG_ID = process.env.GOOGLE_TAG_ID || "G-DCWJV7TVLX";
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+const INBOUND_RETRY_MIN_AVAILABLE_CREDITS = 500;
+const INBOUND_CREDIT_RETRY_BATCH_SIZE = Math.min(
+  Math.max(envInt("INBOUND_CREDIT_RETRY_BATCH_SIZE", 20), 1),
+  100
+);
+const INBOUND_CREDIT_RETRY_INTERVAL_MS = Math.max(
+  envInt("INBOUND_CREDIT_RETRY_INTERVAL_MS", 120000),
+  30000
+);
+let inboundCreditRetryRunning = false;
 
 function setNoCacheHeaders(c: any) {
   c.header("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -1172,6 +1189,72 @@ setInterval(() => {
     if (count > 0) console.log(`[credits] Released ${count} stale hold(s)`);
   }).catch((err) => console.error("[credits] Stale hold cleanup error:", err));
 }, 5 * 60 * 1000);
+
+async function retryInsufficientCreditEmails() {
+  // TODO(max): Replace this polling loop with a DB-backed claim/lock and retry scheduling.
+  // - Current in-memory guard is per-process only; multi-instance deploys can double-retry.
+  // - Add a partial index for insufficient-credit failed emails and next_retry_at/backoff fields.
+  if (inboundCreditRetryRunning) return;
+  inboundCreditRetryRunning = true;
+  try {
+    const candidates = await listInsufficientCreditRetryEmails(INBOUND_CREDIT_RETRY_BATCH_SIZE);
+    if (!candidates.length) return;
+
+    const projectCanRetry = new Map<string, boolean>();
+    for (const email of candidates) {
+      let canRetry = projectCanRetry.get(email.project_id);
+      if (canRetry === undefined) {
+        const ownerId = await getProjectOwner(email.project_id);
+        if (!ownerId) {
+          canRetry = false;
+        } else {
+          const { available } = await getAvailableBalance(ownerId);
+          canRetry = available >= INBOUND_RETRY_MIN_AVAILABLE_CREDITS;
+        }
+        projectCanRetry.set(email.project_id, canRetry);
+      }
+      if (!canRetry) continue;
+
+      try {
+        await processInboundEmail({
+          id: email.id,
+          project_id: email.project_id,
+          project_name: email.project_name,
+          from_address: email.from_address,
+          from_domain: email.from_domain,
+          to_address: email.to_address,
+          subject: email.subject,
+          body_text: email.body_text,
+          body_html: email.body_html,
+          raw_email: email.raw_email,
+          summary: email.summary,
+          resend_email_id: email.resend_email_id,
+          date: email.created_at,
+          cc: [],
+          reply_to: "",
+          headers: email.headers,
+        });
+      } catch (err) {
+        console.error(`[inbound] Retry failed for email ${email.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("[inbound] Credit retry worker error:", err);
+  } finally {
+    inboundCreditRetryRunning = false;
+  }
+}
+
+setInterval(() => {
+  retryInsufficientCreditEmails().catch((err) =>
+    console.error("[inbound] Credit retry scheduling error:", err)
+  );
+}, INBOUND_CREDIT_RETRY_INTERVAL_MS);
+
+// Run one pass immediately on startup, then continue on the interval.
+retryInsufficientCreditEmails().catch((err) =>
+  console.error("[inbound] Initial credit retry run error:", err)
+);
 
 // Share page HTML
 function sharePageHtml(

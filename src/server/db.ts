@@ -86,6 +86,23 @@ export interface ProjectIncomingEmailSummary {
   tags: IncomingEmailTagSummary[];
 }
 
+export interface InboundEmailRetryCandidate {
+  id: string;
+  project_id: string;
+  project_name: string;
+  resend_email_id: string;
+  from_address: string;
+  from_domain: string | null;
+  to_address: string;
+  subject: string;
+  body_text: string;
+  body_html: string;
+  raw_email: string;
+  summary: string | null;
+  created_at: string;
+  headers: Record<string, any>;
+}
+
 function normalizeEmailAddress(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -830,6 +847,58 @@ export async function getProjectIncomingEmailWithTags(
   if (!email) return null;
   const tags = await getIncomingEmailTags(email.id);
   return { ...email, tags };
+}
+
+export async function listInsufficientCreditRetryEmails(
+  limit = 20
+): Promise<InboundEmailRetryCandidate[]> {
+  const clamped = Math.min(Math.max(Math.floor(limit), 1), 100);
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .select(
+      "id, project_id, resend_email_id, from_address, from_domain, to_address, subject, body_text, body_html, raw_email, summary, created_at, headers, projects(name)"
+    )
+    .eq("status", "failed")
+    .ilike("error", "Insufficient credits%")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(clamped);
+  if (error) throw error;
+
+  type Row = {
+    id: string;
+    project_id: string;
+    resend_email_id: string;
+    from_address: string;
+    from_domain: string | null;
+    to_address: string;
+    subject: string | null;
+    body_text: string | null;
+    body_html: string | null;
+    raw_email: string | null;
+    summary: string | null;
+    created_at: string;
+    headers: Record<string, any> | null;
+    projects?: { name?: string | null } | null;
+  };
+
+  const rows = (data ?? []) as Row[];
+  return rows.map((row) => ({
+    id: row.id,
+    project_id: row.project_id,
+    project_name: row.projects?.name?.trim() || "Workspace",
+    resend_email_id: row.resend_email_id,
+    from_address: row.from_address,
+    from_domain: row.from_domain,
+    to_address: row.to_address,
+    subject: row.subject ?? "(no subject)",
+    body_text: row.body_text ?? "",
+    body_html: row.body_html ?? "",
+    raw_email: row.raw_email ?? "",
+    summary: row.summary ?? null,
+    created_at: row.created_at,
+    headers: row.headers ?? {},
+  }));
 }
 
 export async function listProjectEmailDomains(
