@@ -56,6 +56,7 @@ const ASSET_VERSION =
   process.env.FLY_IMAGE_REF ||
   process.env.RELEASE_VERSION ||
   Date.now().toString();
+const GOOGLE_TAG_ID = process.env.GOOGLE_TAG_ID || "G-DCWJV7TVLX";
 
 function setNoCacheHeaders(c: any) {
   c.header("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -1132,6 +1133,7 @@ app.get("*", async (c) => {
   html = html
     .replaceAll("%%ASSET_VERSION%%", ASSET_VERSION)
     .replaceAll("%%BASE_URL%%", baseUrl)
+    .replaceAll("%%GOOGLE_TAG_ID%%", GOOGLE_TAG_ID)
     .replace("%%SUPABASE_URL%%", process.env.SUPABASE_URL || "")
     .replace("%%SUPABASE_ANON_KEY%%", process.env.SUPABASE_ANON_KEY || "");
   return c.html(html);
@@ -1218,14 +1220,17 @@ function landingPageHtml(): string {
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#faf6f1">
   <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-Z3V6P9TKHC"></script>
-  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-Z3V6P9TKHC')</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=${GOOGLE_TAG_ID}"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${GOOGLE_TAG_ID}')</script>
 </head>
 <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #fafafa; color: #111;">
 
   <nav style="display: flex; align-items: center; justify-content: space-between; max-width: 720px; margin: 0 auto; padding: 1.5rem 1.5rem;">
     <a href="/" style="display: flex; align-items: center; gap: 0.5rem; font-size: 1.15rem; font-weight: 700; color: #111; text-decoration: none;">
-      <img src="/assets/logo.png" alt="" style="height: 1.5rem;">Peckmail
+      <picture>
+        <source srcset="/assets/logo-dark.png" media="(prefers-color-scheme: dark)">
+        <img src="/assets/logo.png" alt="" style="height: 1.5rem;">
+      </picture>Peckmail
     </a>
     <div id="nav-actions" style="display: flex; align-items: center; gap: 1rem;">
       <a href="/login" style="font-size: 0.875rem; color: #666; text-decoration: none;">Sign in</a>

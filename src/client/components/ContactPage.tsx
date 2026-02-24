@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import { ThemeToggle } from "./ThemeToggle.js";
+import { Logo } from "./Logo.js";
 
 export function ContactPage() {
   const [name, setName] = useState("");
@@ -45,7 +46,7 @@ export function ContactPage() {
 
       <header className="bg-card border-b border-border px-6 py-4 flex items-center gap-3">
         <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <img src="/assets/logo.png" alt="Peckmail" className="h-7 w-auto" />
+          <Logo className="h-7 w-auto" />
           <span className="text-2xl font-semibold text-foreground -tracking-[0.01em]">Peckmail</span>
         </a>
       </header>

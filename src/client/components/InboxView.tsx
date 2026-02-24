@@ -9,14 +9,13 @@ import {
   ArrowLeft,
   CircleNotch,
   WarningCircle,
-  CheckCircle,
   EnvelopeSimple,
   MagnifyingGlass,
+  Sparkle,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import type { IncomingEmail } from "../store/types.js";
 import { EmailIframe } from "./EmailIframe.js";
@@ -26,20 +25,41 @@ interface EmailDetail extends IncomingEmail {
   body_html: string | null;
 }
 
+// --- Helpers ---
+
+function extractSenderName(address: string): string {
+  const local = address.split("@")[0] || address;
+  return local
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function formatDate(iso: string) {
   const d = new Date(iso);
   const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const emailDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.floor(
+    (today.getTime() - emailDay.getTime()) / 86400000
+  );
+
+  if (diffDays === 0) {
+    return d.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  if (diffDays === 1) return "Yesterday";
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  }
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -54,18 +74,7 @@ function formatFullDate(iso: string) {
   });
 }
 
-function StatusDot({ status, error }: { status: string; error: string | null }) {
-  if (status === "received") {
-    return <span className="block w-2.5 h-2.5 rounded-full bg-blue-500" />;
-  }
-  if (status === "processing") {
-    return <CircleNotch size={12} className="text-amber-500 animate-spin" />;
-  }
-  if (status === "failed") {
-    return <WarningCircle size={12} className="text-red-500" weight="fill" />;
-  }
-  return <CheckCircle size={12} className="text-green-500" weight="fill" />;
-}
+// --- Components ---
 
 function EmailListItem({
   email,
@@ -77,45 +86,95 @@ function EmailListItem({
   onSelect: () => void;
 }) {
   const isUnread = email.status === "received";
+  const senderName = extractSenderName(email.from_address);
+  const initial = senderName[0]?.toUpperCase() || "?";
 
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors border-b border-border hover:bg-accent/50 ${
-        isSelected ? "bg-accent" : ""
+      className={`w-full text-left px-3 py-3 flex items-start gap-3 transition-colors border-b border-border/50 ${
+        isSelected
+          ? "bg-accent"
+          : isUnread
+            ? "bg-primary/[0.04] hover:bg-primary/[0.07]"
+            : "hover:bg-accent/50"
       }`}
     >
-      <div className="mt-1.5 shrink-0">
-        <StatusDot status={email.status} error={email.error} />
+      {/* Avatar */}
+      <div
+        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs ${
+          isUnread
+            ? "bg-primary/15 text-primary font-bold"
+            : "bg-muted text-muted-foreground font-medium"
+        }`}
+      >
+        {initial}
       </div>
+
+      {/* Content */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
+        {/* Row 1: sender + status + date */}
+        <div className="flex items-center gap-2">
           <span
-            className={`text-sm truncate ${
-              isUnread ? "font-semibold text-foreground" : "text-foreground"
+            className={`text-[13px] truncate ${
+              isUnread
+                ? "font-semibold text-foreground"
+                : "font-normal text-foreground/80"
             }`}
           >
-            {email.from_address?.split("@")[0] || "Unknown"}
+            {senderName}
           </span>
-          <span className="text-xs text-muted-foreground shrink-0 ml-auto">
+          {email.status === "processing" && (
+            <CircleNotch
+              size={12}
+              className="text-amber-500 animate-spin shrink-0"
+            />
+          )}
+          {email.status === "failed" && (
+            <WarningCircle
+              size={12}
+              className="text-red-500 shrink-0"
+              weight="fill"
+            />
+          )}
+          <span
+            className={`text-xs shrink-0 ml-auto tabular-nums ${
+              isUnread
+                ? "font-semibold text-foreground"
+                : "font-normal text-muted-foreground"
+            }`}
+          >
             {formatDate(email.created_at)}
           </span>
         </div>
+
+        {/* Row 2: subject */}
         <p
-          className={`text-sm truncate ${
-            isUnread ? "font-medium text-foreground" : "text-muted-foreground"
+          className={`text-[13px] truncate mt-0.5 ${
+            isUnread
+              ? "font-semibold text-foreground"
+              : "font-normal text-muted-foreground"
           }`}
         >
           {email.subject || "(no subject)"}
         </p>
+
+        {/* Row 3: snippet from summary */}
+        {email.summary && (
+          <p className="text-xs text-muted-foreground/80 truncate mt-0.5 leading-relaxed font-normal">
+            {email.summary}
+          </p>
+        )}
+
+        {/* Tags */}
         {email.tags && email.tags.length > 0 && (
-          <div className="flex items-center gap-1 mt-1 flex-wrap">
+          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
             {email.tags.map((tag) => (
               <span
                 key={tag.id}
-                className="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full"
+                className="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full font-medium"
                 style={{
-                  backgroundColor: tag.color + "20",
+                  backgroundColor: tag.color + "18",
                   color: tag.color,
                 }}
               >
@@ -142,73 +201,114 @@ function EmailDetailPanel({
 }) {
   if (!email) return null;
 
+  const senderName = extractSenderName(email.from_address);
+  const initial = senderName[0]?.toUpperCase() || "?";
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Detail header - mobile back button */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border md:hidden">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBack}>
+    <div className="flex flex-col h-full min-h-0">
+      {/* Detail header - mobile back button (stays pinned) */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border md:hidden shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={onBack}
+        >
           <ArrowLeft size={18} />
         </Button>
         <span className="text-sm font-medium truncate">Back</span>
       </div>
 
-      {/* Email header */}
-      <div className="px-6 py-4 border-b border-border">
-        <h2 className="text-lg font-semibold text-foreground mb-2">
-          {email.subject || "(no subject)"}
-        </h2>
-        {email.summary && (
-          <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
-            {email.summary}
-          </p>
-        )}
-        {email.tags && email.tags.length > 0 && (
-          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-            {email.tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
-                style={{
-                  backgroundColor: tag.color + "20",
-                  color: tag.color,
-                }}
-              >
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: tag.color }}
-                />
-                {tag.name}
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center gap-2 text-sm">
-          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-            <span className="text-xs font-medium text-muted-foreground uppercase">
-              {(email.from_address || "?")[0]}
-            </span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-foreground truncate">
-              {email.from_address}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatFullDate(email.created_at)}
-            </p>
-          </div>
-          <div className="shrink-0">
-            <StatusDot status={email.status} error={email.error} />
-          </div>
-        </div>
-        {email.status === "failed" && email.error && (
-          <div className="mt-2 text-xs text-red-500 bg-red-500/10 rounded px-2 py-1">
-            {email.error}
-          </div>
-        )}
-      </div>
+      {/* Scrollable email content: header + body together */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Email header */}
+        <div className="px-6 py-5 border-b border-border">
+          {/* Subject */}
+          <h2 className="text-xl font-semibold text-foreground leading-tight tracking-[-0.01em]">
+            {email.subject || "(no subject)"}
+          </h2>
 
-      {/* Email body */}
-      <div className="flex-1 overflow-auto min-h-0">
+          {/* Tags */}
+          {email.tags && email.tags.length > 0 && (
+            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+              {email.tags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{
+                    backgroundColor: tag.color + "18",
+                    color: tag.color,
+                  }}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: tag.color }}
+                  />
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Sender row */}
+          <div className="flex items-center gap-3 mt-4">
+            <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+              <span className="text-sm font-bold text-primary uppercase">
+                {initial}
+              </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-semibold text-sm text-foreground">
+                  {senderName}
+                </span>
+                <span className="text-xs text-muted-foreground truncate">
+                  &lt;{email.from_address}&gt;
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {formatFullDate(email.created_at)}
+              </p>
+            </div>
+            {email.status === "processing" && (
+              <CircleNotch
+                size={16}
+                className="text-amber-500 animate-spin shrink-0"
+              />
+            )}
+            {email.status === "failed" && (
+              <WarningCircle
+                size={16}
+                className="text-red-500 shrink-0"
+                weight="fill"
+              />
+            )}
+          </div>
+
+          {/* AI Summary */}
+          {email.summary && (
+            <div className="mt-4 px-3 py-2.5 bg-primary/[0.04] rounded-lg border border-primary/10">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Sparkle size={12} weight="fill" className="text-primary" />
+                <span className="text-[11px] font-semibold text-primary uppercase tracking-wide">
+                  Summary
+                </span>
+              </div>
+              <p className="text-sm text-foreground/80 leading-relaxed">
+                {email.summary}
+              </p>
+            </div>
+          )}
+
+          {/* Error */}
+          {email.status === "failed" && email.error && (
+            <div className="mt-3 text-xs text-red-500 bg-red-500/10 rounded-lg px-3 py-2">
+              {email.error}
+            </div>
+          )}
+        </div>
+
+        {/* Email body */}
         <div className="px-6 py-4">
           {email.body_html ? (
             <EmailIframe html={email.body_html} />
@@ -226,6 +326,8 @@ function EmailDetailPanel({
     </div>
   );
 }
+
+// --- Main ---
 
 export function InboxView() {
   const { session } = useAuth();
@@ -296,9 +398,10 @@ export function InboxView() {
   };
 
   const filteredEmails = useMemo(() => {
-    let list = filter === "unread"
-      ? emails.filter((e) => e.status === "received")
-      : emails;
+    let list =
+      filter === "unread"
+        ? emails.filter((e) => e.status === "received")
+        : emails;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -316,7 +419,9 @@ export function InboxView() {
     <div className="flex-1 flex flex-col min-h-0">
       {/* Top bar with email address + actions */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-border shrink-0">
-        <h1 className="text-sm font-semibold text-foreground shrink-0">Inbox</h1>
+        <h1 className="text-sm font-semibold text-foreground shrink-0">
+          Inbox
+        </h1>
         <div className="flex-1 min-w-0">
           {emailLoading ? (
             <Skeleton className="h-5 w-48" />
@@ -358,7 +463,10 @@ export function InboxView() {
           {/* Search + filter */}
           <div className="px-3 py-2 border-b border-border space-y-2">
             <div className="relative">
-              <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <MagnifyingGlass
+                size={14}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
               <Input
                 placeholder="Search emails..."
                 value={search}
@@ -382,7 +490,7 @@ export function InboxView() {
           </div>
 
           {/* Email list */}
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {filteredEmails.length === 0 ? (
               <div className="text-center py-16 px-4">
                 <Tray
@@ -407,7 +515,7 @@ export function InboxView() {
                 />
               ))
             )}
-          </ScrollArea>
+          </div>
         </div>
 
         {/* Detail panel */}
@@ -418,7 +526,10 @@ export function InboxView() {
         >
           {detailLoading ? (
             <div className="flex-1 flex items-center justify-center">
-              <CircleNotch size={24} className="text-muted-foreground animate-spin" />
+              <CircleNotch
+                size={24}
+                className="text-muted-foreground animate-spin"
+              />
             </div>
           ) : selectedEmail ? (
             <EmailDetailPanel

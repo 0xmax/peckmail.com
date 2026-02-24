@@ -29,6 +29,7 @@ function parseRoute(): Route {
   if (inviteMatch) return { page: "invite", invitationId: inviteMatch[1] };
   if (path === "/app" || path === "/app/") return { page: "app", view: "dashboard" };
   if (path === "/app/inbox") return { page: "app", view: "inbox" };
+  if (path === "/app/senders") return { page: "app", view: "senders" };
   if (path === "/app/chat") return { page: "app", view: "chat" };
   if (path === "/app/data") return { page: "app", view: "data" };
   // Default — treat as dashboard if under /app, otherwise inbox
@@ -54,6 +55,7 @@ export function App() {
       case "app":
         url = r.view === "dashboard" ? "/app" :
               r.view === "inbox" ? "/app/inbox" :
+              r.view === "senders" ? "/app/senders" :
               r.view === "chat" ? "/app/chat" :
               "/app/data";
         break;

@@ -40,7 +40,7 @@ export async function sendInvitationEmail({
     <tr><td align="center">
       <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;border:1px solid #e5e5e5;overflow:hidden;">
         <tr><td style="padding:40px 40px 0;">
-          <p style="margin:0 0 4px;font-size:13px;color:#737373;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Invitation</p>
+          <p style="margin:0 0 4px;font-size:13px;color:#9333ea;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;">Invitation</p>
           <h1 style="margin:0;font-size:22px;color:#171717;font-weight:600;line-height:1.3;">You've been invited to collaborate</h1>
         </td></tr>
         <tr><td style="padding:20px 40px 28px;color:#525252;font-size:15px;line-height:1.6;">
@@ -48,7 +48,7 @@ export async function sendInvitationEmail({
           <strong style="color:#171717;">"${escapeHtml(projectName)}"</strong> on Peckmail.
         </td></tr>
         <tr><td style="padding:0 40px 32px;">
-          <a href="${inviteUrl}" style="display:inline-block;padding:12px 28px;background:#171717;color:#fafafa;text-decoration:none;border-radius:8px;font-weight:500;font-size:14px;">
+          <a href="${inviteUrl}" style="display:inline-block;padding:12px 28px;background:#9333ea;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:500;font-size:14px;">
             Accept Invitation
           </a>
         </td></tr>

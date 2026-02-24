@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   House,
   Tray,
+  UsersThree,
   ChatCircle,
   Database,
   Wrench,
@@ -24,6 +25,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/sidebar.js";
 import {
   DropdownMenu,
@@ -36,11 +38,12 @@ import {
 } from "@/components/ui/dropdown-menu.js";
 import { UserAvatar } from "./UserAvatar.js";
 import { CreateProjectModal } from "./CreateProjectModal.js";
+import { Logo } from "./Logo.js";
 import { useAuth } from "../context/AuthContext.js";
 import { useTheme } from "../context/ThemeContext.js";
 import { api } from "../lib/api.js";
 
-export type NavItem = "dashboard" | "inbox" | "chat" | "data" | "workspace" | "settings";
+export type NavItem = "dashboard" | "inbox" | "senders" | "chat" | "data" | "workspace" | "settings";
 
 interface Project {
   id: string;
@@ -50,6 +53,7 @@ interface Project {
 const NAV_ITEMS: { id: NavItem; label: string; icon: typeof House }[] = [
   { id: "dashboard", label: "Dashboard", icon: House },
   { id: "inbox", label: "Inbox", icon: Tray },
+  { id: "senders", label: "Senders", icon: UsersThree },
   { id: "chat", label: "Chat", icon: ChatCircle },
   { id: "data", label: "Data", icon: Database },
   { id: "workspace", label: "Workspace", icon: Wrench },
@@ -99,14 +103,13 @@ export function AppSidebar({
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" className="pointer-events-none">
                 <div className="flex aspect-square size-8 items-center justify-center">
-                  <img
-                    src="/assets/logo.png"
-                    alt="Peckmail"
-                    className="size-6"
-                  />
+                  <Logo className="size-6" />
                 </div>
                 <span className="font-semibold text-base">Peckmail</span>
               </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarTrigger className="w-full" />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
@@ -144,7 +147,9 @@ export function AppSidebar({
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                   >
-                    <UserAvatar src={avatarSrc} name={displayName} size={28} />
+                    <div className="flex aspect-square size-8 items-center justify-center shrink-0">
+                      <UserAvatar src={avatarSrc} name={displayName} size={24} />
+                    </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-medium">
                         {displayName}

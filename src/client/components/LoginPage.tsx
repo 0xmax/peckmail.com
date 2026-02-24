@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input.js";
 import { Button } from "@/components/ui/button.js";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { ThemeToggle } from "./ThemeToggle.js";
+import { Logo } from "./Logo.js";
 
 export function LoginPage({ banner }: { banner?: React.ReactNode }) {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
@@ -37,7 +38,7 @@ export function LoginPage({ banner }: { banner?: React.ReactNode }) {
 
       {/* Hero */}
       <div className="w-full max-w-md text-center mb-6">
-        <img src="/assets/logo.png" alt="Peckmail" className="h-14 w-auto mx-auto mb-3" />
+        <Logo className="h-14 w-auto mx-auto mb-3" />
         <h1 className="text-4xl font-semibold text-foreground mb-2 -tracking-[0.01em]">
           Peckmail
         </h1>

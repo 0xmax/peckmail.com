@@ -320,10 +320,10 @@ function ActivityGrid({ emails }: { emails: IncomingEmail[] }) {
     if (count < 0) return "transparent";
     if (count === 0) return "var(--color-muted)";
     const level = maxCount > 0 ? Math.min(count / maxCount, 1) : 0;
-    if (level <= 0.25) return "oklch(0.7 0.12 145)";
-    if (level <= 0.5) return "oklch(0.6 0.16 145)";
-    if (level <= 0.75) return "oklch(0.5 0.18 145)";
-    return "oklch(0.42 0.2 145)";
+    if (level <= 0.25) return "oklch(0.78 0.12 312)";
+    if (level <= 0.5) return "oklch(0.66 0.18 312)";
+    if (level <= 0.75) return "oklch(0.56 0.22 312)";
+    return "oklch(0.48 0.25 312)";
   }
 
   const dayLabels = ["", "Mon", "", "Wed", "", "Fri", ""];
@@ -395,7 +395,7 @@ function RecentEmails({ emails }: { emails: IncomingEmail[] }) {
               <div key={e.id} className="flex items-start gap-3">
                 <div className="mt-1.5 shrink-0">
                   {e.status === "received" ? (
-                    <span className="block w-2 h-2 rounded-full bg-blue-400" />
+                    <span className="block w-2 h-2 rounded-full bg-primary" />
                   ) : e.status === "processing" ? (
                     <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                   ) : e.status === "failed" ? (
