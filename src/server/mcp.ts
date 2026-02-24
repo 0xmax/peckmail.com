@@ -280,7 +280,35 @@ Peckmail is a web-based workspace where users organize their work into **project
           .eq("email", normalizedEmail)
           .eq("status", "pending")
           .maybeSingle();
-        if (existing) return { content: [{ type: "text", text: "Invitation already pending for this email" }], isError: true };
+
+        if (existing) {
+          const { data: project } = await supabaseAdmin
+            .from("projects")
+            .select("name")
+            .eq("id", projectId)
+            .single();
+          const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(userId);
+          const inviterName =
+            authUser?.user_metadata?.display_name ||
+            authUser?.user_metadata?.full_name ||
+            authUser?.email ||
+            "Someone";
+
+          try {
+            await sendInvitationEmail({
+              to: normalizedEmail,
+              invitationId: existing.id,
+              projectName: project?.name ?? "Untitled",
+              inviterName,
+            });
+            return { content: [{ type: "text", text: "Invitation already pending. Re-sent invitation email." }] };
+          } catch (sendErr: any) {
+            return {
+              content: [{ type: "text", text: `Failed to resend invitation email: ${sendErr?.message || "unknown error"}` }],
+              isError: true,
+            };
+          }
+        }
 
         const invitation = await createInvitation(projectId, normalizedEmail, userId, role ?? "editor");
 
@@ -297,13 +325,27 @@ Peckmail is a web-based workspace where users organize their work into **project
           authUser?.email ||
           "Someone";
 
-        // Fire-and-forget email
-        sendInvitationEmail({
-          to: normalizedEmail,
-          invitationId: invitation.id,
-          projectName: project?.name ?? "Untitled",
-          inviterName,
-        });
+        try {
+          await sendInvitationEmail({
+            to: normalizedEmail,
+            invitationId: invitation.id,
+            projectName: project?.name ?? "Untitled",
+            inviterName,
+          });
+        } catch (sendErr: any) {
+          console.error("[mcp] Failed to send invitation email:", sendErr);
+          const { error: rollbackError } = await supabaseAdmin
+            .from("invitations")
+            .delete()
+            .eq("id", invitation.id);
+          if (rollbackError) {
+            console.error("[mcp] Failed to rollback invitation after email error:", rollbackError);
+          }
+          return {
+            content: [{ type: "text", text: `Failed to send invitation email: ${sendErr?.message || "unknown error"}` }],
+            isError: true,
+          };
+        }
 
         return { content: [{ type: "text", text: `Invited ${normalizedEmail} to project. Invitation email sent.` }] };
       } catch (e: any) {

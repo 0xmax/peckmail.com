@@ -495,14 +495,11 @@ api.post("/projects/:id/invite", async (c) => {
   // Check for duplicate pending invitation
   const { data: existing } = await supabaseAdmin
     .from("invitations")
-    .select("id")
+    .select("id, project_id, email, role, status, invited_by, created_at")
     .eq("project_id", projectId)
     .eq("email", email)
     .eq("status", "pending")
     .maybeSingle();
-  if (existing) return c.json({ error: "Invitation already pending" }, 409);
-
-  const invitation = await createInvitation(projectId, email, user.id, role);
 
   // Look up project name + inviter display name for the email
   const { data: project } = await supabaseAdmin
@@ -519,13 +516,47 @@ api.post("/projects/:id/invite", async (c) => {
     authUser?.email ||
     "Someone";
 
-  // Fire-and-forget email
-  sendInvitationEmail({
-    to: email,
-    invitationId: invitation.id,
-    projectName: project?.name ?? "Untitled",
-    inviterName,
-  });
+  if (existing) {
+    try {
+      await sendInvitationEmail({
+        to: email,
+        invitationId: existing.id,
+        projectName: project?.name ?? "Untitled",
+        inviterName,
+      });
+      return c.json({ invitation: existing, resent: true });
+    } catch (err: any) {
+      console.error("[invite] Failed to resend existing invitation email:", err);
+      return c.json(
+        { error: `Failed to resend invitation email: ${err?.message || "unknown error"}` },
+        502
+      );
+    }
+  }
+
+  const invitation = await createInvitation(projectId, email, user.id, role);
+
+  try {
+    await sendInvitationEmail({
+      to: email,
+      invitationId: invitation.id,
+      projectName: project?.name ?? "Untitled",
+      inviterName,
+    });
+  } catch (err: any) {
+    console.error("[invite] Failed to send invitation email:", err);
+    const { error: rollbackError } = await supabaseAdmin
+      .from("invitations")
+      .delete()
+      .eq("id", invitation.id);
+    if (rollbackError) {
+      console.error("[invite] Failed to rollback invitation after email error:", rollbackError);
+    }
+    return c.json(
+      { error: `Failed to send invitation email: ${err?.message || "unknown error"}` },
+      502
+    );
+  }
 
   return c.json({ invitation });
 });

@@ -1342,7 +1342,31 @@ async function executeTool(
           .eq("email", email)
           .eq("status", "pending")
           .maybeSingle();
-        if (existing) return `An invitation is already pending for ${email}.`;
+
+        if (existing) {
+          const { data: project } = await supabaseAdmin
+            .from("projects")
+            .select("name")
+            .eq("id", projectId)
+            .single();
+          const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(userId);
+          const inviterName = authUser?.user_metadata?.display_name
+            || authUser?.user_metadata?.full_name
+            || authUser?.email
+            || "Someone";
+
+          try {
+            await sendInvitationEmail({
+              to: email,
+              invitationId: existing.id,
+              projectName: project?.name ?? "Untitled",
+              inviterName,
+            });
+            return `An invitation is already pending for ${email}. I re-sent the invitation email.`;
+          } catch (sendErr: any) {
+            return `Error: Could not resend pending invitation — ${sendErr?.message || "unknown error"}`;
+          }
+        }
 
         // Check if already a member
         const memberEmails = await getProjectMemberEmails(projectId);
@@ -1364,13 +1388,24 @@ async function executeTool(
           || authUser?.email
           || "Someone";
 
-        // Send invitation email
-        sendInvitationEmail({
-          to: email,
-          invitationId: invitation.id,
-          projectName: project?.name ?? "Untitled",
-          inviterName,
-        }).catch((err) => console.error("[chat] Failed to send invitation email:", err));
+        try {
+          await sendInvitationEmail({
+            to: email,
+            invitationId: invitation.id,
+            projectName: project?.name ?? "Untitled",
+            inviterName,
+          });
+        } catch (sendErr: any) {
+          console.error("[chat] Failed to send invitation email:", sendErr);
+          const { error: rollbackError } = await supabaseAdmin
+            .from("invitations")
+            .delete()
+            .eq("id", invitation.id);
+          if (rollbackError) {
+            console.error("[chat] Failed to rollback invitation after email error:", rollbackError);
+          }
+          return `Error: Could not send invitation email — ${sendErr?.message || "unknown error"}`;
+        }
 
         return `Invitation sent to ${email} as ${role}. They'll receive an email with a link to join.`;
       } catch (err: any) {

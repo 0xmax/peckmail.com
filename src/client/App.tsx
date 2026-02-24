@@ -7,6 +7,7 @@ import { ContactPage } from "./components/ContactPage.js";
 import { AppShell } from "./components/AppShell.js";
 import { CreateProjectModal } from "./components/CreateProjectModal.js";
 import { StoreProvider } from "./store/StoreContext.js";
+import { api } from "./lib/api.js";
 import { SpinnerGap } from "@phosphor-icons/react";
 import type { NavItem } from "./components/AppSidebar.js";
 
@@ -38,7 +39,8 @@ function parseRoute(): Route {
 export function App() {
   const { user, loading, activeProjectId, setActiveProject } = useAuth();
   const [route, setRoute] = useState<Route>(parseRoute);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [checkingPendingInvites, setCheckingPendingInvites] = useState(false);
+  const [allowCreateOnboarding, setAllowCreateOnboarding] = useState(false);
 
   const navigate = (r: Route) => {
     setRoute(r);
@@ -65,6 +67,47 @@ export function App() {
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
   }, []);
+
+  // If the user has no active project, prefer pending invitations over forcing project creation.
+  useEffect(() => {
+    if (!user || activeProjectId || route.page === "invite") {
+      setCheckingPendingInvites(false);
+      setAllowCreateOnboarding(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingPendingInvites(true);
+    setAllowCreateOnboarding(false);
+
+    api
+      .get<{ invitations: { id: string }[] }>("/api/invitations")
+      .then(({ invitations }) => {
+        if (cancelled) return;
+
+        if (Array.isArray(invitations) && invitations.length > 0) {
+          const invitationId = invitations[0].id;
+          setRoute({ page: "invite", invitationId });
+          window.history.replaceState(null, "", `/invite/${invitationId}`);
+          return;
+        }
+
+        setAllowCreateOnboarding(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAllowCreateOnboarding(true);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCheckingPendingInvites(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, activeProjectId, route.page]);
 
   if (loading) {
     return (
@@ -112,10 +155,17 @@ export function App() {
 
   // App view — need an active project
   if (!activeProjectId) {
-    // Show onboarding — create first project
-    if (!showOnboarding) {
-      setShowOnboarding(true);
+    if (checkingPendingInvites || !allowCreateOnboarding) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="flex flex-col items-center gap-3">
+            <SpinnerGap size={28} className="text-muted-foreground animate-spin" />
+            <div className="text-muted-foreground text-sm">Checking invitations...</div>
+          </div>
+        </div>
+      );
     }
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <CreateProjectModal
@@ -124,7 +174,6 @@ export function App() {
           }}
           onCreated={async (project) => {
             await setActiveProject(project.id);
-            setShowOnboarding(false);
             window.location.reload();
           }}
         />

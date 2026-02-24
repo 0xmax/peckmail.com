@@ -1148,7 +1148,20 @@ export async function getActiveProjectId(userId: string): Promise<string | null>
     .eq("id", userId)
     .single();
   if (error) return null;
-  return data?.active_project_id ?? null;
+
+  const projectId = data?.active_project_id ?? null;
+  if (!projectId) return null;
+
+  // Guard against stale active project pointers (e.g., membership removed).
+  const membership = await getProjectMembership(projectId, userId);
+  if (membership) return projectId;
+
+  await supabaseAdmin
+    .from("profiles")
+    .update({ active_project_id: null })
+    .eq("id", userId);
+
+  return null;
 }
 
 export async function setActiveProjectId(userId: string, projectId: string): Promise<void> {
