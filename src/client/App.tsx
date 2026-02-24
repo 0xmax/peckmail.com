@@ -5,7 +5,7 @@ import { OAuthConsent } from "./components/OAuthConsent.js";
 import { InvitePage } from "./components/InvitePage.js";
 import { ContactPage } from "./components/ContactPage.js";
 import { AppShell } from "./components/AppShell.js";
-import { CreateProjectModal } from "./components/CreateProjectModal.js";
+import { OnboardingWizard } from "./components/OnboardingWizard.js";
 import { StoreProvider } from "./store/StoreContext.js";
 import { api } from "./lib/api.js";
 import { SpinnerGap } from "@phosphor-icons/react";
@@ -169,17 +169,12 @@ export function App() {
     }
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <CreateProjectModal
-          onClose={() => {
-            // Can't close if no project exists — noop
-          }}
-          onCreated={async (project) => {
-            await setActiveProject(project.id);
-            window.location.reload();
-          }}
-        />
-      </div>
+      <OnboardingWizard
+        onComplete={async (project) => {
+          await setActiveProject(project.id);
+          window.location.reload();
+        }}
+      />
     );
   }
 

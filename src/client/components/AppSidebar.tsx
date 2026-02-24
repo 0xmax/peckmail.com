@@ -37,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { UserAvatar } from "./UserAvatar.js";
-import { CreateProjectModal } from "./CreateProjectModal.js";
 import { Logo } from "./Logo.js";
 import { useAuth } from "../context/AuthContext.js";
 import { useTheme } from "../context/ThemeContext.js";
@@ -62,14 +61,15 @@ const NAV_ITEMS: { id: NavItem; label: string; icon: typeof House }[] = [
 export function AppSidebar({
   activeNav,
   onNavigate,
+  onCreateWorkspace,
 }: {
   activeNav: NavItem;
   onNavigate: (item: NavItem) => void;
+  onCreateWorkspace?: () => void;
 }) {
   const { user, activeProjectId, setActiveProject, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     api
@@ -248,7 +248,7 @@ export function AppSidebar({
                         )}
                       </DropdownMenuItem>
                     ))}
-                    <DropdownMenuItem onClick={() => setShowCreate(true)}>
+                    <DropdownMenuItem onClick={() => onCreateWorkspace?.()}>
                       <Plus size={16} className="text-muted-foreground" />
                       New workspace
                     </DropdownMenuItem>
@@ -267,17 +267,6 @@ export function AppSidebar({
         </SidebarFooter>
       </Sidebar>
 
-      {showCreate && (
-        <CreateProjectModal
-          onClose={() => setShowCreate(false)}
-          onCreated={async (project) => {
-            setShowCreate(false);
-            setProjects((prev) => [...prev, project]);
-            await setActiveProject(project.id);
-            window.location.reload();
-          }}
-        />
-      )}
     </>
   );
 }

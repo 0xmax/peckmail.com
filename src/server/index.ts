@@ -36,9 +36,11 @@ import {
   listProjectEmailDomains,
   updateProjectEmailDomain,
   setIncomingEmailReadAt,
+  softDeleteIncomingEmail,
   getUserHandle,
   getActiveProjectId,
   setActiveProjectId,
+  deleteProject,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail, reprocessEmailTags } from "./inbound.js";
@@ -393,11 +395,11 @@ api.delete("/projects/:id", async (c) => {
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership || membership.role !== "owner") return c.json({ error: "Only owners can delete" }, 403);
 
-  // Delete related rows first, then the project
-  await supabaseAdmin.from("invitations").delete().eq("project_id", projectId);
-  await supabaseAdmin.from("project_members").delete().eq("project_id", projectId);
-  const { error } = await supabaseAdmin.from("projects").delete().eq("id", projectId);
-  if (error) return c.json({ error: error.message }, 500);
+  try {
+    await deleteProject(projectId);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
   return c.json({ ok: true });
 });
 
@@ -775,6 +777,23 @@ api.post("/projects/:id/emails/:emailId/read", async (c) => {
     return c.json({ ok: true, read_at: readAt });
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to update read state" }, 500);
+  }
+});
+
+// Soft-delete an email
+api.delete("/projects/:id/emails/:emailId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const emailId = c.req.param("emailId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const ok = await softDeleteIncomingEmail(projectId, emailId);
+    if (!ok) return c.json({ error: "Email not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to delete email" }, 500);
   }
 });
 

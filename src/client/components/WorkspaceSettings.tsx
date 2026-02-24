@@ -25,7 +25,9 @@ import {
   CircleNotch,
   Pencil,
   Trash,
+  Warning,
 } from "@phosphor-icons/react";
+import { TAG_COLORS } from "../lib/presets.js";
 
 // --- Types ---
 
@@ -48,18 +50,6 @@ const ROLE_OPTIONS = [
   { value: "viewer", label: "Read" },
   { value: "editor", label: "Read & Write" },
   { value: "owner", label: "Admin" },
-];
-
-const TAG_COLORS = [
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#06b6d4",
-  "#3b82f6",
-  "#8b5cf6",
-  "#ec4899",
-  "#94a3b8",
 ];
 
 // --- Members Section ---
@@ -643,6 +633,143 @@ function TagsSection({ projectId }: { projectId: string }) {
   );
 }
 
+// --- Danger Zone Section ---
+
+function DangerZoneSection({ projectId }: { projectId: string }) {
+  const { session, user } = useAuth();
+  const [confirmName, setConfirmName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [isOwner, setIsOwner] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    // Check if user is owner
+    api
+      .get<{ members: Member[] }>(`/api/projects/${projectId}/members`)
+      .then((d) => {
+        const me = d.members.find((m) => m.user_id === user?.id);
+        setIsOwner(me?.role === "owner");
+      })
+      .catch(() => {});
+    // Get project name for confirmation
+    api
+      .get<{ projects: { id: string; name: string }[] }>("/api/projects")
+      .then((d) => {
+        const p = d.projects.find((p) => p.id === projectId);
+        if (p) setProjectName(p.name);
+      })
+      .catch(() => {});
+  }, [projectId, session]);
+
+  if (!isOwner) return null;
+
+  const handleDelete = async () => {
+    if (confirmName !== projectName) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api.del(`/api/projects/${projectId}`);
+      window.location.reload();
+    } catch (err: any) {
+      setError(err.message || "Failed to delete workspace");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <section>
+      <h2 className="text-base font-semibold text-destructive mb-4">
+        Danger Zone
+      </h2>
+      <Card className="border-destructive/30">
+        <CardContent className="p-5">
+          {!showConfirm ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-foreground">
+                  Delete this workspace
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Permanently remove this workspace and all its data.
+                </div>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowConfirm(true)}
+              >
+                <Trash size={14} />
+                Delete
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10">
+                <Warning
+                  size={18}
+                  weight="duotone"
+                  className="text-destructive shrink-0 mt-0.5"
+                />
+                <div className="text-sm text-destructive">
+                  This action cannot be undone. All emails, tags, and member
+                  associations will become inaccessible.
+                </div>
+              </div>
+              <div>
+                <label className="text-sm text-foreground block mb-1.5">
+                  Type <span className="font-semibold">{projectName}</span> to
+                  confirm
+                </label>
+                <Input
+                  autoFocus
+                  value={confirmName}
+                  onChange={(e) => setConfirmName(e.target.value)}
+                  placeholder={projectName}
+                  className="h-9"
+                />
+              </div>
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+              <div className="flex items-center gap-2 justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowConfirm(false);
+                    setConfirmName("");
+                    setError("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={confirmName !== projectName || deleting}
+                  onClick={handleDelete}
+                >
+                  {deleting ? (
+                    <>
+                      <CircleNotch size={14} className="animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    "Delete workspace"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 // --- Main Component ---
 
 export function WorkspaceSettings() {
@@ -654,6 +781,7 @@ export function WorkspaceSettings() {
         <StatsSection />
         <MembersSection projectId={projectId} />
         <TagsSection projectId={projectId} />
+        <DangerZoneSection projectId={projectId} />
       </div>
     </div>
   );

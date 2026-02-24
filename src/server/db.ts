@@ -604,6 +604,22 @@ export async function setIncomingEmailReadAt(
   return Boolean(data?.id);
 }
 
+export async function softDeleteIncomingEmail(
+  projectId: string,
+  emailId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("project_id", projectId)
+    .eq("id", emailId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.id);
+}
+
 export async function searchProjectIncomingEmails(params: {
   projectId: string;
   query?: string;
@@ -698,6 +714,7 @@ export async function getProjectIncomingEmail(
     )
     .eq("project_id", projectId)
     .eq("id", emailId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
@@ -765,6 +782,7 @@ export async function listProjectIncomingEmailSummaries(
     .from("incoming_emails")
     .select("id, from_address, from_domain, subject, status, error, created_at, read_at, summary")
     .eq("project_id", projectId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(clamped);
   if (error) throw error;

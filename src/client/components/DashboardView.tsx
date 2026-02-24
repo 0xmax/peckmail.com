@@ -1,17 +1,21 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Tray,
   EnvelopeSimple,
-  ChartLine,
   CheckCircle,
-  Clock,
   TrendUp,
+  GlobeSimple,
+  ArrowRight,
+  Copy,
+  Check,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart.js";
 import {
@@ -20,11 +24,31 @@ import {
   CartesianGrid,
   XAxis,
   YAxis,
-  Area,
-  AreaChart,
+  PieChart,
+  Pie,
+  Cell,
+  Label,
 } from "recharts";
-import { useIncomingEmails } from "../store/StoreContext.js";
+import { useIncomingEmails, useProjectId } from "../store/StoreContext.js";
+import { useAuth } from "../context/AuthContext.js";
+import { Logo } from "./Logo.js";
 import type { IncomingEmail } from "../store/types.js";
+import type { NavItem } from "./AppSidebar.js";
+
+// --- Date range ---
+
+type DateRange = "7d" | "14d" | "30d" | "90d";
+
+const DATE_RANGES: { value: DateRange; label: string }[] = [
+  { value: "7d", label: "7 days" },
+  { value: "14d", label: "14 days" },
+  { value: "30d", label: "30 days" },
+  { value: "90d", label: "90 days" },
+];
+
+function daysFromRange(range: DateRange): number {
+  return parseInt(range);
+}
 
 // --- Helpers ---
 
@@ -56,40 +80,23 @@ function weekdayLabel(dateStr: string) {
   return d.toLocaleDateString(undefined, { weekday: "short" });
 }
 
-// --- Build chart data ---
+// --- Data hooks ---
 
-function useDailyVolume(emails: IncomingEmail[], days: number) {
+function useFilteredEmails(emails: IncomingEmail[], days: number) {
   return useMemo(() => {
-    const now = new Date();
-    const result: { date: string; label: string; count: number }[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      result.push({ date: key, label: dayLabel(key), count: 0 });
-    }
-    for (const e of emails) {
-      const key = dateKey(e.created_at);
-      const entry = result.find((r) => r.date === key);
-      if (entry) entry.count++;
-    }
-    return result;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    return emails.filter((e) => new Date(e.created_at) >= cutoff);
   }, [emails, days]);
 }
 
-function useTagBreakdown(emails: IncomingEmail[]) {
+function useTagPieData(emails: IncomingEmail[]) {
   return useMemo(() => {
     const tagCounts = new Map<
       string,
       { name: string; color: string; count: number }
     >();
-
-    // Only look at last 14 days
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 14);
-
     for (const e of emails) {
-      if (new Date(e.created_at) < cutoff) continue;
       if (!e.tags || e.tags.length === 0) {
         const existing = tagCounts.get("_untagged");
         if (existing) {
@@ -122,13 +129,127 @@ function useTagBreakdown(emails: IncomingEmail[]) {
   }, [emails]);
 }
 
+function useStackedBarData(
+  emails: IncomingEmail[],
+  days: number,
+  tagIds: { id: string; name: string; color: string }[]
+) {
+  return useMemo(() => {
+    const now = new Date();
+    const bucketByWeek = days > 30;
+    const buckets: {
+      key: string;
+      label: string;
+      [tagId: string]: number | string;
+    }[] = [];
+
+    if (bucketByWeek) {
+      const numWeeks = Math.ceil(days / 7);
+      for (let i = numWeeks - 1; i >= 0; i--) {
+        const end = new Date(now);
+        end.setDate(end.getDate() - i * 7);
+        const start = new Date(end);
+        start.setDate(start.getDate() - 6);
+        const key = start.toISOString().slice(0, 10);
+        const label =
+          start.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          }) +
+          "–" +
+          end.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          });
+        const bucket: any = { key, label };
+        for (const t of tagIds) bucket[t.id] = 0;
+        bucket["_untagged"] = 0;
+        buckets.push(bucket);
+      }
+      for (const e of emails) {
+        const eDate = new Date(e.created_at);
+        for (let i = buckets.length - 1; i >= 0; i--) {
+          const bStart = new Date(buckets[i].key + "T00:00:00");
+          const bEnd = new Date(bStart);
+          bEnd.setDate(bEnd.getDate() + 7);
+          if (eDate >= bStart && eDate < bEnd) {
+            if (!e.tags || e.tags.length === 0) {
+              (buckets[i] as any)["_untagged"]++;
+            } else {
+              for (const tag of e.tags) {
+                if (tag.id in buckets[i]) {
+                  (buckets[i] as any)[tag.id]++;
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+    } else {
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        const label =
+          days <= 14
+            ? d.toLocaleDateString(undefined, {
+                weekday: "short",
+                day: "numeric",
+              })
+            : dayLabel(key);
+        const bucket: any = { key, label };
+        for (const t of tagIds) bucket[t.id] = 0;
+        bucket["_untagged"] = 0;
+        buckets.push(bucket);
+      }
+      for (const e of emails) {
+        const key = dateKey(e.created_at);
+        const bucket = buckets.find((b) => b.key === key);
+        if (!bucket) continue;
+        if (!e.tags || e.tags.length === 0) {
+          (bucket as any)["_untagged"]++;
+        } else {
+          for (const tag of e.tags) {
+            if (tag.id in bucket) {
+              (bucket as any)[tag.id]++;
+            }
+          }
+        }
+      }
+    }
+    return buckets;
+  }, [emails, days, tagIds]);
+}
+
+function useTopDomains(emails: IncomingEmail[], limit: number) {
+  return useMemo(() => {
+    const map = new Map<string, { count: number; latestDate: string }>();
+    for (const e of emails) {
+      const domain =
+        e.from_domain || e.from_address.split("@")[1] || "unknown";
+      const existing = map.get(domain);
+      if (existing) {
+        existing.count++;
+        if (e.created_at > existing.latestDate)
+          existing.latestDate = e.created_at;
+      } else {
+        map.set(domain, { count: 1, latestDate: e.created_at });
+      }
+    }
+    return Array.from(map.entries())
+      .map(([domain, data]) => ({ domain, ...data }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+  }, [emails, limit]);
+}
+
 function useActivityGrid(emails: IncomingEmail[]) {
   return useMemo(() => {
-    // Build 7 weeks x 7 days grid
     const weeks = 7;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dayOfWeek = today.getDay(); // 0=Sun
+    const dayOfWeek = today.getDay();
     const startDate = new Date(today);
     startDate.setDate(startDate.getDate() - (weeks * 7 - 1) - dayOfWeek);
 
@@ -162,6 +283,32 @@ function useActivityGrid(emails: IncomingEmail[]) {
 }
 
 // --- Components ---
+
+function DateRangeSelector({
+  value,
+  onChange,
+}: {
+  value: DateRange;
+  onChange: (v: DateRange) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+      {DATE_RANGES.map((r) => (
+        <button
+          key={r.value}
+          onClick={() => onChange(r.value)}
+          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+            value === r.value
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function KpiCard({
   label,
@@ -198,81 +345,159 @@ function KpiCard({
   );
 }
 
-function VolumeChart({ emails }: { emails: IncomingEmail[] }) {
-  const data = useDailyVolume(emails, 14);
-  const config: ChartConfig = {
-    count: { label: "Emails", color: "var(--color-primary)" },
-  };
+function TagPieChart({ emails }: { emails: IncomingEmail[] }) {
+  const data = useTagPieData(emails);
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+  const config: ChartConfig = Object.fromEntries(
+    data.map((t) => [t.id, { label: t.name, color: t.color }])
+  );
+
+  if (data.length === 0) {
+    return (
+      <Card className="flex flex-col">
+        <CardContent className="p-4 flex-1 flex flex-col">
+          <h3 className="text-sm font-semibold text-foreground">
+            Distribution by tag
+          </h3>
+          <p className="text-xs text-muted-foreground mb-4">Email breakdown</p>
+          <div className="flex items-center justify-center flex-1 text-muted-foreground">
+            <p className="text-sm">No tagged emails yet</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-foreground">
-            Email volume
-          </h3>
-          <p className="text-xs text-muted-foreground">Last 14 days</p>
+    <Card className="flex flex-col">
+      <CardContent className="p-4 flex-1 flex flex-col">
+        <h3 className="text-sm font-semibold text-foreground">
+          Distribution by tag
+        </h3>
+        <p className="text-xs text-muted-foreground mb-2">Email breakdown</p>
+        <div className="flex-1 flex items-center gap-4">
+          <ChartContainer
+            config={config}
+            className="aspect-square w-[160px] shrink-0"
+          >
+            <PieChart>
+              <ChartTooltip
+                content={<ChartTooltipContent nameKey="name" hideLabel />}
+              />
+              <Pie
+                data={data}
+                dataKey="count"
+                nameKey="name"
+                innerRadius={48}
+                outerRadius={72}
+                strokeWidth={2}
+                stroke="var(--color-background)"
+              >
+                {data.map((entry) => (
+                  <Cell key={entry.id} fill={entry.color} />
+                ))}
+                <Label
+                  content={({ viewBox }) => {
+                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                      return (
+                        <text
+                          x={viewBox.cx}
+                          y={viewBox.cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                        >
+                          <tspan
+                            x={viewBox.cx}
+                            y={viewBox.cy}
+                            className="fill-foreground text-2xl font-bold"
+                          >
+                            {total}
+                          </tspan>
+                          <tspan
+                            x={viewBox.cx}
+                            y={(viewBox.cy || 0) + 18}
+                            className="fill-muted-foreground text-[10px]"
+                          >
+                            emails
+                          </tspan>
+                        </text>
+                      );
+                    }
+                  }}
+                />
+              </Pie>
+            </PieChart>
+          </ChartContainer>
+          <div className="flex-1 space-y-1.5 min-w-0">
+            {data.map((t) => (
+              <div key={t.id} className="flex items-center gap-2">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: t.color }}
+                />
+                <span className="text-xs text-foreground truncate flex-1">
+                  {t.name}
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground shrink-0">
+                  {t.count}
+                </span>
+                <span className="text-[10px] tabular-nums text-muted-foreground shrink-0 w-8 text-right">
+                  {total > 0 ? Math.round((t.count / total) * 100) : 0}%
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        <ChartContainer config={config} className="aspect-[2.5/1] w-full">
-          <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-            <defs>
-              <linearGradient id="fillVolume" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--color-count)" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="var(--color-count)" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tickMargin={4}
-              allowDecimals={false}
-            />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Area
-              dataKey="count"
-              type="monotone"
-              stroke="var(--color-count)"
-              fill="url(#fillVolume)"
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ChartContainer>
       </CardContent>
     </Card>
   );
 }
 
-function TagBarChart({ emails }: { emails: IncomingEmail[] }) {
-  const breakdown = useTagBreakdown(emails);
-  const config: ChartConfig = Object.fromEntries(
-    breakdown.map((t) => [t.id, { label: t.name, color: t.color }])
+function StackedTagBarChart({
+  emails,
+  days,
+}: {
+  emails: IncomingEmail[];
+  days: number;
+}) {
+  const pieData = useTagPieData(emails);
+  const tagIds = useMemo(
+    () =>
+      pieData
+        .filter((t) => t.id !== "_untagged")
+        .map((t) => ({ id: t.id, name: t.name, color: t.color })),
+    [pieData]
   );
-  const data = breakdown.map((t) => ({
-    name: t.name,
-    count: t.count,
-    fill: t.color,
-  }));
+  const hasUntagged = pieData.some((t) => t.id === "_untagged");
+  const data = useStackedBarData(emails, days, tagIds);
 
-  if (data.length === 0) {
+  const allKeys = useMemo(() => {
+    const keys = tagIds.map((t) => t.id);
+    if (hasUntagged) keys.push("_untagged");
+    return keys;
+  }, [tagIds, hasUntagged]);
+
+  const config: ChartConfig = useMemo(() => {
+    const cfg: ChartConfig = {};
+    for (const t of tagIds) {
+      cfg[t.id] = { label: t.name, color: t.color };
+    }
+    if (hasUntagged) {
+      cfg["_untagged"] = { label: "Untagged", color: "#94a3b8" };
+    }
+    return cfg;
+  }, [tagIds, hasUntagged]);
+
+  if (allKeys.length === 0) {
     return (
       <Card>
         <CardContent className="p-4">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-foreground">
-              Emails by tag
-            </h3>
-            <p className="text-xs text-muted-foreground">Last 14 days</p>
-          </div>
-          <div className="flex items-center justify-center py-12 text-muted-foreground">
-            <p className="text-sm">No tagged emails yet</p>
+          <h3 className="text-sm font-semibold text-foreground">
+            Emails over time
+          </h3>
+          <p className="text-xs text-muted-foreground mb-4">By tag</p>
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <p className="text-sm">No emails in this period</p>
           </div>
         </CardContent>
       </Card>
@@ -282,30 +507,41 @@ function TagBarChart({ emails }: { emails: IncomingEmail[] }) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-foreground">
-            Emails by tag
-          </h3>
-          <p className="text-xs text-muted-foreground">Last 14 days</p>
-        </div>
-        <ChartContainer config={config} className="aspect-[2/1] w-full">
+        <h3 className="text-sm font-semibold text-foreground">
+          Emails over time
+        </h3>
+        <p className="text-xs text-muted-foreground mb-4">Stacked by tag</p>
+        <ChartContainer config={config} className="aspect-[4/1] w-full">
           <BarChart
             data={data}
-            layout="vertical"
-            margin={{ top: 0, right: 4, bottom: 0, left: 0 }}
+            margin={{ top: 4, right: 4, bottom: 0, left: -20 }}
           >
-            <CartesianGrid horizontal={false} />
-            <YAxis
-              dataKey="name"
-              type="category"
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="label"
               tickLine={false}
               axisLine={false}
-              width={80}
-              tickMargin={4}
+              tickMargin={8}
+              interval="preserveStartEnd"
+              fontSize={11}
             />
-            <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} />
-            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-            <Bar dataKey="count" radius={[0, 4, 4, 0]} />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tickMargin={4}
+              allowDecimals={false}
+            />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <ChartLegend content={<ChartLegendContent />} />
+            {allKeys.map((key) => (
+              <Bar
+                key={key}
+                dataKey={key}
+                stackId="tags"
+                fill={`var(--color-${key})`}
+                radius={0}
+              />
+            ))}
           </BarChart>
         </ChartContainer>
       </CardContent>
@@ -336,7 +572,6 @@ function ActivityGrid({ emails }: { emails: IncomingEmail[] }) {
           <p className="text-xs text-muted-foreground">Last 7 weeks</p>
         </div>
         <div className="flex gap-1">
-          {/* Day-of-week labels */}
           <div className="flex flex-col gap-1 pr-1">
             {dayLabels.map((l, i) => (
               <div
@@ -347,7 +582,6 @@ function ActivityGrid({ emails }: { emails: IncomingEmail[] }) {
               </div>
             ))}
           </div>
-          {/* Grid */}
           {grid.map((week, wi) => (
             <div key={wi} className="flex flex-col gap-1">
               {week.map((day) => (
@@ -366,19 +600,97 @@ function ActivityGrid({ emails }: { emails: IncomingEmail[] }) {
   );
 }
 
-function RecentEmails({ emails }: { emails: IncomingEmail[] }) {
+function TopDomains({
+  emails,
+  onNavigate,
+}: {
+  emails: IncomingEmail[];
+  onNavigate: (item: NavItem, path?: string) => void;
+}) {
+  const domains = useTopDomains(emails, 8);
+
+  return (
+    <Card className="flex flex-col">
+      <CardContent className="p-4 flex-1 flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Top senders
+            </h3>
+            <p className="text-xs text-muted-foreground">By domain</p>
+          </div>
+          <button
+            onClick={() => onNavigate("senders")}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          >
+            View all
+            <ArrowRight size={12} />
+          </button>
+        </div>
+        {domains.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <p className="text-sm">No senders yet</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {domains.map((d, i) => (
+              <button
+                key={d.domain}
+                onClick={() => onNavigate("senders")}
+                className="flex items-center gap-3 w-full text-left rounded-md px-2 py-1.5 -mx-2 hover:bg-muted/50 transition-colors group"
+              >
+                <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                  <GlobeSimple
+                    size={14}
+                    className="text-primary"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                    {d.domain}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {formatRelative(d.latestDate)}
+                  </p>
+                </div>
+                <span className="text-xs tabular-nums font-medium text-muted-foreground shrink-0">
+                  {d.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecentEmails({
+  emails,
+  onNavigate,
+}: {
+  emails: IncomingEmail[];
+  onNavigate: (item: NavItem, path?: string) => void;
+}) {
   const recent = emails.slice(0, 5);
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="mb-4">
+    <Card className="flex flex-col">
+      <CardContent className="p-4 flex-1 flex flex-col">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-foreground">
             Recent emails
           </h3>
+          <button
+            onClick={() => onNavigate("inbox")}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          >
+            View all
+            <ArrowRight size={12} />
+          </button>
         </div>
         {recent.length === 0 ? (
-          <div className="text-center py-8">
+          <div className="text-center py-8 flex-1 flex flex-col items-center justify-center">
             <Tray
               size={32}
               weight="duotone"
@@ -390,9 +702,15 @@ function RecentEmails({ emails }: { emails: IncomingEmail[] }) {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-1">
             {recent.map((e) => (
-              <div key={e.id} className="flex items-start gap-3">
+              <button
+                key={e.id}
+                onClick={() =>
+                  onNavigate("inbox", `/app/inbox?email=${e.id}`)
+                }
+                className="flex items-start gap-3 w-full text-left rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors group"
+              >
                 <div className="mt-1.5 shrink-0">
                   {e.status === "received" ? (
                     <span className="block w-2 h-2 rounded-full bg-primary" />
@@ -405,7 +723,7 @@ function RecentEmails({ emails }: { emails: IncomingEmail[] }) {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground truncate">
+                  <p className="text-sm text-foreground truncate group-hover:text-primary transition-colors">
                     {e.subject || "(no subject)"}
                   </p>
                   <div className="flex items-center gap-2">
@@ -437,7 +755,7 @@ function RecentEmails({ emails }: { emails: IncomingEmail[] }) {
                     </div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -446,37 +764,151 @@ function RecentEmails({ emails }: { emails: IncomingEmail[] }) {
   );
 }
 
+// --- Empty state ---
+
+function EmptyDashboard({
+  onNavigate,
+}: {
+  onNavigate: (item: NavItem, path?: string) => void;
+}) {
+  const { session } = useAuth();
+  const projectId = useProjectId();
+  const [projectEmail, setProjectEmail] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+    fetch(`/api/projects/${projectId}/email`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => setProjectEmail(data.email ?? null))
+      .catch(() => setProjectEmail(null));
+  }, [projectId, session?.access_token]);
+
+  const copyEmail = () => {
+    if (!projectEmail) return;
+    navigator.clipboard.writeText(projectEmail);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex-1 flex items-center justify-center p-6">
+      <div className="max-w-lg w-full text-center">
+        <Logo className="h-16 w-auto mx-auto mb-6" />
+        <h1 className="text-2xl font-bold text-foreground">
+          Welcome to Peckmail
+        </h1>
+        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+          Subscribe to newsletters and forward emails to your unique address to
+          start tracking, tagging, and analyzing your inbox.
+        </p>
+
+        {projectEmail && (
+          <div className="mt-8">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+              Your workspace email
+            </p>
+            <button
+              onClick={copyEmail}
+              className="group inline-flex items-center gap-3 bg-muted/60 hover:bg-muted border border-border rounded-xl px-5 py-4 transition-colors w-full max-w-md mx-auto"
+            >
+              <EnvelopeSimple
+                size={20}
+                className="text-primary shrink-0"
+              />
+              <code className="text-base font-mono text-foreground truncate flex-1 text-left">
+                {projectEmail}
+              </code>
+              {copied ? (
+                <Check
+                  size={18}
+                  className="text-green-500 shrink-0"
+                />
+              ) : (
+                <Copy
+                  size={18}
+                  className="text-muted-foreground group-hover:text-foreground shrink-0 transition-colors"
+                />
+              )}
+            </button>
+            <p className="text-xs text-muted-foreground mt-2">
+              Click to copy
+            </p>
+          </div>
+        )}
+
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+          <div className="rounded-lg border border-border p-4">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+              <EnvelopeSimple size={16} className="text-primary" />
+            </div>
+            <p className="text-sm font-medium text-foreground">Subscribe</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Use your workspace email to sign up for newsletters
+            </p>
+          </div>
+          <div className="rounded-lg border border-border p-4">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+              <Tray size={16} className="text-primary" />
+            </div>
+            <p className="text-sm font-medium text-foreground">Receive</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Emails arrive in your inbox, auto-tagged by AI
+            </p>
+          </div>
+          <div className="rounded-lg border border-border p-4">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+              <TrendUp size={16} className="text-primary" />
+            </div>
+            <p className="text-sm font-medium text-foreground">Analyze</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Track trends, senders, and content across all your emails
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Main ---
 
-export function DashboardView() {
+export function DashboardView({
+  onNavigate,
+}: {
+  onNavigate: (item: NavItem, path?: string) => void;
+}) {
   const emails = useIncomingEmails();
-  const total = emails.length;
-  const unread = emails.filter((e) => e.status === "received").length;
-  const processed = emails.filter((e) => e.status === "processed").length;
+  const [range, setRange] = useState<DateRange>("14d");
+  const days = daysFromRange(range);
+  const filtered = useFilteredEmails(emails, days);
 
-  // Avg per day (last 14 days)
-  const avgPerDay = useMemo(() => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 14);
-    const recent = emails.filter(
-      (e) => new Date(e.created_at) >= cutoff
-    ).length;
-    return (recent / 14).toFixed(1);
-  }, [emails]);
+  const total = filtered.length;
+  const unread = filtered.filter((e) => e.status === "received").length;
+  const processed = filtered.filter((e) => e.status === "processed").length;
+  const avgPerDay = useMemo(
+    () => (days > 0 ? (total / days).toFixed(1) : "0"),
+    [total, days]
+  );
+
+  if (emails.length === 0) {
+    return <EmptyDashboard onNavigate={onNavigate} />;
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-
-        {/* Hero row: recent emails + volume chart */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-3">
-            <VolumeChart emails={emails} />
+        {/* Header with date selector */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Overview of your email activity
+            </p>
           </div>
-          <div className="lg:col-span-2">
-            <RecentEmails emails={emails} />
-          </div>
+          <DateRangeSelector value={range} onChange={setRange} />
         </div>
 
         {/* KPI row */}
@@ -485,29 +917,31 @@ export function DashboardView() {
             label="Total emails"
             value={total}
             icon={EnvelopeSimple}
+            subtitle={`Last ${days} days`}
           />
-          <KpiCard
-            label="Unread"
-            value={unread}
-            icon={Tray}
-          />
-          <KpiCard
-            label="Processed"
-            value={processed}
-            icon={CheckCircle}
-          />
+          <KpiCard label="Unread" value={unread} icon={Tray} />
+          <KpiCard label="Processed" value={processed} icon={CheckCircle} />
           <KpiCard
             label="Avg / day"
             value={avgPerDay}
             icon={TrendUp}
-            subtitle="Last 14 days"
+            subtitle={`Last ${days} days`}
           />
         </div>
 
-        {/* Bottom row */}
+        {/* Stacked bar chart (full width) */}
+        <StackedTagBarChart emails={filtered} days={days} />
+
+        {/* Pie chart + Recent emails */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <TagBarChart emails={emails} />
+          <TagPieChart emails={filtered} />
+          <RecentEmails emails={emails} onNavigate={onNavigate} />
+        </div>
+
+        {/* Activity grid + Top domains */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ActivityGrid emails={emails} />
+          <TopDomains emails={filtered} onNavigate={onNavigate} />
         </div>
       </div>
     </div>

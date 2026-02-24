@@ -12,6 +12,7 @@ import {
   EnvelopeSimple,
   MagnifyingGlass,
   Sparkle,
+  Trash,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
@@ -195,9 +196,13 @@ function EmailListItem({
 function EmailDetailPanel({
   email,
   onBack,
+  onDelete,
+  deleting,
 }: {
   email: EmailDetail | null;
   onBack: () => void;
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   if (!email) return null;
 
@@ -216,17 +221,38 @@ function EmailDetailPanel({
         >
           <ArrowLeft size={18} />
         </Button>
-        <span className="text-sm font-medium truncate">Back</span>
+        <span className="text-sm font-medium truncate flex-1">Back</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={onDelete}
+          disabled={deleting}
+        >
+          {deleting ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} />}
+        </Button>
       </div>
 
       {/* Scrollable email content: header + body together */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {/* Email header */}
         <div className="px-6 py-5 border-b border-border">
-          {/* Subject */}
-          <h2 className="text-xl font-semibold text-foreground leading-tight tracking-[-0.01em]">
-            {email.subject || "(no subject)"}
-          </h2>
+          {/* Subject + delete */}
+          <div className="flex items-start gap-3">
+            <h2 className="text-xl font-semibold text-foreground leading-tight tracking-[-0.01em] flex-1">
+              {email.subject || "(no subject)"}
+            </h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0 hidden md:inline-flex"
+              onClick={onDelete}
+              disabled={deleting}
+              title="Delete email"
+            >
+              {deleting ? <CircleNotch size={16} className="animate-spin" /> : <Trash size={16} />}
+            </Button>
+          </div>
 
           {/* Tags */}
           {email.tags && email.tags.length > 0 && (
@@ -337,7 +363,10 @@ export function InboxView() {
   const [emailLoading, setEmailLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("email");
+  });
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
@@ -374,9 +403,44 @@ export function InboxView() {
     [projectId]
   );
 
+  // Load email from URL param on mount
+  useEffect(() => {
+    if (selectedId && !selectedEmail && !detailLoading) {
+      loadEmailDetail(selectedId);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateEmailParam = (id: string | null) => {
+    const url = new URL(window.location.href);
+    if (id) {
+      url.searchParams.set("email", id);
+    } else {
+      url.searchParams.delete("email");
+    }
+    window.history.replaceState(null, "", url.pathname + url.search);
+  };
+
   const handleSelect = (id: string) => {
     setSelectedId(id);
+    updateEmailParam(id);
     loadEmailDetail(id);
+  };
+
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!selectedId) return;
+    setDeleting(true);
+    try {
+      await api.del(`/api/projects/${projectId}/emails/${selectedId}`);
+      setSelectedId(null);
+      setSelectedEmail(null);
+      updateEmailParam(null);
+    } catch {
+      // silently fail
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const copyEmail = () => {
@@ -537,7 +601,10 @@ export function InboxView() {
               onBack={() => {
                 setSelectedId(null);
                 setSelectedEmail(null);
+                updateEmailParam(null);
               }}
+              onDelete={handleDelete}
+              deleting={deleting}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
