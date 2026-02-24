@@ -4,6 +4,7 @@ import {
   Tray,
   ChatCircle,
   Database,
+  UsersThree,
   CaretUpDown,
   Check,
   Plus,
@@ -39,7 +40,7 @@ import { useAuth } from "../context/AuthContext.js";
 import { useTheme } from "../context/ThemeContext.js";
 import { api } from "../lib/api.js";
 
-export type NavItem = "dashboard" | "inbox" | "chat" | "data" | "settings";
+export type NavItem = "dashboard" | "inbox" | "chat" | "data" | "workspace" | "settings";
 
 interface Project {
   id: string;
@@ -51,6 +52,7 @@ const NAV_ITEMS: { id: NavItem; label: string; icon: typeof House }[] = [
   { id: "inbox", label: "Inbox", icon: Tray },
   { id: "chat", label: "Chat", icon: ChatCircle },
   { id: "data", label: "Data", icon: Database },
+  { id: "workspace", label: "Workspace", icon: UsersThree },
 ];
 
 export function AppSidebar({

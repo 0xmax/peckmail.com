@@ -146,6 +146,20 @@ export class WorkspaceStore {
         });
         break;
 
+      case "email:classified":
+        this.setState({
+          incomingEmails: this.state.incomingEmails.map((e) =>
+            e.id === msg.emailId
+              ? {
+                  ...e,
+                  tags: Array.isArray(msg.tags) ? msg.tags : e.tags,
+                  summary: typeof msg.summary === "string" ? msg.summary : e.summary,
+                }
+              : e
+          ),
+        });
+        break;
+
       case "pong":
         break;
     }

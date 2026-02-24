@@ -137,6 +137,11 @@ function EmailDetailPanel({
         <h2 className="text-lg font-semibold text-foreground mb-2">
           {email.subject || "(no subject)"}
         </h2>
+        {email.summary && (
+          <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
+            {email.summary}
+          </p>
+        )}
         <div className="flex items-center gap-2 text-sm">
           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
             <span className="text-xs font-medium text-muted-foreground uppercase">

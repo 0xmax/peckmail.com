@@ -26,6 +26,15 @@ import {
   assignProjectEmail,
   listProjectEmails,
   addProjectEmail,
+  listProjectIncomingEmailSummaries,
+  getProjectIncomingEmailWithTags,
+  listProjectEmailTags,
+  createProjectEmailTag,
+  updateProjectEmailTag,
+  softDeleteProjectEmailTag,
+  listProjectEmailDomains,
+  updateProjectEmailDomain,
+  setIncomingEmailReadAt,
   getUserHandle,
   getActiveProjectId,
   setActiveProjectId,
@@ -693,14 +702,12 @@ api.get("/projects/:id/emails", async (c) => {
   const projectId = c.req.param("id");
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership) return c.json({ error: "Access denied" }, 403);
-  const { data, error } = await supabaseAdmin
-    .from("incoming_emails")
-    .select("id, from_address, subject, status, error, created_at")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false })
-    .limit(20);
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ emails: data });
+  try {
+    const emails = await listProjectIncomingEmailSummaries(projectId, 50);
+    return c.json({ emails });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load emails" }, 500);
+  }
 });
 
 // Get a single email with body
@@ -710,14 +717,32 @@ api.get("/projects/:id/emails/:emailId", async (c) => {
   const emailId = c.req.param("emailId");
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership) return c.json({ error: "Access denied" }, 403);
-  const { data, error } = await supabaseAdmin
-    .from("incoming_emails")
-    .select("id, from_address, subject, status, error, created_at, body_text, body_html")
-    .eq("project_id", projectId)
-    .eq("id", emailId)
-    .single();
-  if (error) return c.json({ error: error.message }, 404);
-  return c.json({ email: data });
+  try {
+    const email = await getProjectIncomingEmailWithTags(projectId, emailId);
+    if (!email) return c.json({ error: "Email not found" }, 404);
+    return c.json({ email });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load email" }, 500);
+  }
+});
+
+// Mark email read/unread
+api.post("/projects/:id/emails/:emailId/read", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const emailId = c.req.param("emailId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  const { read } = await c.req.json<{ read?: boolean }>().catch(() => ({ read: true }));
+  try {
+    const readAt = read === false ? null : new Date().toISOString();
+    const ok = await setIncomingEmailReadAt(projectId, emailId, readAt);
+    if (!ok) return c.json({ error: "Email not found" }, 404);
+    return c.json({ ok: true, read_at: readAt });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to update read state" }, 500);
+  }
 });
 
 // Send test email (simulates inbound flow)
@@ -754,6 +779,148 @@ api.post("/projects/:id/emails/test", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// Email tags
+api.get("/projects/:id/tags", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const tags = await listProjectEmailTags(projectId);
+    return c.json({ tags });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load tags" }, 500);
+  }
+});
+
+api.post("/projects/:id/tags", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can create tags" }, 403);
+  }
+
+  const body = await c.req.json<{
+    name?: unknown;
+    color?: unknown;
+    enabled?: unknown;
+    condition?: unknown;
+  }>();
+  const name = typeof body.name === "string" ? body.name : "";
+  const color = typeof body.color === "string" ? body.color : "#94a3b8";
+  const condition = typeof body.condition === "string" ? body.condition : "";
+  const enabled = body.enabled !== undefined ? Boolean(body.enabled) : true;
+  if (!name.trim()) return c.json({ error: "name is required" }, 400);
+  if (!condition.trim()) return c.json({ error: "condition is required" }, 400);
+
+  try {
+    const tag = await createProjectEmailTag({
+      projectId,
+      name,
+      color,
+      enabled,
+      condition,
+    });
+    return c.json({ tag });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to create tag" }, 400);
+  }
+});
+
+api.patch("/projects/:id/tags/:tagId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const tagId = c.req.param("tagId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can update tags" }, 403);
+  }
+
+  const body = await c.req.json<{
+    name?: unknown;
+    color?: unknown;
+    enabled?: unknown;
+    condition?: unknown;
+  }>();
+
+  try {
+    const tag = await updateProjectEmailTag({
+      projectId,
+      tagId,
+      name: typeof body.name === "string" ? body.name : undefined,
+      color: typeof body.color === "string" ? body.color : undefined,
+      enabled: body.enabled !== undefined ? Boolean(body.enabled) : undefined,
+      condition: typeof body.condition === "string" ? body.condition : undefined,
+    });
+    if (!tag) return c.json({ error: "Tag not found" }, 404);
+    return c.json({ tag });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to update tag" }, 400);
+  }
+});
+
+api.delete("/projects/:id/tags/:tagId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const tagId = c.req.param("tagId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can delete tags" }, 403);
+  }
+
+  try {
+    const ok = await softDeleteProjectEmailTag(projectId, tagId);
+    if (!ok) return c.json({ error: "Tag not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to delete tag" }, 500);
+  }
+});
+
+// Email sender domains
+api.get("/projects/:id/domains", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const domains = await listProjectEmailDomains(projectId);
+    return c.json({ domains });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load domains" }, 500);
+  }
+});
+
+api.patch("/projects/:id/domains/:domainId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const domainId = c.req.param("domainId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can update domains" }, 403);
+  }
+
+  const body = await c.req.json<{ enabled?: unknown }>();
+  if (body.enabled === undefined) {
+    return c.json({ error: "enabled is required" }, 400);
+  }
+
+  try {
+    const domain = await updateProjectEmailDomain({
+      projectId,
+      domainId,
+      enabled: Boolean(body.enabled),
+    });
+    if (!domain) return c.json({ error: "Domain not found" }, 404);
+    return c.json({ domain });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to update domain" }, 500);
+  }
 });
 
 // Project attached email addresses (multiple)

@@ -5,6 +5,7 @@ import { InboxView } from "./InboxView.js";
 import { ChatView } from "./ChatView.js";
 import { DataView } from "./DataView.js";
 import { AccountSettings } from "./AccountSettings.js";
+import { WorkspaceSettings } from "./WorkspaceSettings.js";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar.js";
 
 const PATH_TO_NAV: Record<string, NavItem> = {
@@ -13,6 +14,7 @@ const PATH_TO_NAV: Record<string, NavItem> = {
   "/app/inbox": "inbox",
   "/app/chat": "chat",
   "/app/data": "data",
+  "/app/workspace": "workspace",
   "/settings": "settings",
 };
 
@@ -21,6 +23,7 @@ const NAV_TO_PATH: Record<NavItem, string> = {
   inbox: "/app/inbox",
   chat: "/app/chat",
   data: "/app/data",
+  workspace: "/app/workspace",
   settings: "/settings",
 };
 
@@ -53,6 +56,7 @@ export function AppShell({ initialView }: { initialView?: NavItem }) {
           {activeNav === "inbox" && <InboxView />}
           {activeNav === "chat" && <ChatView />}
           {activeNav === "data" && <DataView />}
+          {activeNav === "workspace" && <WorkspaceSettings />}
           {activeNav === "settings" && <AccountSettings />}
         </div>
       </SidebarInset>

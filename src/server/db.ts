@@ -7,6 +7,7 @@ const PROJECT_EMAIL_TYPES = ["peckmail", "imap"] as const;
 const PROJECT_EMAIL_TYPE_SET = new Set<string>(PROJECT_EMAIL_TYPES);
 const INCOMING_EMAIL_STATUSES = ["received", "processing", "processed", "failed"] as const;
 const INCOMING_EMAIL_STATUS_SET = new Set<string>(INCOMING_EMAIL_STATUSES);
+const EMAIL_TAG_COLOR_REGEX = /^#[0-9a-f]{6}$/i;
 
 export type ProjectEmailType = (typeof PROJECT_EMAIL_TYPES)[number];
 export type IncomingEmailStatus = (typeof INCOMING_EMAIL_STATUSES)[number];
@@ -14,6 +15,7 @@ export type IncomingEmailStatus = (typeof INCOMING_EMAIL_STATUSES)[number];
 export interface IncomingEmailSearchResult {
   id: string;
   from_address: string;
+  from_domain: string | null;
   to_address: string;
   subject: string | null;
   status: IncomingEmailStatus;
@@ -27,11 +29,14 @@ export interface ProjectIncomingEmail {
   project_id: string;
   resend_email_id: string;
   from_address: string;
+  from_domain: string | null;
   to_address: string;
   subject: string | null;
   status: IncomingEmailStatus;
   error: string | null;
   created_at: string;
+  read_at: string | null;
+  summary: string | null;
   body_text: string | null;
   body_html: string | null;
   raw_email: string | null;
@@ -40,8 +45,69 @@ export interface ProjectIncomingEmail {
   agent_session_id: string | null;
 }
 
+export interface ProjectEmailTag {
+  id: string;
+  project_id: string;
+  name: string;
+  color: string;
+  enabled: boolean;
+  condition: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface ProjectEmailDomain {
+  id: string;
+  project_id: string;
+  domain: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string;
+}
+
+export interface IncomingEmailTagSummary {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface ProjectIncomingEmailSummary {
+  id: string;
+  from_address: string;
+  from_domain: string | null;
+  subject: string | null;
+  status: IncomingEmailStatus;
+  error: string | null;
+  created_at: string;
+  read_at: string | null;
+  summary: string | null;
+  tags: IncomingEmailTagSummary[];
+}
+
 function normalizeEmailAddress(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function normalizeEmailDomain(domain: string): string {
+  return domain.trim().toLowerCase();
+}
+
+function normalizeEmailTagName(name: string): string {
+  return name.trim();
+}
+
+function normalizeEmailTagCondition(condition: string): string {
+  return condition.trim();
+}
+
+function normalizeEmailTagColor(color: string): string {
+  const normalized = color.trim().toLowerCase();
+  if (!EMAIL_TAG_COLOR_REGEX.test(normalized)) {
+    throw new Error("Tag color must be a hex code like #c4956a");
+  }
+  return normalized;
 }
 
 function normalizeSearchTerm(value: unknown): string | null {
@@ -260,10 +326,22 @@ export async function getProjectMembers(projectId: string) {
         .in("id", userIds)
     : { data: [] };
 
+  // Fetch emails from auth
+  const emailMap = new Map<string, string>();
+  await Promise.all(
+    userIds.map(async (uid) => {
+      try {
+        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(uid);
+        if (user?.email) emailMap.set(uid, user.email);
+      } catch {}
+    })
+  );
+
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
   return (members ?? []).map((m) => ({
     user_id: m.user_id,
     role: m.role,
+    email: emailMap.get(m.user_id) ?? null,
     profiles: profileMap.get(m.user_id) ?? null,
   }));
 }
@@ -451,6 +529,7 @@ export async function insertIncomingEmail(record: {
   project_id: string;
   resend_email_id: string;
   from_address: string;
+  from_domain?: string;
   to_address: string;
   subject?: string;
   body_text?: string;
@@ -478,12 +557,14 @@ export async function updateIncomingEmailContent(
     body_text?: string;
     body_html?: string;
     raw_email?: string;
+    summary?: string | null;
   }
 ): Promise<void> {
   const update: Record<string, any> = {};
   if (updates.body_text !== undefined) update.body_text = updates.body_text;
   if (updates.body_html !== undefined) update.body_html = updates.body_html;
   if (updates.raw_email !== undefined) update.raw_email = updates.raw_email;
+  if (updates.summary !== undefined) update.summary = updates.summary;
   if (!Object.keys(update).length) return;
 
   await supabaseAdmin
@@ -507,6 +588,22 @@ export async function updateEmailStatus(
     .eq("id", emailId);
 }
 
+export async function setIncomingEmailReadAt(
+  projectId: string,
+  emailId: string,
+  readAt: string | null
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .update({ read_at: readAt })
+    .eq("project_id", projectId)
+    .eq("id", emailId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.id);
+}
+
 export async function searchProjectIncomingEmails(params: {
   projectId: string;
   query?: string;
@@ -526,7 +623,7 @@ export async function searchProjectIncomingEmails(params: {
   let queryBuilder = supabaseAdmin
     .from("incoming_emails")
     .select(
-      "id, from_address, to_address, subject, status, error, created_at, body_text, body_html"
+      "id, from_address, from_domain, to_address, subject, status, error, created_at, body_text, body_html"
     )
     .eq("project_id", params.projectId)
     .order("created_at", { ascending: false })
@@ -551,6 +648,7 @@ export async function searchProjectIncomingEmails(params: {
   type IncomingEmailSearchRow = {
     id: string;
     from_address: string;
+    from_domain: string | null;
     to_address: string;
     subject: string | null;
     status: string;
@@ -565,6 +663,7 @@ export async function searchProjectIncomingEmails(params: {
     if (!query) return true;
     const haystack = [
       row.from_address,
+      row.from_domain ?? "",
       row.to_address,
       row.subject ?? "",
       row.body_text ?? "",
@@ -578,6 +677,7 @@ export async function searchProjectIncomingEmails(params: {
   return filtered.slice(0, limit).map((row) => ({
     id: row.id,
     from_address: row.from_address,
+    from_domain: row.from_domain,
     to_address: row.to_address,
     subject: row.subject,
     status: toIncomingEmailStatus(row.status),
@@ -594,7 +694,7 @@ export async function getProjectIncomingEmail(
   const { data, error } = await supabaseAdmin
     .from("incoming_emails")
     .select(
-      "id, project_id, resend_email_id, from_address, to_address, subject, status, error, created_at, body_text, body_html, raw_email, headers, attachments, agent_session_id"
+      "id, project_id, resend_email_id, from_address, from_domain, to_address, subject, status, error, created_at, read_at, summary, body_text, body_html, raw_email, headers, attachments, agent_session_id"
     )
     .eq("project_id", projectId)
     .eq("id", emailId)
@@ -607,6 +707,359 @@ export async function getProjectIncomingEmail(
     ...row,
     status: toIncomingEmailStatus(row.status),
   };
+}
+
+async function listIncomingEmailTagMap(
+  emailIds: string[]
+): Promise<Map<string, IncomingEmailTagSummary[]>> {
+  const map = new Map<string, IncomingEmailTagSummary[]>();
+  if (!emailIds.length) return map;
+
+  const { data: assignmentRows, error: assignmentErr } = await supabaseAdmin
+    .from("incoming_email_tags")
+    .select("email_id, tag_id")
+    .in("email_id", emailIds)
+    .is("deleted_at", null);
+  if (assignmentErr) throw assignmentErr;
+
+  type AssignmentRow = { email_id: string; tag_id: string };
+  const assignments = (assignmentRows ?? []) as AssignmentRow[];
+  const tagIds = [...new Set(assignments.map((a) => a.tag_id))];
+  if (!tagIds.length) return map;
+
+  const { data: tagRows, error: tagErr } = await supabaseAdmin
+    .from("email_tags")
+    .select("id, name, color")
+    .in("id", tagIds)
+    .is("deleted_at", null);
+  if (tagErr) throw tagErr;
+
+  type TagRow = { id: string; name: string; color: string };
+  const tagMap = new Map(
+    ((tagRows ?? []) as TagRow[]).map((row) => [
+      row.id,
+      { id: row.id, name: row.name, color: row.color } satisfies IncomingEmailTagSummary,
+    ])
+  );
+
+  for (const assignment of assignments) {
+    const tag = tagMap.get(assignment.tag_id);
+    if (!tag) continue;
+    const arr = map.get(assignment.email_id) ?? [];
+    arr.push(tag);
+    map.set(assignment.email_id, arr);
+  }
+
+  for (const tags of map.values()) {
+    tags.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  return map;
+}
+
+export async function listProjectIncomingEmailSummaries(
+  projectId: string,
+  limit = 20
+): Promise<ProjectIncomingEmailSummary[]> {
+  const clamped = Math.min(Math.max(Math.floor(limit), 1), 200);
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .select("id, from_address, from_domain, subject, status, error, created_at, read_at, summary")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(clamped);
+  if (error) throw error;
+
+  type Row = {
+    id: string;
+    from_address: string;
+    from_domain: string | null;
+    subject: string | null;
+    status: string;
+    error: string | null;
+    created_at: string;
+    read_at: string | null;
+    summary: string | null;
+  };
+  const rows = (data ?? []) as Row[];
+  const tagMap = await listIncomingEmailTagMap(rows.map((r) => r.id));
+
+  return rows.map((row) => ({
+    id: row.id,
+    from_address: row.from_address,
+    from_domain: row.from_domain,
+    subject: row.subject,
+    status: toIncomingEmailStatus(row.status),
+    error: row.error,
+    created_at: row.created_at,
+    read_at: row.read_at,
+    summary: row.summary,
+    tags: tagMap.get(row.id) ?? [],
+  }));
+}
+
+export async function getIncomingEmailTags(
+  emailId: string
+): Promise<IncomingEmailTagSummary[]> {
+  const map = await listIncomingEmailTagMap([emailId]);
+  return map.get(emailId) ?? [];
+}
+
+export async function getProjectIncomingEmailWithTags(
+  projectId: string,
+  emailId: string
+): Promise<(ProjectIncomingEmail & { tags: IncomingEmailTagSummary[] }) | null> {
+  const email = await getProjectIncomingEmail(projectId, emailId);
+  if (!email) return null;
+  const tags = await getIncomingEmailTags(email.id);
+  return { ...email, tags };
+}
+
+export async function listProjectEmailDomains(
+  projectId: string
+): Promise<ProjectEmailDomain[]> {
+  const { data, error } = await supabaseAdmin
+    .from("email_domains")
+    .select("id, project_id, domain, enabled, created_at, updated_at, last_seen_at")
+    .eq("project_id", projectId)
+    .order("domain", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as ProjectEmailDomain[];
+}
+
+export async function upsertProjectEmailDomain(
+  projectId: string,
+  domain: string
+): Promise<ProjectEmailDomain> {
+  const normalized = normalizeEmailDomain(domain);
+  if (!normalized || !normalized.includes(".")) {
+    throw new Error("Invalid domain");
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("email_domains")
+    .upsert(
+      {
+        project_id: projectId,
+        domain: normalized,
+        last_seen_at: nowIso,
+        updated_at: nowIso,
+      },
+      { onConflict: "project_id,domain" }
+    )
+    .select("id, project_id, domain, enabled, created_at, updated_at, last_seen_at")
+    .single();
+  if (error) throw error;
+  return data as ProjectEmailDomain;
+}
+
+export async function updateProjectEmailDomain(params: {
+  projectId: string;
+  domainId: string;
+  enabled?: boolean;
+}): Promise<ProjectEmailDomain | null> {
+  const update: Record<string, any> = {};
+  if (params.enabled !== undefined) {
+    update.enabled = Boolean(params.enabled);
+  }
+  if (!Object.keys(update).length) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("email_domains")
+    .update(update)
+    .eq("project_id", params.projectId)
+    .eq("id", params.domainId)
+    .select("id, project_id, domain, enabled, created_at, updated_at, last_seen_at")
+    .maybeSingle();
+  if (error) throw error;
+  return (data as ProjectEmailDomain | null) ?? null;
+}
+
+export async function listProjectEmailTags(
+  projectId: string,
+  opts?: { enabledOnly?: boolean; includeDeleted?: boolean }
+): Promise<ProjectEmailTag[]> {
+  let query = supabaseAdmin
+    .from("email_tags")
+    .select(
+      "id, project_id, name, color, enabled, condition, created_at, updated_at, deleted_at"
+    )
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+
+  if (!opts?.includeDeleted) {
+    query = query.is("deleted_at", null);
+  }
+  if (opts?.enabledOnly) {
+    query = query.eq("enabled", true);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as ProjectEmailTag[];
+}
+
+export async function createProjectEmailTag(params: {
+  projectId: string;
+  name: string;
+  color: string;
+  enabled?: boolean;
+  condition: string;
+}): Promise<ProjectEmailTag> {
+  const name = normalizeEmailTagName(params.name);
+  const condition = normalizeEmailTagCondition(params.condition);
+  if (!name) throw new Error("Tag name is required");
+  if (!condition) throw new Error("Tag condition is required");
+
+  const color = normalizeEmailTagColor(params.color);
+  const { data, error } = await supabaseAdmin
+    .from("email_tags")
+    .insert({
+      project_id: params.projectId,
+      name,
+      color,
+      enabled: params.enabled ?? true,
+      condition,
+    })
+    .select(
+      "id, project_id, name, color, enabled, condition, created_at, updated_at, deleted_at"
+    )
+    .single();
+
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new Error("A tag with this name already exists");
+    }
+    throw error;
+  }
+  return data as ProjectEmailTag;
+}
+
+export async function updateProjectEmailTag(params: {
+  projectId: string;
+  tagId: string;
+  name?: string;
+  color?: string;
+  enabled?: boolean;
+  condition?: string;
+}): Promise<ProjectEmailTag | null> {
+  const update: Record<string, any> = {};
+  if (params.name !== undefined) {
+    const value = normalizeEmailTagName(params.name);
+    if (!value) throw new Error("Tag name is required");
+    update.name = value;
+  }
+  if (params.color !== undefined) {
+    update.color = normalizeEmailTagColor(params.color);
+  }
+  if (params.enabled !== undefined) {
+    update.enabled = Boolean(params.enabled);
+  }
+  if (params.condition !== undefined) {
+    const value = normalizeEmailTagCondition(params.condition);
+    if (!value) throw new Error("Tag condition is required");
+    update.condition = value;
+  }
+  if (!Object.keys(update).length) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("email_tags")
+    .update(update)
+    .eq("project_id", params.projectId)
+    .eq("id", params.tagId)
+    .is("deleted_at", null)
+    .select(
+      "id, project_id, name, color, enabled, condition, created_at, updated_at, deleted_at"
+    )
+    .maybeSingle();
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new Error("A tag with this name already exists");
+    }
+    throw error;
+  }
+  return (data as ProjectEmailTag | null) ?? null;
+}
+
+export async function softDeleteProjectEmailTag(
+  projectId: string,
+  tagId: string
+): Promise<boolean> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("email_tags")
+    .update({ deleted_at: nowIso, enabled: false })
+    .eq("project_id", projectId)
+    .eq("id", tagId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return false;
+
+  await supabaseAdmin
+    .from("incoming_email_tags")
+    .update({ deleted_at: nowIso })
+    .eq("tag_id", tagId)
+    .is("deleted_at", null);
+
+  return true;
+}
+
+export async function setIncomingEmailTags(
+  projectId: string,
+  emailId: string,
+  tagIds: string[]
+): Promise<IncomingEmailTagSummary[]> {
+  const uniqueRequested = [...new Set(tagIds)];
+  const nowIso = new Date().toISOString();
+
+  let activeTagIds: string[] = [];
+  if (uniqueRequested.length > 0) {
+    const { data: validTags, error: validErr } = await supabaseAdmin
+      .from("email_tags")
+      .select("id")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .in("id", uniqueRequested);
+    if (validErr) throw validErr;
+    activeTagIds = (validTags ?? []).map((row: any) => row.id);
+  }
+
+  const { data: currentRows, error: currentErr } = await supabaseAdmin
+    .from("incoming_email_tags")
+    .select("tag_id")
+    .eq("email_id", emailId)
+    .is("deleted_at", null);
+  if (currentErr) throw currentErr;
+
+  const currentIds = new Set((currentRows ?? []).map((row: any) => row.tag_id));
+  for (const currentId of currentIds) {
+    if (activeTagIds.includes(currentId)) continue;
+    await supabaseAdmin
+      .from("incoming_email_tags")
+      .update({ deleted_at: nowIso })
+      .eq("email_id", emailId)
+      .eq("tag_id", currentId)
+      .is("deleted_at", null);
+  }
+
+  if (activeTagIds.length > 0) {
+    const upsertRows = activeTagIds.map((tagId) => ({
+      email_id: emailId,
+      tag_id: tagId,
+      deleted_at: null as string | null,
+      updated_at: nowIso,
+    }));
+    const { error: upsertErr } = await supabaseAdmin
+      .from("incoming_email_tags")
+      .upsert(upsertRows, { onConflict: "email_id,tag_id" });
+    if (upsertErr) throw upsertErr;
+  }
+
+  return getIncomingEmailTags(emailId);
 }
 
 export async function getProjectMemberEmails(

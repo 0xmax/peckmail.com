@@ -11,13 +11,23 @@ export interface ChatSession {
   updatedAt: string;
 }
 
+export interface EmailTagSummary {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface IncomingEmail {
   id: string;
   from_address: string;
-  subject: string;
+  from_domain?: string | null;
+  subject: string | null;
   status: "received" | "processing" | "processed" | "failed";
   error: string | null;
   created_at: string;
+  read_at?: string | null;
+  summary?: string | null;
+  tags?: EmailTagSummary[];
 }
 
 export interface StoreState {

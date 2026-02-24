@@ -1,9 +1,13 @@
 import { Webhook } from "svix";
 import { Resend } from "resend";
+import Anthropic from "@anthropic-ai/sdk";
 import {
   getProjectByEmail,
   getProjectMemberEmails,
   insertIncomingEmail,
+  listProjectEmailTags,
+  setIncomingEmailTags,
+  upsertProjectEmailDomain,
   updateIncomingEmailContent,
   updateEmailStatus,
 } from "./db.js";
@@ -18,9 +22,16 @@ import { getProjectOwner } from "./credits.js";
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
 
 const WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET;
 const INBOUND_AUTO_REPLY_ENABLED = process.env.INBOUND_AUTO_REPLY_ENABLED === "true";
+const EMAIL_TAGGING_MODEL = process.env.EMAIL_TAGGING_MODEL || "claude-3-5-haiku-latest";
+const EMAIL_SUMMARY_MODEL = process.env.EMAIL_SUMMARY_MODEL || "claude-3-6-sonnet-latest";
+const MAX_TAGGING_INPUT_CHARS = 12000;
+const MAX_SUMMARY_INPUT_CHARS = 16000;
 
 export function verifyWebhookSignature(
   rawBody: string,
@@ -42,11 +53,13 @@ export interface InboundEmailRecord {
   project_id: string;
   project_name: string;
   from_address: string;
+  from_domain: string | null;
   to_address: string;
   subject: string;
   body_text: string;
   body_html: string;
   raw_email: string;
+  summary: string | null;
   resend_email_id: string;
   date: string;
   cc: string[];
@@ -73,6 +86,7 @@ export async function receiveInboundEmail(
   const cc: string[] = Array.isArray(data.cc) ? data.cc : data.cc ? [data.cc] : [];
   const replyTo: string = data.reply_to ?? data.replyTo ?? "";
   const date: string = data.date ?? data.created_at ?? new Date().toISOString();
+  const fromDomain = extractDomainFromAddress(fromAddress);
 
   // Find matching project for any of the to addresses
   let project: { id: string; name: string } | null = null;
@@ -91,11 +105,18 @@ export async function receiveInboundEmail(
     return null;
   }
 
+  if (fromDomain) {
+    upsertProjectEmailDomain(project.id, fromDomain).catch((err) =>
+      console.error("[inbound] Failed to upsert sender domain:", err)
+    );
+  }
+
   // Store in database with no body yet (idempotent — returns null on duplicate)
   const record = await insertIncomingEmail({
     project_id: project.id,
     resend_email_id: resendEmailId,
     from_address: fromAddress,
+    from_domain: fromDomain ?? undefined,
     to_address: matchedTo,
     subject,
     body_text: "",
@@ -116,10 +137,13 @@ export async function receiveInboundEmail(
     email: {
       id: record.id,
       from_address: fromAddress,
+      from_domain: fromDomain,
       subject,
       status: "received",
       error: null,
       created_at: new Date().toISOString(),
+      summary: null,
+      tags: [],
     },
   });
 
@@ -128,11 +152,13 @@ export async function receiveInboundEmail(
     project_id: project.id,
     project_name: project.name,
     from_address: fromAddress,
+    from_domain: fromDomain,
     to_address: matchedTo,
     subject,
     body_text: "",
     body_html: "",
     raw_email: "",
+    summary: null,
     resend_email_id: resendEmailId,
     date,
     cc,
@@ -233,6 +259,7 @@ export async function processInboundEmail(
     body_text: record.body_text,
     body_html: record.body_html,
     raw_email: record.raw_email,
+    summary: null,
   });
 
   // Mark as processing
@@ -242,6 +269,27 @@ export async function processInboundEmail(
     emailId: record.id,
     status: "processing",
     error: null,
+  });
+
+  // Auto-classify tags + generate summary before agent processing (best effort).
+  const [tags, summary] = await Promise.all([
+    classifyIncomingEmailTags(record).catch((err) => {
+      console.error("[inbound] Tag classification failed:", err);
+      return [];
+    }),
+    summarizeIncomingEmail(record).catch((err) => {
+      console.error("[inbound] Email summarization failed:", err);
+      return null;
+    }),
+  ]);
+
+  record.summary = summary;
+  await updateIncomingEmailContent(record.id, { summary });
+  broadcast(record.project_id, {
+    type: "email:classified",
+    emailId: record.id,
+    tags,
+    summary,
   });
 
   // Build agent system prompt
@@ -410,6 +458,146 @@ ${meta}
 ---
 
 ${record.body_text}`;
+}
+
+async function summarizeIncomingEmail(
+  record: InboundEmailRecord
+): Promise<string | null> {
+  const emailInput = buildEmailModelInput(record, MAX_SUMMARY_INPUT_CHARS);
+  if (!emailInput) return null;
+  if (!anthropic) {
+    console.warn("[inbound] Skipping summary: ANTHROPIC_API_KEY not configured");
+    return null;
+  }
+
+  const response = await anthropic.messages.create({
+    model: EMAIL_SUMMARY_MODEL,
+    max_tokens: 300,
+    temperature: 0,
+    system:
+      "You summarize inbound emails for a workspace inbox. Return plain text only. Keep the summary concise (2-4 sentences) and mention the key request, context, and any concrete action items.",
+    messages: [
+      {
+        role: "user",
+        content: `Summarize this inbound email:\n\n${emailInput}`,
+      },
+    ],
+  });
+
+  const summary = extractTextFromAnthropicContent(response.content).trim();
+  return summary || null;
+}
+
+async function classifyIncomingEmailTags(
+  record: InboundEmailRecord
+): Promise<Array<{ id: string; name: string; color: string }>> {
+  const enabledTags = await listProjectEmailTags(record.project_id, { enabledOnly: true });
+  if (enabledTags.length === 0) {
+    return setIncomingEmailTags(record.project_id, record.id, []);
+  }
+
+  const emailInput = buildEmailModelInput(record, MAX_TAGGING_INPUT_CHARS);
+  if (!emailInput || !anthropic) {
+    if (!anthropic) {
+      console.warn("[inbound] Skipping tag classification: ANTHROPIC_API_KEY not configured");
+    }
+    return setIncomingEmailTags(record.project_id, record.id, []);
+  }
+
+  const tagPayload = enabledTags.map((tag) => ({
+    id: tag.id,
+    name: tag.name,
+    condition: tag.condition,
+  }));
+
+  const response = await anthropic.messages.create({
+    model: EMAIL_TAGGING_MODEL,
+    max_tokens: 400,
+    temperature: 0,
+    system:
+      "You classify emails against project-defined tag conditions. Respond with strict JSON only: {\"matching_tag_ids\":[\"...\"]}. Include only tag IDs that clearly apply.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Available tags (JSON):\n${JSON.stringify(tagPayload, null, 2)}\n\n` +
+          `Inbound email:\n${emailInput}\n\n` +
+          `Return only JSON.`,
+      },
+    ],
+  });
+
+  const raw = extractTextFromAnthropicContent(response.content);
+  const parsed = parseJsonObject(raw);
+  const candidateIds = Array.isArray(parsed?.matching_tag_ids)
+    ? parsed.matching_tag_ids.filter((id: unknown): id is string => typeof id === "string")
+    : [];
+  const allowedIds = new Set(tagPayload.map((tag) => tag.id));
+  const selectedIds = candidateIds.filter((id) => allowedIds.has(id));
+  return setIncomingEmailTags(record.project_id, record.id, selectedIds);
+}
+
+function buildEmailModelInput(record: InboundEmailRecord, maxChars: number): string {
+  const body = (record.body_text || extractBodyText("", record.body_html || "") || "").trim();
+  const raw = [
+    `From: ${record.from_address}`,
+    `To: ${record.to_address}`,
+    `Subject: ${record.subject}`,
+    "",
+    body || "(no body)",
+  ].join("\n");
+  if (raw.length <= maxChars) return raw;
+  return `${raw.slice(0, maxChars)}\n\n...[truncated]`;
+}
+
+function extractTextFromAnthropicContent(content: Array<{ type: string; text?: string }>): string {
+  return content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text ?? "")
+    .join("\n");
+}
+
+function parseJsonObject(value: string): any {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // fall through
+  }
+
+  const fenceMatch = trimmed.match(/```json\s*([\s\S]*?)\s*```/i) || trimmed.match(/```\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch?.[1]) {
+    try {
+      return JSON.parse(fenceMatch[1]);
+    } catch {
+      // fall through
+    }
+  }
+
+  const objectMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (objectMatch?.[0]) {
+    try {
+      return JSON.parse(objectMatch[0]);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function extractDomainFromAddress(fromAddress: string): string | null {
+  if (!fromAddress) return null;
+  const normalized = fromAddress
+    .replace(/.*<([^>]+)>.*/, "$1")
+    .trim()
+    .toLowerCase();
+  const atIndex = normalized.lastIndexOf("@");
+  if (atIndex < 0 || atIndex === normalized.length - 1) return null;
+  const domain = normalized.slice(atIndex + 1).replace(/[>\s]/g, "");
+  if (!domain || !domain.includes(".")) return null;
+  return domain;
 }
 
 function extractBodyText(text: string, html: string): string {

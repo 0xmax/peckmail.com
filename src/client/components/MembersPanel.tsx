@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface Member {
   user_id: string;
   role: string;
+  email: string | null;
   profiles: { display_name: string | null; avatar_url: string | null } | null;
 }
 
@@ -106,6 +107,11 @@ export function MembersPanel({ projectId, onLeave }: { projectId: string; onLeav
                       <span className="text-muted-foreground ml-1">(you)</span>
                     )}
                   </div>
+                  {m.email && (
+                    <div className="text-xs text-muted-foreground truncate">
+                      {m.email}
+                    </div>
+                  )}
                   {isOwner && !isSelf ? (
                     <Select
                       value={m.role}
