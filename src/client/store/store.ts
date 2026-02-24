@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import type { StoreState, StoreAction, FileNode, ChatMessage, ChatSession, ProjectSettings, IncomingEmail } from "./types.js";
-import { treeAddNode, treeRemoveNode, treeRenameNode } from "./tree-ops.js";
+import type { StoreState, StoreAction, ChatMessage, ChatSession, IncomingEmail } from "./types.js";
 import { api } from "../lib/api.js";
 
 type Listener = () => void;
@@ -22,22 +21,12 @@ export class WorkspaceStore {
       projectId,
       projectName: "",
       connected: false,
-      tree: [],
-      treeLoading: true,
-      openFilePath: null,
-      fileContent: null,
-      fileLoading: false,
-      cursorPosition: null,
-      highlight: null,
-      ttsPlayback: null,
       chatSessions: [],
       currentSessionId: null,
       chatMessages: [],
       chatStreaming: false,
       chatError: null,
-      ttsFromLine: null,
       chatPrompt: null,
-      projectSettings: {},
       incomingEmails: [],
     };
   }
@@ -60,47 +49,6 @@ export class WorkspaceStore {
   private setState(partial: Partial<StoreState>) {
     this.state = { ...this.state, ...partial };
     this.emit();
-  }
-
-  // --- Item color helpers ---
-
-  private migrateItemColors(from: string, to: string) {
-    const ic = this.state.projectSettings.itemColors;
-    if (!ic) return;
-    let changed = false;
-    const updated: Record<string, (typeof ic)[string]> = {};
-    for (const [p, c] of Object.entries(ic)) {
-      if (p === from) {
-        updated[to] = c;
-        changed = true;
-      } else if (p.startsWith(from + "/")) {
-        updated[to + p.slice(from.length)] = c;
-        changed = true;
-      } else {
-        updated[p] = c;
-      }
-    }
-    if (changed) {
-      const settings = { ...this.state.projectSettings, itemColors: updated };
-      this.setState({ projectSettings: settings });
-      api.put(`/api/projects/${this.state.projectId}/settings`, settings).catch(() => {});
-    }
-  }
-
-  private removeItemColors(path: string) {
-    const ic = this.state.projectSettings.itemColors;
-    if (!ic) return;
-    const hasExact = ic[path] !== undefined;
-    const hasChild = !hasExact && Object.keys(ic).some((p) => p.startsWith(path + "/"));
-    if (!hasExact && !hasChild) return;
-    const updated = { ...ic };
-    delete updated[path];
-    for (const p of Object.keys(updated)) {
-      if (p.startsWith(path + "/")) delete updated[p];
-    }
-    const settings = { ...this.state.projectSettings, itemColors: updated };
-    this.setState({ projectSettings: settings });
-    api.put(`/api/projects/${this.state.projectId}/settings`, settings).catch(() => {});
   }
 
   // --- WebSocket ---
@@ -162,76 +110,6 @@ export class WorkspaceStore {
 
   private handleWsMessage(msg: any) {
     switch (msg.type) {
-      case "tree:add":
-        this.setState({
-          tree: treeAddNode(this.state.tree, msg.path, msg.nodeType),
-        });
-        break;
-
-      case "tree:remove":
-        this.setState({
-          tree: treeRemoveNode(this.state.tree, msg.path),
-        });
-        // Close file if it was deleted
-        if (this.state.openFilePath === msg.path) {
-          this.setState({ openFilePath: null, fileContent: null });
-        }
-        this.removeItemColors(msg.path);
-        break;
-
-      case "tree:rename":
-        this.setState({
-          tree: treeRenameNode(this.state.tree, msg.from, msg.to),
-        });
-        // Update open file path if renamed
-        if (this.state.openFilePath === msg.from) {
-          this.setState({ openFilePath: msg.to });
-        }
-        this.migrateItemColors(msg.from, msg.to);
-        break;
-
-      case "file:live":
-      case "file:updated":
-        if (msg.path === this.state.openFilePath && msg.content !== undefined) {
-          this.setState({ fileContent: msg.content });
-        }
-        break;
-
-      case "file:changed":
-        // Legacy: full tree refresh for unhandled fs changes
-        this.loadTree();
-        if (msg.path === this.state.openFilePath) {
-          this.loadFileContent(msg.path);
-        }
-        break;
-
-      case "editor:open_file":
-        if (msg.path && msg.path !== this.state.openFilePath) {
-          this.loadFileContent(msg.path);
-        }
-        break;
-
-      case "editor:highlight":
-        if (msg.path === this.state.openFilePath) {
-          this.setState({ highlight: { fromLine: msg.fromLine, toLine: msg.toLine } });
-          // Auto-clear highlight after 4 seconds
-          setTimeout(() => {
-            if (this.state.highlight?.fromLine === msg.fromLine && this.state.highlight?.toLine === msg.toLine) {
-              this.setState({ highlight: null });
-            }
-          }, 4000);
-        }
-        break;
-
-      case "mutation:ack":
-        // Server confirmed our mutation — no action needed (optimistic update already applied)
-        break;
-
-      case "mutation:nack":
-        // Server rejected our mutation — reload tree to get correct state
-        this.loadTree();
-        break;
-
       case "chat:delta":
         this.handleChatDelta(msg);
         break;
@@ -290,7 +168,6 @@ export class WorkspaceStore {
   private flushDeltaBuffer() {
     if (!this.deltaBuffer) return;
     const text = this.deltaBuffer;
-    // Don't clear buffer here — accumulate for full content
     const messages = [...this.state.chatMessages];
     const last = messages[messages.length - 1];
     if (last && last.role === "assistant") {
@@ -312,14 +189,12 @@ export class WorkspaceStore {
 
   private handleChatDone(msg: { sessionId: string; title: string }) {
     if (msg.sessionId !== this.state.currentSessionId) return;
-    // Flush any remaining delta
     if (this.deltaFlushTimer) {
       clearTimeout(this.deltaFlushTimer);
       this.deltaFlushTimer = null;
     }
     this.flushDeltaBuffer();
     this.setState({ chatStreaming: false });
-    // Refresh sessions list
     this.loadChatSessions();
   }
 
@@ -332,119 +207,6 @@ export class WorkspaceStore {
 
   dispatch = (action: StoreAction) => {
     switch (action.type) {
-      // File mutations — optimistic update + WS send
-      case "file:create": {
-        this.setState({
-          tree: treeAddNode(this.state.tree, action.path, "file"),
-        });
-        this.send({ type: "file:create", path: action.path, content: action.content });
-        break;
-      }
-
-      case "file:mkdir": {
-        this.setState({
-          tree: treeAddNode(this.state.tree, action.path, "directory"),
-        });
-        this.send({ type: "file:mkdir", path: action.path });
-        break;
-      }
-
-      case "file:delete": {
-        this.setState({
-          tree: treeRemoveNode(this.state.tree, action.path),
-        });
-        if (this.state.openFilePath === action.path) {
-          this.setState({ openFilePath: null, fileContent: null });
-        }
-        this.send({ type: "file:delete", path: action.path });
-        this.removeItemColors(action.path);
-        break;
-      }
-
-      case "file:rename": {
-        this.setState({
-          tree: treeRenameNode(this.state.tree, action.from, action.to),
-        });
-        if (this.state.openFilePath === action.from) {
-          this.setState({ openFilePath: action.to });
-        }
-        this.send({ type: "file:rename", from: action.from, to: action.to });
-        this.migrateItemColors(action.from, action.to);
-        break;
-      }
-
-      case "file:write": {
-        this.send({ type: "file:write", path: action.path, content: action.content });
-        break;
-      }
-
-      case "file:live": {
-        this.send({ type: "file:live", path: action.path, content: action.content });
-        break;
-      }
-
-      // File open/close (REST-based)
-      case "file:open": {
-        this.setState({
-          openFilePath: action.path,
-          fileContent: action.content,
-          fileLoading: false,
-        });
-        break;
-      }
-
-      case "file:close": {
-        this.setState({ openFilePath: null, fileContent: null });
-        break;
-      }
-
-      case "file:loading": {
-        this.setState({ fileLoading: action.loading });
-        break;
-      }
-
-      case "file:content": {
-        this.setState({ fileContent: action.content });
-        break;
-      }
-
-      case "file:cursor": {
-        this.setState({ cursorPosition: { line: action.line, col: action.col } });
-        break;
-      }
-
-      // Tree
-      case "tree:set": {
-        this.setState({ tree: action.tree, treeLoading: false });
-        break;
-      }
-
-      case "tree:loading": {
-        this.setState({ treeLoading: action.loading });
-        break;
-      }
-
-      case "tree:add": {
-        this.setState({
-          tree: treeAddNode(this.state.tree, action.path, action.nodeType),
-        });
-        break;
-      }
-
-      case "tree:remove": {
-        this.setState({
-          tree: treeRemoveNode(this.state.tree, action.path),
-        });
-        break;
-      }
-
-      case "tree:rename": {
-        this.setState({
-          tree: treeRenameNode(this.state.tree, action.from, action.to),
-        });
-        break;
-      }
-
       // Chat
       case "chat:send": {
         let sessionId = action.sessionId || this.state.currentSessionId;
@@ -476,20 +238,15 @@ export class WorkspaceStore {
           sessionId,
           message: action.message,
           thinking: action.thinking || false,
-          context: {
-            openFilePath: this.state.openFilePath,
-            fileContent: this.state.fileContent,
-            cursorPosition: this.state.cursorPosition,
-          },
+          context: {},
         });
         break;
       }
 
       case "chat:new-session": {
-        const sessionId = uuidv4();
         this.deltaBuffer = "";
         this.setState({
-          currentSessionId: sessionId,
+          currentSessionId: uuidv4(),
           chatMessages: [],
           chatError: null,
           chatStreaming: false,
@@ -532,83 +289,6 @@ export class WorkspaceStore {
         break;
       }
 
-      // TTS
-      case "tts:play-from": {
-        this.setState({
-          ttsFromLine: {
-            fromLine: action.fromLine,
-            fromChar: action.fromChar,
-          },
-        });
-        break;
-      }
-
-      case "tts:clear": {
-        this.setState({ ttsFromLine: null, highlight: null, ttsPlayback: null });
-        break;
-      }
-
-      case "tts:highlight": {
-        const cur = this.state.highlight;
-        const next = {
-          fromLine: action.line,
-          toLine: action.line,
-          fromChar: action.fromChar,
-          toChar: action.toChar,
-        };
-        if (
-          !cur ||
-          cur.fromLine !== next.fromLine ||
-          cur.toLine !== next.toLine ||
-          cur.fromChar !== next.fromChar ||
-          cur.toChar !== next.toChar
-        ) {
-          this.setState({ highlight: next });
-        }
-        break;
-      }
-
-      case "tts:highlight-clear": {
-        this.setState({ highlight: null });
-        break;
-      }
-
-      case "tts:playback": {
-        this.setState({ ttsPlayback: action.playback });
-        break;
-      }
-
-      case "tts:playback-stop": {
-        this.setState({ ttsPlayback: null });
-        break;
-      }
-
-      // Settings
-      case "settings:set": {
-        this.setState({ projectSettings: action.settings });
-        break;
-      }
-
-      case "settings:save": {
-        this.setState({ projectSettings: action.settings });
-        api.put(`/api/projects/${this.state.projectId}/settings`, action.settings).catch(() => {});
-        break;
-      }
-
-      case "settings:set-item-color": {
-        const prev = this.state.projectSettings.itemColors ?? {};
-        const next = { ...prev };
-        if (action.color === null) {
-          delete next[action.path];
-        } else {
-          next[action.path] = action.color;
-        }
-        const settings = { ...this.state.projectSettings, itemColors: next };
-        this.setState({ projectSettings: settings });
-        api.put(`/api/projects/${this.state.projectId}/settings`, settings).catch(() => {});
-        break;
-      }
-
       // Connection
       case "ws:connected": {
         this.setState({ connected: true });
@@ -623,34 +303,6 @@ export class WorkspaceStore {
   };
 
   // --- REST helpers ---
-
-  async loadTree() {
-    this.setState({ treeLoading: true });
-    try {
-      const data = await api.get<{ tree: FileNode[] }>(
-        `/api/files/${this.state.projectId}/tree`
-      );
-      this.setState({ tree: data.tree, treeLoading: false });
-    } catch {
-      this.setState({ treeLoading: false });
-    }
-  }
-
-  async loadFileContent(path: string) {
-    this.setState({ fileLoading: true });
-    try {
-      const data = await api.get<{ content: string }>(
-        `/api/files/${this.state.projectId}/read?path=${encodeURIComponent(path)}`
-      );
-      this.setState({
-        openFilePath: path,
-        fileContent: data.content,
-        fileLoading: false,
-      });
-    } catch {
-      this.setState({ fileLoading: false });
-    }
-  }
 
   async loadChatSessions() {
     try {
@@ -691,17 +343,6 @@ export class WorkspaceStore {
       return true;
     } catch {
       return false;
-    }
-  }
-
-  async loadSettings() {
-    try {
-      const data = await api.get<ProjectSettings>(
-        `/api/projects/${this.state.projectId}/settings`
-      );
-      this.setState({ projectSettings: data });
-    } catch {
-      // Ignore — defaults to {}
     }
   }
 

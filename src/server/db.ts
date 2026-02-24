@@ -529,3 +529,23 @@ async function syncLegacyProjectEmail(projectId: string, email: string): Promise
     .update({ email: normalizeEmailAddress(email) })
     .eq("id", projectId);
 }
+
+// --- Active Project Helpers ---
+
+export async function getActiveProjectId(userId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("active_project_id")
+    .eq("id", userId)
+    .single();
+  if (error) return null;
+  return data?.active_project_id ?? null;
+}
+
+export async function setActiveProjectId(userId: string, projectId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("profiles")
+    .update({ active_project_id: projectId })
+    .eq("id", userId);
+  if (error) throw error;
+}

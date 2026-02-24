@@ -1,38 +1,62 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./context/AuthContext.js";
 import { LoginPage } from "./components/LoginPage.js";
-import { ProjectList } from "./components/ProjectList.js";
 import { AccountSettings } from "./components/AccountSettings.js";
 import { OAuthConsent } from "./components/OAuthConsent.js";
 import { InvitePage } from "./components/InvitePage.js";
-import { Workspace } from "./components/Workspace.js";
 import { ContactPage } from "./components/ContactPage.js";
+import { AppShell } from "./components/AppShell.js";
+import { CreateProjectModal } from "./components/CreateProjectModal.js";
 import { StoreProvider } from "./store/StoreContext.js";
 import { SpinnerGap } from "@phosphor-icons/react";
+import type { NavItem } from "./components/AppSidebar.js";
 
-type Route = { page: "login" } | { page: "projects" } | { page: "settings" } | { page: "contact" } | { page: "oauth-consent" } | { page: "invite"; invitationId: string } | { page: "workspace"; projectId: string };
+type Route =
+  | { page: "login" }
+  | { page: "settings" }
+  | { page: "contact" }
+  | { page: "oauth-consent" }
+  | { page: "invite"; invitationId: string }
+  | { page: "app"; view: NavItem };
 
 function parseRoute(): Route {
   const path = window.location.pathname;
   if (path === "/login") return { page: "login" };
-  if (path === "/projects") return { page: "projects" };
   if (path === "/settings") return { page: "settings" };
   if (path === "/contact") return { page: "contact" };
   if (path === "/oauth/consent") return { page: "oauth-consent" };
   const inviteMatch = path.match(/^\/invite\/([a-f0-9-]+)/);
   if (inviteMatch) return { page: "invite", invitationId: inviteMatch[1] };
-  const match = path.match(/^\/p\/([a-f0-9-]+)/);
-  if (match) return { page: "workspace", projectId: match[1] };
-  return { page: "projects" };
+  if (path === "/app" || path === "/app/") return { page: "app", view: "dashboard" };
+  if (path === "/app/inbox") return { page: "app", view: "inbox" };
+  if (path === "/app/chat") return { page: "app", view: "chat" };
+  if (path === "/app/data") return { page: "app", view: "data" };
+  // Default — treat as dashboard if under /app, otherwise inbox
+  if (path.startsWith("/app")) return { page: "app", view: "dashboard" };
+  return { page: "app", view: "inbox" };
 }
 
 export function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, activeProjectId, setActiveProject } = useAuth();
   const [route, setRoute] = useState<Route>(parseRoute);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const navigate = (r: Route) => {
     setRoute(r);
-    const url = r.page === "login" ? "/login" : r.page === "settings" ? "/settings" : r.page === "contact" ? "/contact" : r.page === "workspace" ? `/p/${r.projectId}` : r.page === "invite" ? `/invite/${r.invitationId}` : "/projects";
+    let url: string;
+    switch (r.page) {
+      case "login": url = "/login"; break;
+      case "settings": url = "/settings"; break;
+      case "contact": url = "/contact"; break;
+      case "oauth-consent": url = "/oauth/consent"; break;
+      case "invite": url = `/invite/${r.invitationId}`; break;
+      case "app":
+        url = r.view === "dashboard" ? "/app" :
+              r.view === "inbox" ? "/app/inbox" :
+              r.view === "chat" ? "/app/chat" :
+              "/app/data";
+        break;
+    }
     window.history.pushState(null, "", url);
   };
 
@@ -45,13 +69,13 @@ export function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <SpinnerGap size={28} className="text-text-muted animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <SpinnerGap size={28} className="text-muted-foreground animate-spin" />
       </div>
     );
   }
 
-  // OAuth consent doesn't need full auth gate — it handles its own auth flow
+  // OAuth consent doesn't need full auth gate
   if (route.page === "oauth-consent") {
     return <OAuthConsent />;
   }
@@ -61,10 +85,10 @@ export function App() {
     return <ContactPage />;
   }
 
-  // Login page — show login form (if already authed, redirect to projects)
+  // Login page
   if (route.page === "login") {
     if (user) {
-      navigate({ page: "projects" });
+      navigate({ page: "app", view: "inbox" });
       return null;
     }
     return <LoginPage />;
@@ -75,7 +99,10 @@ export function App() {
     return (
       <InvitePage
         invitationId={route.invitationId}
-        onNavigate={(projectId) => navigate({ page: "workspace", projectId })}
+        onNavigate={async (projectId) => {
+          await setActiveProject(projectId);
+          navigate({ page: "app", view: "inbox" });
+        }}
       />
     );
   }
@@ -85,21 +112,41 @@ export function App() {
   }
 
   if (route.page === "settings") {
-    return <AccountSettings onBack={() => navigate({ page: "projects" })} onOpenProject={(id) => navigate({ page: "workspace", projectId: id })} />;
+    return (
+      <AccountSettings
+        onBack={() => navigate({ page: "app", view: "dashboard" })}
+      />
+    );
   }
 
-  if (route.page === "workspace") {
+  // App view — need an active project
+  if (!activeProjectId) {
+    // Show onboarding — create first project
+    if (!showOnboarding) {
+      setShowOnboarding(true);
+    }
     return (
-      <StoreProvider projectId={route.projectId}>
-        <Workspace onBack={() => navigate({ page: "projects" })} onOpenSettings={() => navigate({ page: "settings" })} />
-      </StoreProvider>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <CreateProjectModal
+          onClose={() => {
+            // Can't close if no project exists — noop
+          }}
+          onCreated={async (project) => {
+            await setActiveProject(project.id);
+            setShowOnboarding(false);
+            window.location.reload();
+          }}
+        />
+      </div>
     );
   }
 
   return (
-    <ProjectList
-      onOpenProject={(id) => navigate({ page: "workspace", projectId: id })}
-      onOpenSettings={() => navigate({ page: "settings" })}
-    />
+    <StoreProvider projectId={activeProjectId}>
+      <AppShell
+        initialView={route.page === "app" ? route.view : "dashboard"}
+        onNavigateSettings={() => navigate({ page: "settings" })}
+      />
+    </StoreProvider>
   );
 }

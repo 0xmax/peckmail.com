@@ -27,7 +27,7 @@ interface CreditTransaction {
   created_at: string;
 }
 
-export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void; onOpenProject?: (id: string) => void }) {
+export function AccountSettings({ onBack }: { onBack: () => void }) {
   const { user, credits, refreshCredits, signOut, handle } = useAuth();
 
   // API Keys / Connect state
@@ -38,7 +38,6 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
   const [creatingKey, setCreatingKey] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
   const [cliCopied, setCliCopied] = useState(false);
-  const [creatingStarter, setCreatingStarter] = useState(false);
   const [showTransactions, setShowTransactions] = useState(false);
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
@@ -151,7 +150,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onBack()}>
                 <ArrowLeft size={16} className="text-muted-foreground" />
-                All workspaces
+                Back to app
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href="/contact">
@@ -286,7 +285,7 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
           <Card>
             <CardContent className="p-5 space-y-5">
               <p className="text-xs text-muted-foreground">
-                Connect Claude to your Peckmail projects so it can read, write, and manage your files directly.
+                Connect Claude to your Peckmail workspace so it can read and manage your emails directly.
               </p>
 
               {/* MCP URL */}
@@ -414,34 +413,6 @@ export function AccountSettings({ onBack, onOpenProject }: { onBack: () => void;
           </Card>
         </section>
 
-        {/* Starter project */}
-        <section className="pt-4 border-t border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Starter project</h3>
-              <p className="text-xs text-muted-foreground/70 mt-0.5">
-                Create a new workspace with sample files, recipes, and guides.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                setCreatingStarter(true);
-                try {
-                  const res = await api.post<{ project: { id: string } }>("/api/projects", { name: "Starter Project" });
-                  if (onOpenProject) onOpenProject(res.project.id);
-                } finally {
-                  setCreatingStarter(false);
-                }
-              }}
-              disabled={creatingStarter}
-              className="shrink-0"
-            >
-              {creatingStarter ? "Creating..." : "Create"}
-            </Button>
-          </div>
-        </section>
       </div>
     </div>
   );

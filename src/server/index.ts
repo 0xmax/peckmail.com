@@ -27,6 +27,8 @@ import {
   listProjectEmails,
   addProjectEmail,
   getUserHandle,
+  getActiveProjectId,
+  setActiveProjectId,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail } from "./inbound.js";
@@ -197,6 +199,23 @@ api.get("/user/profile", async (c) => {
   return c.json({ handle });
 });
 
+// Active project
+api.get("/user/active-project", async (c) => {
+  const user = getUser(c);
+  const projectId = await getActiveProjectId(user.id);
+  return c.json({ projectId });
+});
+
+api.put("/user/active-project", async (c) => {
+  const user = getUser(c);
+  const { projectId } = await c.req.json<{ projectId: string }>();
+  if (!projectId) return c.json({ error: "projectId required" }, 400);
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  await setActiveProjectId(user.id, projectId);
+  return c.json({ ok: true });
+});
+
 // User preferences
 api.get("/user/preferences", async (c) => {
   const user = getUser(c);
@@ -310,6 +329,12 @@ api.post("/projects", async (c) => {
   if (!body.name?.trim()) return c.json({ error: "Name required" }, 400);
 
   const project = await createProject(body.name.trim(), user.id);
+
+  // Auto-set as active project if user doesn't have one
+  const currentActive = await getActiveProjectId(user.id);
+  if (!currentActive) {
+    await setActiveProjectId(user.id, project.id).catch(() => {});
+  }
 
   try {
     if (body.mode === "template" && body.templateId) {
@@ -837,6 +862,10 @@ app.get(
   })
 );
 
+// --- Legacy redirects ---
+app.get("/projects", (c) => c.redirect("/app", 302));
+app.get("/p/:id", (c) => c.redirect("/app", 302));
+
 // --- SPA fallback ---
 app.get("*", async (c) => {
   let html = await fs.readFile("dist/public/index.html", "utf-8");
@@ -960,7 +989,7 @@ function landingPageHtml(): string {
         }
         if (sb.access_token && sb.expires_at && sb.expires_at > Math.floor(Date.now() / 1000)) {
           document.getElementById('nav-actions').innerHTML =
-            '<a href="/projects" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Go to Projects</a>';
+            '<a href="/app" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Open App</a>';
         }
       } catch(e) {}
     </script>

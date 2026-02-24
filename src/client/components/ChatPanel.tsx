@@ -118,10 +118,10 @@ export function ChatPanel() {
           <div className="text-center py-8">
             <ChatCircle size={32} weight="duotone" className="mx-auto mb-2 text-muted-foreground" />
             <p className="text-muted-foreground text-sm">
-              Ask me anything about your writing!
+              Ask me anything about your newsletters!
             </p>
             <p className="text-muted-foreground text-xs mt-1">
-              I can help edit, brainstorm, outline, and more.
+              I can summarize, analyze, search, and more.
             </p>
           </div>
         )}

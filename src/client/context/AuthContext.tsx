@@ -9,7 +9,6 @@ import {
 import { supabase } from "../lib/supabase.js";
 import { api, setApiToken } from "../lib/api.js";
 import type { User, Session } from "@supabase/supabase-js";
-import type { UserPreferences } from "../store/types.js";
 
 interface CreditBalance {
   balance: number;
@@ -21,11 +20,12 @@ interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  preferences: UserPreferences;
   defaultApiKey: string | null;
   handle: string | null;
   credits: CreditBalance | null;
+  activeProjectId: string | null;
   refreshCredits: () => Promise<void>;
+  setActiveProject: (projectId: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
@@ -34,7 +34,6 @@ interface AuthState {
     displayName: string
   ) => Promise<void>;
   signOut: () => Promise<void>;
-  updatePreferences: (prefs: UserPreferences) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -43,10 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [preferences, setPreferences] = useState<UserPreferences>({});
   const [defaultApiKey, setDefaultApiKey] = useState<string | null>(null);
   const [handle, setHandle] = useState<string | null>(null);
   const [credits, setCredits] = useState<CreditBalance | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleSession = (session: Session | null) => {
@@ -54,7 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        setPreferences(session.user.user_metadata?.preferences || {});
         // Ensure a default API key exists (fire-and-forget)
         api
           .post<{ key: string; created: boolean }>("/api/keys/ensure-default")
@@ -70,12 +68,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .get<CreditBalance>("/api/credits/balance")
           .then((r) => setCredits(r))
           .catch(() => {});
+        // Fetch active project — auto-select first project if none set
+        api
+          .get<{ projectId: string | null }>("/api/user/active-project")
+          .then(async (r) => {
+            if (r.projectId) {
+              setActiveProjectId(r.projectId);
+            } else {
+              // No active project — try to auto-select the first one
+              try {
+                const { projects } = await api.get<{ projects: { id: string }[] }>("/api/projects");
+                if (projects.length > 0) {
+                  const firstId = projects[0].id;
+                  await api.put("/api/user/active-project", { projectId: firstId }).catch(() => {});
+                  setActiveProjectId(firstId);
+                }
+              } catch {
+                // No projects — will show onboarding
+              }
+            }
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
       } else {
         setDefaultApiKey(null);
         setHandle(null);
         setCredits(null);
+        setActiveProjectId(null);
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     // Get initial session
@@ -129,11 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = "/";
   }, []);
 
-  const updatePreferences = useCallback(async (prefs: UserPreferences) => {
-    await api.put("/api/user/preferences", prefs);
-    setPreferences(prefs);
-  }, []);
-
   const refreshCredits = useCallback(async () => {
     try {
       const r = await api.get<CreditBalance>("/api/credits/balance");
@@ -143,22 +161,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setActiveProject = useCallback(async (projectId: string) => {
+    await api.put("/api/user/active-project", { projectId });
+    setActiveProjectId(projectId);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
         user,
         session,
         loading,
-        preferences,
         defaultApiKey,
         handle,
         credits,
+        activeProjectId,
         refreshCredits,
+        setActiveProject,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
         signOut,
-        updatePreferences,
       }}
     >
       {children}

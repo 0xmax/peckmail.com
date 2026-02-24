@@ -11,14 +11,9 @@ import { useAuth } from "../context/AuthContext.js";
 import type {
   StoreState,
   StoreAction,
-  FileNode,
   ChatMessage,
   ChatSession,
-  ProjectSettings,
-  TtsPlayback,
-  HighlightRange,
   IncomingEmail,
-  TtsPlayFromTarget,
 } from "./types.js";
 
 const StoreContext = createContext<WorkspaceStore | null>(null);
@@ -46,10 +41,8 @@ export function StoreProvider({
     if (session?.access_token) {
       store.connect(session.access_token);
     }
-    store.loadTree();
     store.loadProjectName();
     store.loadChatSessions();
-    store.loadSettings();
     store.loadEmails();
 
     return () => {
@@ -75,23 +68,6 @@ function useSelector<T>(selector: (state: StoreState) => T): T {
 }
 
 // --- Selector hooks ---
-
-export function useTree(): { tree: FileNode[]; loading: boolean } {
-  const tree = useSelector((s) => s.tree);
-  const loading = useSelector((s) => s.treeLoading);
-  return { tree, loading };
-}
-
-export function useOpenFile(): {
-  path: string | null;
-  content: string | null;
-  loading: boolean;
-} {
-  const path = useSelector((s) => s.openFilePath);
-  const content = useSelector((s) => s.fileContent);
-  const loading = useSelector((s) => s.fileLoading);
-  return { path, content, loading };
-}
 
 export function useChatState(): {
   sessions: ChatSession[];
@@ -121,18 +97,6 @@ export function useStoreDispatch(): (action: StoreAction) => void {
   return store.dispatch;
 }
 
-export function useHighlight(): HighlightRange | null {
-  return useSelector((s) => s.highlight);
-}
-
-export function useTtsPlayback(): TtsPlayback | null {
-  return useSelector((s) => s.ttsPlayback);
-}
-
-export function useTtsFromLine(): TtsPlayFromTarget | null {
-  return useSelector((s) => s.ttsFromLine);
-}
-
 export function useChatPrompt(): string | null {
   return useSelector((s) => s.chatPrompt);
 }
@@ -146,15 +110,6 @@ export function useRenameProject(): (name: string) => Promise<boolean> {
   return (name: string) => store.renameProject(name);
 }
 
-export function useProjectSettings(): ProjectSettings {
-  return useSelector((s) => s.projectSettings);
-}
-
 export function useIncomingEmails(): IncomingEmail[] {
   return useSelector((s) => s.incomingEmails);
-}
-
-export function useLoadFileContent(): (path: string) => Promise<void> {
-  const store = useStore();
-  return (path: string) => store.loadFileContent(path);
 }
