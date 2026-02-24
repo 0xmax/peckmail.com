@@ -703,6 +703,23 @@ api.get("/projects/:id/emails", async (c) => {
   return c.json({ emails: data });
 });
 
+// Get a single email with body
+api.get("/projects/:id/emails/:emailId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const emailId = c.req.param("emailId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .select("id, from_address, subject, status, error, created_at, body_text, body_html")
+    .eq("project_id", projectId)
+    .eq("id", emailId)
+    .single();
+  if (error) return c.json({ error: error.message }, 404);
+  return c.json({ email: data });
+});
+
 // Send test email (simulates inbound flow)
 api.post("/projects/:id/emails/test", async (c) => {
   const user = getUser(c);
@@ -945,38 +962,33 @@ function landingPageHtml(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Peckmail — A collaborative writing workspace</title>
-  <meta name="description" content="A calm writing workspace with a smart little bird. Organize projects, write in markdown, and collaborate in real time.">
+  <title>Peckmail — Your newsletter inbox, organized by AI</title>
+  <meta name="description" content="Forward your newsletter subscriptions to Peckmail. AI reads, summarizes, and organizes everything so you don't have to.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://peckmail.com/">
-  <meta property="og:title" content="Peckmail — A writing workspace that thinks with you">
-  <meta property="og:description" content="Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.">
-  <meta property="og:image" content="https://peckmail.com/assets/og.jpg">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="628">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Peckmail — A writing workspace that thinks with you">
-  <meta name="twitter:description" content="Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.">
-  <meta name="twitter:image" content="https://peckmail.com/assets/og.jpg">
+  <meta property="og:title" content="Peckmail — Your newsletter inbox, organized by AI">
+  <meta property="og:description" content="Forward your newsletter subscriptions to Peckmail. AI reads, summarizes, and organizes everything so you don't have to.">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Peckmail — Your newsletter inbox, organized by AI">
+  <meta name="twitter:description" content="Forward your newsletter subscriptions to Peckmail. AI reads, summarizes, and organizes everything so you don't have to.">
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#faf6f1">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css?v=${ASSET_VERSION}">
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-Z3V6P9TKHC"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-Z3V6P9TKHC')</script>
 </head>
-<body class="bg-bg text-text">
+<body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #fafafa; color: #111;">
 
-  <nav class="flex items-center justify-between max-w-[1100px] mx-auto px-6 py-4 sm:px-8 sm:py-5">
-    <a href="/" class="flex items-center gap-2 font-heading text-[1.35rem] font-bold text-text">
-      <img src="/assets/logo.png" alt="" class="h-7 w-auto">Peckmail
+  <nav style="display: flex; align-items: center; justify-content: space-between; max-width: 720px; margin: 0 auto; padding: 1.5rem 1.5rem;">
+    <a href="/" style="display: flex; align-items: center; gap: 0.5rem; font-size: 1.15rem; font-weight: 700; color: #111; text-decoration: none;">
+      <img src="/assets/logo.png" alt="" style="height: 1.5rem;">Peckmail
     </a>
-    <div id="nav-actions" class="flex items-center gap-5">
-      <a href="/login" class="text-[0.95rem] text-text-secondary font-medium hover:text-text transition-colors">Sign In</a>
-      <a href="/login" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Get Started</a>
+    <div id="nav-actions" style="display: flex; align-items: center; gap: 1rem;">
+      <a href="/login" style="font-size: 0.875rem; color: #666; text-decoration: none;">Sign in</a>
+      <a href="/login" style="font-size: 0.875rem; color: #fff; background: #111; padding: 0.5rem 1.25rem; border-radius: 0.5rem; text-decoration: none; font-weight: 500;">Get started</a>
     </div>
     <script>
       try {
@@ -989,193 +1001,101 @@ function landingPageHtml(): string {
         }
         if (sb.access_token && sb.expires_at && sb.expires_at > Math.floor(Date.now() / 1000)) {
           document.getElementById('nav-actions').innerHTML =
-            '<a href="/app" class="inline-block bg-dark text-white px-5 py-2 rounded-lg text-[0.9rem] font-semibold hover:opacity-85 transition-opacity">Open App</a>';
+            '<a href="/app" style="font-size: 0.875rem; color: #fff; background: #111; padding: 0.5rem 1.25rem; border-radius: 0.5rem; text-decoration: none; font-weight: 500;">Open App</a>';
         }
       } catch(e) {}
     </script>
   </nav>
 
-  <section class="max-w-[1100px] mx-auto px-6 pt-8 sm:px-8 sm:pt-16">
-    <div class="flex flex-col gap-5 mb-8 sm:flex-row sm:items-center sm:gap-12 sm:mb-12">
-      <div class="sm:flex-[1.2]">
-        <h1 class="font-heading text-4xl sm:text-[3.5rem] font-extrabold leading-[1.1] text-dark tracking-tight">A writing workspace that thinks with you</h1>
-      </div>
-      <div class="sm:flex-1">
-        <p class="text-lg text-text-body leading-relaxed">Organize projects, write in markdown, and collaborate in real time — with a thoughtful little bird that reads your files, drafts with you, and keeps everything in order.</p>
-      </div>
-    </div>
-    <picture>
-      <source media="(max-width: 640px)" srcset="/assets/hero-mobile.jpg">
-      <img src="/assets/hero.jpg" alt="A person writing under a tree with a bird perched on a branch" loading="eager" class="w-full rounded-2xl block">
-    </picture>
+  <section style="max-width: 720px; margin: 0 auto; padding: 4rem 1.5rem 3rem; text-align: center;">
+    <h1 style="font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; margin: 0 0 1.25rem;">
+      Your newsletter inbox,<br>organized by AI
+    </h1>
+    <p style="font-size: 1.125rem; color: #555; line-height: 1.6; max-width: 520px; margin: 0 auto 2rem;">
+      Forward your subscriptions to Peckmail. We read, summarize, and organize every newsletter so you get the signal without the noise.
+    </p>
+    <a href="/login" style="display: inline-block; font-size: 0.95rem; color: #fff; background: #111; padding: 0.75rem 2rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600;">
+      Start for free
+    </a>
   </section>
 
-  <section class="max-w-[1100px] mx-auto px-6 pt-8 pb-12 sm:px-8">
-    <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">A calm place to get things done</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM152,88V44l44,44Z" opacity="0.2"/><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">Plain Flat Files</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Your project is just files on disk — markdown, CSV, whatever you need. No database, no proprietary format, no lock-in. Download, move, or back up the whole thing anytime.</p>
+  <section style="max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem 3rem;">
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+      <div style="text-align: center; padding: 1.5rem 1rem;">
+        <div style="font-size: 1.75rem; margin-bottom: 0.5rem;">&#9993;</div>
+        <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0 0 0.35rem;">Forward & forget</h3>
+        <p style="font-size: 0.8rem; color: #666; line-height: 1.5; margin: 0;">Each workspace gets a unique email. Forward newsletters there and they show up instantly.</p>
       </div>
-      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64a24,24,0,1,1-24-24A24,24,0,0,1,224,64Z" opacity="0.2"/><path d="M232,64a32,32,0,1,0-40,31v17a8,8,0,0,1-8,8H96a23.84,23.84,0,0,0-8,1.38V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V144a8,8,0,0,1,8-8h88a24,24,0,0,0,24-24V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64ZM96,192a16,16,0,1,1-16-16A16,16,0,0,1,96,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">Real-Time Sync</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">Collaborate live with your team in the browser. File updates appear instantly for everyone in the workspace.</p>
+      <div style="text-align: center; padding: 1.5rem 1rem;">
+        <div style="font-size: 1.75rem; margin-bottom: 0.5rem;">&#9889;</div>
+        <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0 0 0.35rem;">AI summaries</h3>
+        <p style="font-size: 0.8rem; color: #666; line-height: 1.5; margin: 0;">Every email is read and summarized automatically. Ask follow-up questions in the built-in chat.</p>
       </div>
-      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A16,16,0,0,0,40,64V192a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V64A16,16,0,0,0,200,48Z" opacity="0.2"/><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A16,16,0,0,0,40,64V192a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V64A16,16,0,0,0,200,48Zm0,144H56V64H200V192ZM80,96a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,96Zm0,32a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,128Zm0,32a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H88A8,8,0,0,1,80,160Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">LLM Ready</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">No heavy Word or PowerPoint blobs. Plain text that any AI tool can read and edit directly — Claude, Cursor, your own scripts. Built for the way people work now.</p>
-      </div>
-      <div class="bg-white border border-border rounded-2xl p-7 shadow-sm">
-        <svg class="w-7 h-7 mb-3 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M232,80,208,96v24a96,96,0,0,1-96,96H24a8,8,0,0,1-6.25-13L104,99.52V76.89c0-28.77,23-52.75,51.74-52.89a52,52,0,0,1,50.59,38.89Z" opacity="0.2"/><path d="M176,68a12,12,0,1,1-12-12A12,12,0,0,1,176,68Zm64,12a8,8,0,0,1-3.56,6.66L216,100.28V120A104.11,104.11,0,0,1,112,224H24a16,16,0,0,1-12.49-26l.1-.12L96,96.63V76.89C96,43.47,122.79,16.16,155.71,16H156a60,60,0,0,1,57.21,41.86l23.23,15.48A8,8,0,0,1,240,80Zm-22.42,0L201.9,69.54a8,8,0,0,1-3.31-4.64A44,44,0,0,0,156,32h-.22C131.64,32.12,112,52.25,112,76.89V99.52a8,8,0,0,1-1.85,5.13L24,208h26.9l70.94-85.12a8,8,0,1,1,12.29,10.24L71.75,208H112a88.1,88.1,0,0,0,88-88V96a8,8,0,0,1,3.56-6.66Z"/></svg>
-        <h3 class="text-[1.1rem] mb-2 text-text">A Smart Little Bird</h3>
-        <p class="text-[0.95rem] text-text-secondary leading-relaxed">A friendly AI assistant that lives in your workspace. It can read your files, help you draft, organize your thoughts, and answer questions — like a companion that quietly knows the whole project.</p>
+      <div style="text-align: center; padding: 1.5rem 1rem;">
+        <div style="font-size: 1.75rem; margin-bottom: 0.5rem;">&#128279;</div>
+        <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0 0 0.35rem;">MCP + API</h3>
+        <p style="font-size: 0.8rem; color: #666; line-height: 1.5; margin: 0;">Connect from Claude Desktop or Claude Code. Export your data as CSV or JSON anytime.</p>
       </div>
     </div>
   </section>
 
-  <section class="max-w-[1100px] mx-auto px-6 pb-12 sm:px-8">
-    <h2 class="font-heading text-[1.35rem] text-center mb-6 text-text-body font-semibold">And a few more things you might like</h2>
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,88H152V32Z" opacity="0.2"/><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-32-80a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,136Zm0,32a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,168Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Markdown-Based</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Write in plain markdown with live preview. No proprietary formats — your files are always yours.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,128a88,88,0,1,1-88-88A88,88,0,0,1,216,128Z" opacity="0.2"/><path d="M136,80v43.47l36.12,21.67a8,8,0,0,1-8.24,13.72l-40-24A8,8,0,0,1,120,128V80a8,8,0,0,1,16,0Zm-8-48A95.44,95.44,0,0,0,60.08,60.15C52.81,67.51,46.35,74.59,40,82V64a8,8,0,0,0-16,0v40a8,8,0,0,0,8,8H72a8,8,0,0,0,0-16H49c7.15-8.42,14.27-16.35,22.39-24.57a80,80,0,1,1,1.66,114.75,8,8,0,1,0-11,11.64A96,96,0,1,0,128,32Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Never Lose a Thing</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Auto-saves your edits continuously so your latest work is always there without manual saving.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,48H56a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H200a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48ZM152,152H104V104h48Z" opacity="0.2"/><path d="M152,96H104a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V104A8,8,0,0,0,152,96Zm-8,48H112V112h32Zm88,0H216V112h16a8,8,0,0,0,0-16H216V56a16,16,0,0,0-16-16H160V24a8,8,0,0,0-16,0V40H112V24a8,8,0,0,0-16,0V40H56A16,16,0,0,0,40,56V96H24a8,8,0,0,0,0,16H40v32H24a8,8,0,0,0,0,16H40v40a16,16,0,0,0,16,16H96v16a8,8,0,0,0,16,0V216h32v16a8,8,0,0,0,16,0V216h40a16,16,0,0,0,16-16V160h16a8,8,0,0,0,0-16Zm-32,56H56V56H200v95.87s0,.09,0,.13,0,.09,0,.13V200Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Claude Integration</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Connect via MCP from Claude Desktop or Cursor. Manage your projects from any compatible tool.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M136,108A52,52,0,1,1,84,56,52,52,0,0,1,136,108Z" opacity="0.2"/><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Teams</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Invite collaborators with roles — owners, editors, or viewers. Everyone gets the right level of access.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,192H48a8,8,0,0,1-6.88-12C47.71,168.6,56,139.81,56,104a72,72,0,0,1,144,0c0,35.82,8.3,64.6,14.9,76A8,8,0,0,1,208,192Z" opacity="0.2"/><path d="M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Notifications</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Know when something changes. File updates, new collaborators, and incoming emails — all surfaced quietly.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64a24,24,0,1,1-24-24A24,24,0,0,1,224,64Z" opacity="0.2"/><path d="M232,64a32,32,0,1,0-40,31v17a8,8,0,0,1-8,8H96a23.84,23.84,0,0,0-8,1.38V95a32,32,0,1,0-16,0v66a32,32,0,1,0,16,0V144a8,8,0,0,1,8-8h88a24,24,0,0,0,24-24V95A32.06,32.06,0,0,0,232,64ZM64,64A16,16,0,1,1,80,80,16,16,0,0,1,64,64ZM96,192a16,16,0,1,1-16-16A16,16,0,0,1,96,192ZM200,80a16,16,0,1,1,16-16A16,16,0,0,1,200,80Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Live Collaboration</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Everyone sees updates as they happen, so teams can write together without sending files around.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M168,144a40,40,0,1,1-40-40A40,40,0,0,1,168,144ZM64,56A32,32,0,1,0,96,88,32,32,0,0,0,64,56Zm128,0a32,32,0,1,0,32,32A32,32,0,0,0,192,56Z" opacity="0.2"/><path d="M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1,0-16,24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.85,8,57,57,0,0,0-98.15,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Write Together</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Invite your team or a friend. Everyone sees changes live — no emailing files back and forth.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,56l-96,88L32,56Z" opacity="0.2"/><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Email to Workspace</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Send an email to your workspace and the bird files it where it belongs.</p>
-      </div>
-      <div class="text-center px-4 py-5">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M80,88v80H32a8,8,0,0,1-8-8V96a8,8,0,0,1,8-8Z" opacity="0.2"/><path d="M155.51,24.81a8,8,0,0,0-8.42.88L77.25,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H77.25l69.84,54.31A8,8,0,0,0,160,224V32A8,8,0,0,0,155.51,24.81ZM32,96H72v64H32ZM144,207.64,88,164.09V91.91l56-43.55Zm54-106.08a40,40,0,0,1,0,52.88,8,8,0,0,1-12-10.58,24,24,0,0,0,0-31.72,8,8,0,0,1,12-10.58ZM248,128a79.9,79.9,0,0,1-20.37,53.34,8,8,0,0,1-11.92-10.67,64,64,0,0,0,0-85.33,8,8,0,1,1,11.92-10.67A79.83,79.83,0,0,1,248,128Z"/></svg>
-        <h3 class="text-[0.95rem] text-text font-semibold mb-1">Read Aloud</h3>
-        <p class="text-[0.85rem] text-text-secondary leading-relaxed">Hit play and hear your writing in natural speech. Great for catching mistakes or listening on the go.</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="faq" class="max-w-[800px] mx-auto px-6 pt-8 pb-12 sm:px-8">
-    <h2 class="font-heading text-[1.75rem] text-center mb-8 text-text">Under the Hood</h2>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">What is Peckmail?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">A collaborative writing workspace for markdown and CSV files. You write with a friendly little bird assistant, and everything syncs in real time.</p>
-    </div>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">What file formats are supported?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Markdown (<code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">.md</code>) with live preview, and CSV (<code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">.csv</code>) rendered as editable tables with sticky headers. Markdown supports syntax highlighting for code blocks.</p>
-    </div>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">How does saving work?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Edits save directly to workspace files and sync to connected collaborators in real time. You can keep writing without manual save steps.</p>
-    </div>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">How does the email integration work?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Each workspace gets a unique email address. Send content there and it gets folded into your project — creating files, updating documents, or organizing things based on what you sent. Configure it with an <code class="bg-surface-alt px-1.5 py-0.5 rounded text-[0.9em]">AGENTS.md</code> file.</p>
-    </div>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">Can I connect Claude Desktop or Cursor?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Peckmail includes a Model Context Protocol (MCP) server, so you can connect from Claude Desktop, Cursor, or any MCP-compatible client to manage your projects directly.</p>
-    </div>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">How does sharing work?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Invite people by email with role-based access — owners, editors, or viewers. You can also share individual files via public links. All changes sync instantly for everyone.</p>
-    </div>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">Can I use it for reading and research?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Absolutely. Create playlists of documents — reading lists, paper collections, study notes — and work through them at your own pace. The bird can summarize, annotate, and help you make sense of what you're reading.</p>
-    </div>
-    <div class="bg-white border border-border rounded-2xl px-8 py-6 mb-4 shadow-sm">
-      <h3 class="text-[1.05rem] mb-2 text-accent">Is my data private?</h3>
-      <p class="text-[0.95rem] text-text leading-relaxed">Yes. Projects are isolated per user and never shared unless you explicitly invite someone. Your files stay in your workspace and are always under your control.</p>
-    </div>
-  </section>
-
-  <section class="max-w-[800px] mx-auto px-6 pb-16 sm:px-8">
-    <h2 class="font-heading text-[1.35rem] text-center mb-6 text-text-body font-semibold">Coming Soon</h2>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <div class="text-center px-3 py-4 opacity-60">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,104v8a48,48,0,0,1-48,48H96a48,48,0,0,1-48-48v-8a49.28,49.28,0,0,1,8.51-27.3A51.92,51.92,0,0,1,76,32a52,52,0,0,1,43.83,24h16.34A52,52,0,0,1,180,32a51.92,51.92,0,0,1,19.49,44.7A49.28,49.28,0,0,1,208,104Z" opacity="0.2"/><path d="M208.3,75.68A51.71,51.71,0,0,0,180.36,32a52,52,0,0,0-43.08,24H118.72A52,52,0,0,0,75.64,32a51.71,51.71,0,0,0-27.94,43.68A56.09,56.09,0,0,0,40,104v8a56.06,56.06,0,0,0,48,55.43V192a8,8,0,0,0,16,0V167.43a55.94,55.94,0,0,0,24-10.54,55.94,55.94,0,0,0,24,10.54V192a8,8,0,0,0,16,0V167.43A56.06,56.06,0,0,0,216,112v-8A56.09,56.09,0,0,0,208.3,75.68Z"/></svg>
-        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">Workspace Exports</h3>
-        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Scheduled exports and downloadable workspace bundles.</p>
-      </div>
-      <div class="text-center px-3 py-4 opacity-60">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,104v8a88,88,0,0,1-88,88H40a8,8,0,0,1-8-8V104A88,88,0,0,1,216,104Z" opacity="0.2"/><path d="M200,176a8,8,0,0,1-8,8H152a8,8,0,0,1,0-16h40A8,8,0,0,1,200,176Zm-8-48H152a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm48-24v88a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V104A88.1,88.1,0,0,1,104,16h48A88.1,88.1,0,0,1,240,104Z"/></svg>
-        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">Webhooks</h3>
-        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Trigger actions when files change.</p>
-      </div>
-      <div class="text-center px-3 py-4 opacity-60">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M152,152H104V104h48Z" opacity="0.2"/><path d="M200,24H72A16,16,0,0,0,56,40V64H40A16,16,0,0,0,24,80v96a16,16,0,0,0,16,16H56v24a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V40A16,16,0,0,0,200,24Zm0,192H72V192h64a8,8,0,0,0,0-16H72V80H200ZM160,96H104a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h56a8,8,0,0,0,8-8V104A8,8,0,0,0,160,96Zm-8,48H112V112h40Z"/></svg>
-        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">Excel Support</h3>
-        <p class="text-[0.8rem] text-text-secondary leading-relaxed">Import and edit .xlsx spreadsheets.</p>
-      </div>
-      <div class="text-center px-3 py-4 opacity-60">
-        <svg class="w-5 h-5 mx-auto mb-2 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,24H48A16,16,0,0,0,32,40V216a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V40A16,16,0,0,0,208,24Z" opacity="0.2"/><path d="M208,24H48A16,16,0,0,0,32,40V216a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V40A16,16,0,0,0,208,24Zm0,192H48V40H208V216ZM80,96a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,96Zm0,32a8,8,0,0,1,8-8h80a8,8,0,0,1,0,16H88A8,8,0,0,1,80,128Zm0,32a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H88A8,8,0,0,1,80,160Z"/></svg>
-        <h3 class="text-[0.9rem] text-text font-semibold mb-0.5">PDF Support</h3>
-        <p class="text-[0.8rem] text-text-secondary leading-relaxed">View and annotate PDF documents.</p>
-      </div>
-    </div>
-  </section>
-
-  <footer class="bg-footer-bg text-footer-text pt-16 px-6 pb-10 sm:px-8">
-    <div class="max-w-[1100px] mx-auto flex flex-col gap-8 sm:flex-row sm:justify-between sm:items-start sm:gap-16">
-      <div>
-        <div class="font-heading text-xl font-bold text-white mb-2">Peckmail</div>
-        <div class="text-[0.85rem] text-footer-muted max-w-[280px] leading-relaxed">A calm writing workspace with a smart little bird.</div>
-        <a href="https://x.com/peckmail" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-[0.85rem] text-footer-muted hover:text-white transition-colors mt-3">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-          Follow @peckmail
-        </a>
-      </div>
-      <div class="flex gap-8 sm:gap-16">
+  <section style="max-width: 720px; margin: 0 auto; padding: 1rem 1.5rem 3rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 700; text-align: center; margin: 0 0 1.5rem;">How it works</h2>
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+      <div style="display: flex; gap: 1rem; align-items: flex-start; background: #fff; border: 1px solid #e5e5e5; border-radius: 0.75rem; padding: 1.25rem;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: #999; flex-shrink: 0; width: 1.5rem; text-align: center;">1</span>
         <div>
-          <h4 class="text-xs uppercase tracking-wider text-footer-muted mb-3 font-semibold">Product</h4>
-          <a href="/login" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Sign In</a>
-          <a href="/login" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Get Started</a>
-          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">FAQ</a>
-          <a href="/contact" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Contact</a>
+          <h3 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.25rem;">Create a workspace</h3>
+          <p style="font-size: 0.8rem; color: #666; line-height: 1.5; margin: 0;">Sign up and get a dedicated email address for your newsletter subscriptions.</p>
         </div>
+      </div>
+      <div style="display: flex; gap: 1rem; align-items: flex-start; background: #fff; border: 1px solid #e5e5e5; border-radius: 0.75rem; padding: 1.25rem;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: #999; flex-shrink: 0; width: 1.5rem; text-align: center;">2</span>
         <div>
-          <h4 class="text-xs uppercase tracking-wider text-footer-muted mb-3 font-semibold">Features</h4>
-          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Writing Assistant</a>
-          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Collaboration</a>
-          <a href="#faq" class="block text-[0.9rem] text-footer-text mb-2 hover:text-white transition-colors">Real-Time Sync</a>
+          <h3 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.25rem;">Forward your newsletters</h3>
+          <p style="font-size: 0.8rem; color: #666; line-height: 1.5; margin: 0;">Update your subscription emails or set up auto-forwarding. Every email lands in your inbox.</p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 1rem; align-items: flex-start; background: #fff; border: 1px solid #e5e5e5; border-radius: 0.75rem; padding: 1.25rem;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: #999; flex-shrink: 0; width: 1.5rem; text-align: center;">3</span>
+        <div>
+          <h3 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.25rem;">Read the highlights</h3>
+          <p style="font-size: 0.8rem; color: #666; line-height: 1.5; margin: 0;">AI processes each email. Check your dashboard for summaries, or chat with the assistant for deeper analysis.</p>
         </div>
       </div>
     </div>
-    <div class="max-w-[1100px] mx-auto mt-10 pt-6 border-t border-dark text-[0.8rem] text-footer-dim">&copy; 2026 Peckmail</div>
+  </section>
+
+  <section id="faq" style="max-width: 720px; margin: 0 auto; padding: 1rem 1.5rem 3rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 700; text-align: center; margin: 0 0 1.5rem;">FAQ</h2>
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <div style="background: #fff; border: 1px solid #e5e5e5; border-radius: 0.75rem; padding: 1.25rem;">
+        <h3 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.35rem;">What is Peckmail?</h3>
+        <p style="font-size: 0.8rem; color: #555; line-height: 1.6; margin: 0;">A smart inbox for your newsletter subscriptions. Forward emails to your workspace, and AI reads, summarizes, and organizes them for you.</p>
+      </div>
+      <div style="background: #fff; border: 1px solid #e5e5e5; border-radius: 0.75rem; padding: 1.25rem;">
+        <h3 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.35rem;">How does the email integration work?</h3>
+        <p style="font-size: 0.8rem; color: #555; line-height: 1.6; margin: 0;">Each workspace gets a unique email address. Forward newsletters there and they're automatically processed by the AI assistant.</p>
+      </div>
+      <div style="background: #fff; border: 1px solid #e5e5e5; border-radius: 0.75rem; padding: 1.25rem;">
+        <h3 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.35rem;">Can I connect Claude Desktop or Claude Code?</h3>
+        <p style="font-size: 0.8rem; color: #555; line-height: 1.6; margin: 0;">Yes. Peckmail includes an MCP server. Connect from Claude Desktop with OAuth, or use an API key with Claude Code.</p>
+      </div>
+      <div style="background: #fff; border: 1px solid #e5e5e5; border-radius: 0.75rem; padding: 1.25rem;">
+        <h3 style="font-size: 0.9rem; font-weight: 600; margin: 0 0 0.35rem;">Is my data private?</h3>
+        <p style="font-size: 0.8rem; color: #555; line-height: 1.6; margin: 0;">Yes. Workspaces are isolated per user and never shared unless you explicitly invite someone.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer style="border-top: 1px solid #e5e5e5; padding: 2rem 1.5rem; text-align: center;">
+    <div style="max-width: 720px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 0.8rem; color: #999;">&copy; 2026 Peckmail</span>
+      <div style="display: flex; gap: 1.25rem;">
+        <a href="/contact" style="font-size: 0.8rem; color: #666; text-decoration: none;">Contact</a>
+        <a href="https://x.com/peckmail" target="_blank" rel="noopener" style="font-size: 0.8rem; color: #666; text-decoration: none;">@peckmail</a>
+      </div>
+    </div>
   </footer>
 ${isDev ? `<script>
 (function(){var t;function c(){var ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=function(){if(t){location.reload()}};ws.onclose=function(){t=true;setTimeout(c,500)}}c()})();

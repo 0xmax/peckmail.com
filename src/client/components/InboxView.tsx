@@ -1,10 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { useIncomingEmails, useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
-import { Tray, Copy, Check } from "@phosphor-icons/react";
+import {
+  Tray,
+  Copy,
+  Check,
+  ArrowLeft,
+  CircleNotch,
+  WarningCircle,
+  CheckCircle,
+  EnvelopeSimple,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
+import { ScrollArea } from "@/components/ui/scroll-area.js";
+import { Separator } from "@/components/ui/separator.js";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
+import type { IncomingEmail } from "../store/types.js";
+
+interface EmailDetail extends IncomingEmail {
+  body_text: string | null;
+  body_html: string | null;
+}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -17,33 +35,206 @@ function formatDate(iso: string) {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString();
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatFullDate(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function StatusDot({ status, error }: { status: string; error: string | null }) {
+  if (status === "received") {
+    return <span className="block w-2.5 h-2.5 rounded-full bg-blue-500" />;
+  }
+  if (status === "processing") {
+    return <CircleNotch size={12} className="text-amber-500 animate-spin" />;
+  }
+  if (status === "failed") {
+    return <WarningCircle size={12} className="text-red-500" weight="fill" />;
+  }
+  return <CheckCircle size={12} className="text-green-500" weight="fill" />;
+}
+
+function EmailListItem({
+  email,
+  isSelected,
+  onSelect,
+}: {
+  email: IncomingEmail;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const isUnread = email.status === "received";
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors border-b border-border hover:bg-accent/50 ${
+        isSelected ? "bg-accent" : ""
+      }`}
+    >
+      <div className="mt-1.5 shrink-0">
+        <StatusDot status={email.status} error={email.error} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span
+            className={`text-sm truncate ${
+              isUnread ? "font-semibold text-foreground" : "text-foreground"
+            }`}
+          >
+            {email.from_address?.split("@")[0] || "Unknown"}
+          </span>
+          <span className="text-xs text-muted-foreground shrink-0 ml-auto">
+            {formatDate(email.created_at)}
+          </span>
+        </div>
+        <p
+          className={`text-sm truncate ${
+            isUnread ? "font-medium text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          {email.subject || "(no subject)"}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+function EmailDetailPanel({
+  email,
+  onBack,
+}: {
+  email: EmailDetail | null;
+  onBack: () => void;
+}) {
+  if (!email) return null;
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Detail header - mobile back button */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border md:hidden">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBack}>
+          <ArrowLeft size={18} />
+        </Button>
+        <span className="text-sm font-medium truncate">Back</span>
+      </div>
+
+      {/* Email header */}
+      <div className="px-6 py-4 border-b border-border">
+        <h2 className="text-lg font-semibold text-foreground mb-2">
+          {email.subject || "(no subject)"}
+        </h2>
+        <div className="flex items-center gap-2 text-sm">
+          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+            <span className="text-xs font-medium text-muted-foreground uppercase">
+              {(email.from_address || "?")[0]}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-foreground truncate">
+              {email.from_address}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {formatFullDate(email.created_at)}
+            </p>
+          </div>
+          <div className="shrink-0">
+            <StatusDot status={email.status} error={email.error} />
+          </div>
+        </div>
+        {email.status === "failed" && email.error && (
+          <div className="mt-2 text-xs text-red-500 bg-red-500/10 rounded px-2 py-1">
+            {email.error}
+          </div>
+        )}
+      </div>
+
+      {/* Email body */}
+      <ScrollArea className="flex-1">
+        <div className="px-6 py-4">
+          {email.body_html ? (
+            <div
+              className="prose prose-sm dark:prose-invert max-w-none text-foreground"
+              dangerouslySetInnerHTML={{ __html: email.body_html }}
+            />
+          ) : email.body_text ? (
+            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+              {email.body_text}
+            </pre>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              No email content available.
+            </p>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
 }
 
 export function InboxView() {
   const { session } = useAuth();
   const projectId = useProjectId();
   const emails = useIncomingEmails();
-  const [email, setEmail] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [projectEmail, setProjectEmail] = useState<string | null>(null);
+  const [emailLoading, setEmailLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [filter, setFilter] = useState<"all" | "unread">("all");
 
+  // Fetch project email address
   useEffect(() => {
     if (!session?.access_token) return;
-    setLoading(true);
+    setEmailLoading(true);
     fetch(`/api/projects/${projectId}/email`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then((r) => r.json())
-      .then((data) => setEmail(data.email ?? null))
-      .catch(() => setEmail(null))
-      .finally(() => setLoading(false));
+      .then((data) => setProjectEmail(data.email ?? null))
+      .catch(() => setProjectEmail(null))
+      .finally(() => setEmailLoading(false));
   }, [projectId, session?.access_token]);
 
+  // Fetch selected email detail
+  const loadEmailDetail = useCallback(
+    async (emailId: string) => {
+      setDetailLoading(true);
+      try {
+        const data = await api.get<{ email: EmailDetail }>(
+          `/api/projects/${projectId}/emails/${emailId}`
+        );
+        setSelectedEmail(data.email);
+      } catch {
+        setSelectedEmail(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [projectId]
+  );
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    loadEmailDetail(id);
+  };
+
   const copyEmail = () => {
-    if (!email) return;
-    navigator.clipboard.writeText(email);
+    if (!projectEmail) return;
+    navigator.clipboard.writeText(projectEmail);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -59,90 +250,133 @@ export function InboxView() {
     }
   };
 
+  const filteredEmails =
+    filter === "unread"
+      ? emails.filter((e) => e.status === "received")
+      : emails;
+
+  const unreadCount = emails.filter((e) => e.status === "received").length;
+
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-foreground">Inbox</h1>
-          {email && (
-            <Button variant="outline" size="sm" onClick={sendTestEmail} disabled={sendingTest}>
-              {sendingTest ? "Sending..." : "Send test email"}
-            </Button>
-          )}
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Top bar with email address + actions */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-border shrink-0">
+        <h1 className="text-sm font-semibold text-foreground shrink-0">Inbox</h1>
+        <div className="flex-1 min-w-0">
+          {emailLoading ? (
+            <Skeleton className="h-5 w-48" />
+          ) : projectEmail ? (
+            <button
+              onClick={copyEmail}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <code className="font-mono truncate">{projectEmail}</code>
+              {copied ? (
+                <Check size={12} className="text-green-500 shrink-0" />
+              ) : (
+                <Copy size={12} className="shrink-0" />
+              )}
+            </button>
+          ) : null}
+        </div>
+        {projectEmail && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-7 shrink-0"
+            onClick={sendTestEmail}
+            disabled={sendingTest}
+          >
+            {sendingTest ? "Sending..." : "Send test"}
+          </Button>
+        )}
+      </div>
+
+      {/* Main content: list + detail split */}
+      <div className="flex-1 flex min-h-0">
+        {/* Email list panel */}
+        <div
+          className={`w-full md:w-80 lg:w-96 border-r border-border flex flex-col min-h-0 shrink-0 ${
+            selectedId ? "hidden md:flex" : "flex"
+          }`}
+        >
+          {/* Filter tabs */}
+          <div className="px-3 py-2 border-b border-border">
+            <Tabs
+              value={filter}
+              onValueChange={(v) => setFilter(v as "all" | "unread")}
+            >
+              <TabsList className="h-7">
+                <TabsTrigger value="all" className="text-xs px-3 h-6">
+                  All mail
+                </TabsTrigger>
+                <TabsTrigger value="unread" className="text-xs px-3 h-6">
+                  Unread{unreadCount > 0 ? ` (${unreadCount})` : ""}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Email list */}
+          <ScrollArea className="flex-1">
+            {filteredEmails.length === 0 ? (
+              <div className="text-center py-16 px-4">
+                <Tray
+                  size={40}
+                  weight="duotone"
+                  className="mx-auto mb-3 text-muted-foreground"
+                />
+                <p className="text-muted-foreground text-sm">
+                  {filter === "unread" ? "No unread emails" : "No emails yet"}
+                </p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  Forward a newsletter to get started.
+                </p>
+              </div>
+            ) : (
+              filteredEmails.map((e) => (
+                <EmailListItem
+                  key={e.id}
+                  email={e}
+                  isSelected={selectedId === e.id}
+                  onSelect={() => handleSelect(e.id)}
+                />
+              ))
+            )}
+          </ScrollArea>
         </div>
 
-        {/* Project email address */}
-        {loading ? (
-          <Skeleton className="h-10 w-full" />
-        ) : email ? (
-          <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
-            <code className="flex-1 text-sm font-mono text-foreground select-all truncate">
-              {email}
-            </code>
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={copyEmail}>
-              {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
-            </Button>
-          </div>
-        ) : null}
-
-        <p className="text-xs text-muted-foreground">
-          Forward newsletters to this address. The AI assistant will process incoming emails automatically.
-        </p>
-
-        {/* Email list */}
-        {emails.length === 0 ? (
-          <div className="text-center py-12">
-            <Tray size={40} weight="duotone" className="mx-auto mb-3 text-muted-foreground" />
-            <p className="text-muted-foreground text-sm">No emails yet</p>
-            <p className="text-muted-foreground text-xs mt-1">
-              Forward a newsletter to get started.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {emails.map((e) => (
-              <div
-                key={e.id}
-                className="bg-card border border-border rounded-lg px-4 py-3 flex items-start gap-3"
-              >
-                <div
-                  className="mt-1.5 shrink-0"
-                  title={
-                    e.status === "failed"
-                      ? `Error: ${e.error}`
-                      : e.status === "processed"
-                        ? "Processed"
-                        : e.status === "processing"
-                          ? "Processing..."
-                          : "Received"
-                  }
-                >
-                  {e.status === "received" ? (
-                    <span className="block w-2 h-2 rounded-full bg-blue-400" />
-                  ) : e.status === "processing" ? (
-                    <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  ) : e.status === "failed" ? (
-                    <span className="block w-2 h-2 rounded-full bg-red-400" />
-                  ) : (
-                    <span className="block w-2 h-2 rounded-full bg-green-400" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground truncate">
-                    {e.subject || "(no subject)"}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {e.from_address}
-                  </p>
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0 mt-0.5">
-                  {formatDate(e.created_at)}
-                </span>
+        {/* Detail panel */}
+        <div
+          className={`flex-1 flex flex-col min-h-0 min-w-0 ${
+            selectedId ? "flex" : "hidden md:flex"
+          }`}
+        >
+          {detailLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <CircleNotch size={24} className="text-muted-foreground animate-spin" />
+            </div>
+          ) : selectedEmail ? (
+            <EmailDetailPanel
+              email={selectedEmail}
+              onBack={() => {
+                setSelectedId(null);
+                setSelectedEmail(null);
+              }}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <EnvelopeSimple
+                  size={48}
+                  weight="duotone"
+                  className="mx-auto mb-3"
+                />
+                <p className="text-sm">Select an email to read</p>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
