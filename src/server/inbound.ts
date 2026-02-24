@@ -10,6 +10,7 @@ import {
   upsertProjectEmailDomain,
   updateIncomingEmailContent,
   updateEmailStatus,
+  type ProjectIncomingEmail,
 } from "./db.js";
 import { runAgentHeadless } from "./chat.js";
 import { broadcast } from "./ws.js";
@@ -28,7 +29,7 @@ const anthropic = process.env.ANTHROPIC_API_KEY
 
 const WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET;
 const INBOUND_AUTO_REPLY_ENABLED = process.env.INBOUND_AUTO_REPLY_ENABLED === "true";
-const EMAIL_TAGGING_MODEL = process.env.EMAIL_TAGGING_MODEL || "claude-3-5-haiku-latest";
+const EMAIL_TAGGING_MODEL = process.env.EMAIL_TAGGING_MODEL || "claude-sonnet-4-5-20250929";
 const EMAIL_SUMMARY_MODEL = process.env.EMAIL_SUMMARY_MODEL || "claude-3-6-sonnet-latest";
 const MAX_TAGGING_INPUT_CHARS = 12000;
 const MAX_SUMMARY_INPUT_CHARS = 16000;
@@ -677,4 +678,32 @@ function decodeBody(body: string, headers: string): string {
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Re-run tag classification on an existing email.
+ * Converts a ProjectIncomingEmail to the shape classifyIncomingEmailTags expects.
+ */
+export async function reprocessEmailTags(
+  email: ProjectIncomingEmail
+): Promise<Array<{ id: string; name: string; color: string }>> {
+  const record: InboundEmailRecord = {
+    id: email.id,
+    project_id: email.project_id,
+    project_name: "",
+    from_address: email.from_address,
+    from_domain: email.from_domain,
+    to_address: email.to_address ?? "",
+    subject: email.subject ?? "",
+    body_text: email.body_text ?? "",
+    body_html: email.body_html ?? "",
+    raw_email: email.raw_email ?? "",
+    summary: email.summary,
+    resend_email_id: email.resend_email_id,
+    date: email.created_at,
+    cc: [],
+    reply_to: "",
+    headers: email.headers ?? {},
+  };
+  return classifyIncomingEmailTags(record);
 }

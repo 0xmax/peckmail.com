@@ -32,6 +32,7 @@ import {
   createProjectEmailTag,
   updateProjectEmailTag,
   softDeleteProjectEmailTag,
+  getProjectIncomingEmail,
   listProjectEmailDomains,
   updateProjectEmailDomain,
   setIncomingEmailReadAt,
@@ -40,7 +41,7 @@ import {
   setActiveProjectId,
   supabaseAdmin,
 } from "./db.js";
-import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail } from "./inbound.js";
+import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail, reprocessEmailTags } from "./inbound.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
@@ -878,6 +879,48 @@ api.delete("/projects/:id/tags/:tagId", async (c) => {
     return c.json({ ok: true });
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to delete tag" }, 500);
+  }
+});
+
+// Reprocess tags for a single email
+api.post("/projects/:id/emails/:emailId/reprocess-tags", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const emailId = c.req.param("emailId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can reprocess tags" }, 403);
+  }
+  try {
+    const email = await getProjectIncomingEmail(projectId, emailId);
+    if (!email) return c.json({ error: "Email not found" }, 404);
+    const tags = await reprocessEmailTags(email);
+    return c.json({ tags });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to reprocess tags" }, 500);
+  }
+});
+
+// Reprocess tags for all emails in a project
+api.post("/projects/:id/reprocess-tags", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can reprocess tags" }, 403);
+  }
+  try {
+    const emails = await listProjectIncomingEmailSummaries(projectId, 200);
+    let processed = 0;
+    for (const summary of emails) {
+      const email = await getProjectIncomingEmail(projectId, summary.id);
+      if (!email) continue;
+      await reprocessEmailTags(email);
+      processed++;
+    }
+    return c.json({ ok: true, processed });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to reprocess tags" }, 500);
   }
 });
 

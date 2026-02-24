@@ -4,7 +4,7 @@ import {
   Tray,
   ChatCircle,
   Database,
-  UsersThree,
+  Wrench,
   CaretUpDown,
   Check,
   Plus,
@@ -52,7 +52,7 @@ const NAV_ITEMS: { id: NavItem; label: string; icon: typeof House }[] = [
   { id: "inbox", label: "Inbox", icon: Tray },
   { id: "chat", label: "Chat", icon: ChatCircle },
   { id: "data", label: "Data", icon: Database },
-  { id: "workspace", label: "Workspace", icon: UsersThree },
+  { id: "workspace", label: "Workspace", icon: Wrench },
 ];
 
 export function AppSidebar({

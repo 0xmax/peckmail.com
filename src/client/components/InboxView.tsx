@@ -108,6 +108,26 @@ function EmailListItem({
         >
           {email.subject || "(no subject)"}
         </p>
+        {email.tags && email.tags.length > 0 && (
+          <div className="flex items-center gap-1 mt-1 flex-wrap">
+            {email.tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full"
+                style={{
+                  backgroundColor: tag.color + "20",
+                  color: tag.color,
+                }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: tag.color }}
+                />
+                {tag.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </button>
   );
@@ -141,6 +161,26 @@ function EmailDetailPanel({
           <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
             {email.summary}
           </p>
+        )}
+        {email.tags && email.tags.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            {email.tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+                style={{
+                  backgroundColor: tag.color + "20",
+                  color: tag.color,
+                }}
+              >
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: tag.color }}
+                />
+                {tag.name}
+              </span>
+            ))}
+          </div>
         )}
         <div className="flex items-center gap-2 text-sm">
           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
