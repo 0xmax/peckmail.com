@@ -534,7 +534,7 @@ async function classifyIncomingEmailTags(
     ? parsed.matching_tag_ids.filter((id: unknown): id is string => typeof id === "string")
     : [];
   const allowedIds = new Set(tagPayload.map((tag) => tag.id));
-  const selectedIds = candidateIds.filter((id) => allowedIds.has(id));
+  const selectedIds = candidateIds.filter((id: string) => allowedIds.has(id));
   return setIncomingEmailTags(record.project_id, record.id, selectedIds);
 }
 

@@ -469,6 +469,16 @@ export function DashboardView() {
       <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
 
+        {/* Hero row: recent emails + volume chart */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-3">
+            <VolumeChart emails={emails} />
+          </div>
+          <div className="lg:col-span-2">
+            <RecentEmails emails={emails} />
+          </div>
+        </div>
+
         {/* KPI row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
@@ -494,17 +504,9 @@ export function DashboardView() {
           />
         </div>
 
-        {/* Charts row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <VolumeChart emails={emails} />
-          <TagBarChart emails={emails} />
-        </div>
-
         {/* Bottom row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <RecentEmails emails={emails} />
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <TagBarChart emails={emails} />
           <ActivityGrid emails={emails} />
         </div>
       </div>
