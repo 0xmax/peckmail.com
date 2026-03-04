@@ -9,8 +9,30 @@ import {
   Copy,
   Check,
   CircleNotch,
+  Globe,
+  ArrowsDownUp,
+  XCircle,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
+import { Badge } from "@/components/ui/badge.js";
+import { Button } from "@/components/ui/button.js";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.js";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.js";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import {
   ChartContainer,
   ChartTooltip,
@@ -36,6 +58,67 @@ import { api } from "../lib/api.js";
 import { Logo } from "./Logo.js";
 import type { NavItem } from "./AppSidebar.js";
 
+// --- Countries ---
+
+const COUNTRIES: Record<string, { name: string; flag: string }> = {
+  US: { name: "United States", flag: "🇺🇸" },
+  GB: { name: "United Kingdom", flag: "🇬🇧" },
+  CA: { name: "Canada", flag: "🇨🇦" },
+  AU: { name: "Australia", flag: "🇦🇺" },
+  DE: { name: "Germany", flag: "🇩🇪" },
+  FR: { name: "France", flag: "🇫🇷" },
+  IT: { name: "Italy", flag: "🇮🇹" },
+  ES: { name: "Spain", flag: "🇪🇸" },
+  NL: { name: "Netherlands", flag: "🇳🇱" },
+  SE: { name: "Sweden", flag: "🇸🇪" },
+  NO: { name: "Norway", flag: "🇳🇴" },
+  DK: { name: "Denmark", flag: "🇩🇰" },
+  FI: { name: "Finland", flag: "🇫🇮" },
+  CH: { name: "Switzerland", flag: "🇨🇭" },
+  AT: { name: "Austria", flag: "🇦🇹" },
+  BE: { name: "Belgium", flag: "🇧🇪" },
+  PT: { name: "Portugal", flag: "🇵🇹" },
+  IE: { name: "Ireland", flag: "🇮🇪" },
+  PL: { name: "Poland", flag: "🇵🇱" },
+  CZ: { name: "Czech Republic", flag: "🇨🇿" },
+  JP: { name: "Japan", flag: "🇯🇵" },
+  KR: { name: "South Korea", flag: "🇰🇷" },
+  CN: { name: "China", flag: "🇨🇳" },
+  IN: { name: "India", flag: "🇮🇳" },
+  SG: { name: "Singapore", flag: "🇸🇬" },
+  HK: { name: "Hong Kong", flag: "🇭🇰" },
+  TW: { name: "Taiwan", flag: "🇹🇼" },
+  IL: { name: "Israel", flag: "🇮🇱" },
+  AE: { name: "UAE", flag: "🇦🇪" },
+  SA: { name: "Saudi Arabia", flag: "🇸🇦" },
+  BR: { name: "Brazil", flag: "🇧🇷" },
+  MX: { name: "Mexico", flag: "🇲🇽" },
+  AR: { name: "Argentina", flag: "🇦🇷" },
+  CO: { name: "Colombia", flag: "🇨🇴" },
+  CL: { name: "Chile", flag: "🇨🇱" },
+  ZA: { name: "South Africa", flag: "🇿🇦" },
+  NG: { name: "Nigeria", flag: "🇳🇬" },
+  EG: { name: "Egypt", flag: "🇪🇬" },
+  KE: { name: "Kenya", flag: "🇰🇪" },
+  NZ: { name: "New Zealand", flag: "🇳🇿" },
+  RU: { name: "Russia", flag: "🇷🇺" },
+  UA: { name: "Ukraine", flag: "🇺🇦" },
+  TR: { name: "Turkey", flag: "🇹🇷" },
+  TH: { name: "Thailand", flag: "🇹🇭" },
+  VN: { name: "Vietnam", flag: "🇻🇳" },
+  MY: { name: "Malaysia", flag: "🇲🇾" },
+  PH: { name: "Philippines", flag: "🇵🇭" },
+  ID: { name: "Indonesia", flag: "🇮🇩" },
+  RO: { name: "Romania", flag: "🇷🇴" },
+  GR: { name: "Greece", flag: "🇬🇷" },
+  HU: { name: "Hungary", flag: "🇭🇺" },
+};
+
+function countryLabel(code: string): string {
+  const c = COUNTRIES[code];
+  return c ? `${c.flag} ${c.name}` : code;
+}
+
 // --- Types ---
 
 interface DashboardStats {
@@ -54,22 +137,19 @@ interface DashboardStats {
     summary: string | null;
     tags: { id: string; name: string; color: string }[];
   }[];
+  countries: string[];
 }
 
 // --- Date range ---
 
-type DateRange = "7d" | "14d" | "30d" | "90d";
+type DateRange = "7" | "14" | "30" | "90";
 
 const DATE_RANGES: { value: DateRange; label: string }[] = [
-  { value: "7d", label: "7 days" },
-  { value: "14d", label: "14 days" },
-  { value: "30d", label: "30 days" },
-  { value: "90d", label: "90 days" },
+  { value: "7", label: "7D" },
+  { value: "14", label: "14D" },
+  { value: "30", label: "30D" },
+  { value: "90", label: "90D" },
 ];
-
-function daysFromRange(range: DateRange): number {
-  return parseInt(range);
-}
 
 // --- Helpers ---
 
@@ -99,32 +179,6 @@ function weekdayLabel(dateStr: string) {
 
 // --- Components ---
 
-function DateRangeSelector({
-  value,
-  onChange,
-}: {
-  value: DateRange;
-  onChange: (v: DateRange) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-      {DATE_RANGES.map((r) => (
-        <button
-          key={r.value}
-          onClick={() => onChange(r.value)}
-          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-            value === r.value
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {r.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function KpiCard({
   label,
   value,
@@ -137,22 +191,22 @@ function KpiCard({
   subtitle?: string;
 }) {
   return (
-    <Card>
-      <CardContent className="p-4">
+    <Card className="border-border/60 shadow-sm overflow-hidden group">
+      <CardContent className="p-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold text-foreground tabular-nums mt-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{label}</p>
+            <p className="text-2xl font-bold text-foreground tabular-nums mt-1 tracking-tight">
               {value}
             </p>
             {subtitle && (
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-[10px] font-medium text-muted-foreground/40 mt-1 uppercase tracking-wide">
                 {subtitle}
               </p>
             )}
           </div>
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Icon size={18} className="text-primary" />
+          <div className="w-10 h-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+            <Icon size={20} className="text-primary opacity-80" />
           </div>
         </div>
       </CardContent>
@@ -191,14 +245,14 @@ function TagPieChart({
 
   if (data.length === 0) {
     return (
-      <Card className="flex flex-col">
-        <CardContent className="p-4 flex-1 flex flex-col">
-          <h3 className="text-sm font-semibold text-foreground">
-            Distribution by tag
+      <Card className="flex flex-col border-border/60">
+        <CardContent className="p-5 flex-1 flex flex-col">
+          <h3 className="text-sm font-bold text-foreground">
+            Distribution
           </h3>
-          <p className="text-xs text-muted-foreground mb-4">Email breakdown</p>
+          <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-4">By tag</p>
           <div className="flex items-center justify-center flex-1 text-muted-foreground">
-            <p className="text-sm">No tagged emails yet</p>
+            <p className="text-xs italic opacity-40 uppercase tracking-widest">No tagged emails</p>
           </div>
         </CardContent>
       </Card>
@@ -206,16 +260,16 @@ function TagPieChart({
   }
 
   return (
-    <Card className="flex flex-col">
-      <CardContent className="p-4 flex-1 flex flex-col">
-        <h3 className="text-sm font-semibold text-foreground">
-          Distribution by tag
+    <Card className="flex flex-col border-border/60">
+      <CardContent className="p-5 flex-1 flex flex-col">
+        <h3 className="text-sm font-bold text-foreground">
+          Distribution
         </h3>
-        <p className="text-xs text-muted-foreground mb-2">Email breakdown</p>
-        <div className="flex-1 flex items-center gap-4">
+        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-2">By tag</p>
+        <div className="flex-1 flex items-center gap-6">
           <ChartContainer
             config={config}
-            className="aspect-square w-[160px] shrink-0"
+            className="aspect-square w-[140px] shrink-0"
           >
             <PieChart>
               <ChartTooltip
@@ -225,8 +279,8 @@ function TagPieChart({
                 data={data}
                 dataKey="count"
                 nameKey="name"
-                innerRadius={48}
-                outerRadius={72}
+                innerRadius={44}
+                outerRadius={66}
                 strokeWidth={2}
                 stroke="var(--color-background)"
               >
@@ -246,16 +300,16 @@ function TagPieChart({
                           <tspan
                             x={viewBox.cx}
                             y={viewBox.cy}
-                            className="fill-foreground text-2xl font-bold"
+                            className="fill-foreground text-xl font-bold tracking-tight"
                           >
                             {total}
                           </tspan>
                           <tspan
                             x={viewBox.cx}
-                            y={(viewBox.cy || 0) + 18}
-                            className="fill-muted-foreground text-[10px]"
+                            y={(viewBox.cy || 0) + 16}
+                            className="fill-muted-foreground text-[8px] font-bold uppercase tracking-widest opacity-40"
                           >
-                            emails
+                            total
                           </tspan>
                         </text>
                       );
@@ -265,20 +319,17 @@ function TagPieChart({
               </Pie>
             </PieChart>
           </ChartContainer>
-          <div className="flex-1 space-y-1.5 min-w-0">
-            {data.map((t) => (
+          <div className="flex-1 space-y-2 min-w-0">
+            {data.slice(0, 6).map((t) => (
               <div key={t.id} className="flex items-center gap-2">
                 <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: t.color }}
                 />
-                <span className="text-xs text-foreground truncate flex-1">
+                <span className="text-[11px] font-medium text-foreground truncate flex-1">
                   {t.name}
                 </span>
-                <span className="text-xs tabular-nums text-muted-foreground shrink-0">
-                  {t.count}
-                </span>
-                <span className="text-[10px] tabular-nums text-muted-foreground shrink-0 w-8 text-right">
+                <span className="text-[11px] tabular-nums font-bold text-muted-foreground shrink-0 w-8 text-right">
                   {total > 0 ? Math.round((t.count / total) * 100) : 0}%
                 </span>
               </div>
@@ -297,7 +348,6 @@ function StackedTagBarChart({
   tagDaily: DashboardStats["tag_daily"];
   days: number;
 }) {
-  // Derive unique tags from tag_daily
   const tagIds = useMemo(() => {
     const seen = new Map<string, { id: string; name: string; color: string }>();
     for (const row of tagDaily) {
@@ -308,7 +358,6 @@ function StackedTagBarChart({
     return Array.from(seen.values());
   }, [tagDaily]);
 
-  // Build bucketed data from tag_daily rows
   const data = useMemo(() => {
     const now = new Date();
     const bucketByWeek = days > 30;
@@ -380,14 +429,14 @@ function StackedTagBarChart({
 
   if (allKeys.length === 0) {
     return (
-      <Card>
-        <CardContent className="p-4">
-          <h3 className="text-sm font-semibold text-foreground">
-            Emails over time
+      <Card className="border-border/60">
+        <CardContent className="p-5">
+          <h3 className="text-sm font-bold text-foreground">
+            Activity
           </h3>
-          <p className="text-xs text-muted-foreground mb-4">By tag</p>
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <p className="text-sm">No emails in this period</p>
+          <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-4">By tag</p>
+          <div className="flex items-center justify-center py-24 text-muted-foreground">
+            <p className="text-xs italic opacity-40 uppercase tracking-widest">No emails in this period</p>
           </div>
         </CardContent>
       </Card>
@@ -395,31 +444,34 @@ function StackedTagBarChart({
   }
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <h3 className="text-sm font-semibold text-foreground">
-          Emails over time
+    <Card className="border-border/60">
+      <CardContent className="p-5">
+        <h3 className="text-sm font-bold text-foreground">
+          Activity
         </h3>
-        <p className="text-xs text-muted-foreground mb-4">Stacked by tag</p>
+        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-6">Emails stacked by tag</p>
         <ChartContainer config={config} className="aspect-[4/1] w-full">
           <BarChart
             data={data}
             margin={{ top: 4, right: 4, bottom: 0, left: -20 }}
           >
-            <CartesianGrid vertical={false} />
+            <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
             <XAxis
               dataKey="label"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
               interval="preserveStartEnd"
-              fontSize={11}
+              fontSize={10}
+              className="font-bold opacity-60 uppercase tracking-tighter"
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={4}
               allowDecimals={false}
+              fontSize={10}
+              className="font-bold opacity-40"
             />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />
@@ -430,6 +482,7 @@ function StackedTagBarChart({
                 stackId="tags"
                 fill={`var(--color-${key})`}
                 radius={0}
+                isAnimationActive={false}
               />
             ))}
           </BarChart>
@@ -493,18 +546,18 @@ function ActivityGrid({
   const dayLabels = ["", "Mon", "", "Wed", "", "Fri", ""];
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-foreground">Activity</h3>
-          <p className="text-xs text-muted-foreground">Last 7 weeks</p>
+    <Card className="border-border/60">
+      <CardContent className="p-5">
+        <div className="mb-6">
+          <h3 className="text-sm font-bold text-foreground">Density</h3>
+          <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60">Daily Volume</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1.5">
           <div className="flex flex-col gap-1 pr-1">
             {dayLabels.map((l, i) => (
               <div
                 key={i}
-                className="h-3 text-[9px] leading-3 text-muted-foreground flex items-center"
+                className="h-3 text-[8px] font-bold uppercase tracking-tighter leading-3 text-muted-foreground/40 flex items-center"
               >
                 {l}
               </div>
@@ -515,7 +568,7 @@ function ActivityGrid({
               {week.map((day) => (
                 <div
                   key={day.date}
-                  className="w-3 h-3 rounded-sm"
+                  className="w-3 h-3 rounded-[2px] border-[0.5px] border-border/5"
                   style={{ backgroundColor: intensity(day.count) }}
                   title={`${dayLabel(day.date)}: ${day.count < 0 ? "\u2014" : day.count} email${day.count === 1 ? "" : "s"}`}
                 />
@@ -536,50 +589,50 @@ function TopDomains({
   onNavigate: (item: NavItem, path?: string) => void;
 }) {
   return (
-    <Card className="flex flex-col">
-      <CardContent className="p-4 flex-1 flex flex-col">
+    <Card className="flex flex-col border-border/60">
+      <CardContent className="p-5 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-sm font-semibold text-foreground">
-              Top senders
+            <h3 className="text-sm font-bold text-foreground">
+              Senders
             </h3>
-            <p className="text-xs text-muted-foreground">By domain</p>
+            <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60">Top Domains</p>
           </div>
           <button
             onClick={() => onNavigate("senders")}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            className="h-6 px-2 rounded-md bg-muted/50 hover:bg-muted text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all flex items-center gap-1.5"
           >
-            View all
-            <ArrowRight size={12} />
+            All
+            <ArrowRight size={10} weight="bold" />
           </button>
         </div>
         {domains.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <p className="text-sm">No senders yet</p>
+            <p className="text-xs italic opacity-40 uppercase tracking-widest">No activity</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {domains.map((d) => (
               <button
                 key={d.domain}
                 onClick={() => onNavigate("senders")}
-                className="flex items-center gap-3 w-full text-left rounded-md px-2 py-1.5 -mx-2 hover:bg-muted/50 transition-colors group"
+                className="flex items-center gap-3 w-full text-left rounded-lg px-2 py-2 hover:bg-muted/50 transition-colors group"
               >
-                <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
                   <GlobeSimple
                     size={14}
-                    className="text-primary"
+                    className="text-primary opacity-70"
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                  <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                     {d.domain}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[10px] font-medium text-muted-foreground/60">
                     {formatRelative(d.latest_date)}
                   </p>
                 </div>
-                <span className="text-xs tabular-nums font-medium text-muted-foreground shrink-0">
+                <span className="text-sm tabular-nums font-bold text-foreground shrink-0">
                   {d.count}
                 </span>
               </button>
@@ -599,18 +652,21 @@ function RecentEmails({
   onNavigate: (item: NavItem, path?: string) => void;
 }) {
   return (
-    <Card className="flex flex-col">
-      <CardContent className="p-4 flex-1 flex flex-col">
+    <Card className="flex flex-col border-border/60">
+      <CardContent className="p-5 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-foreground">
-            Recent emails
-          </h3>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">
+              Recent
+            </h3>
+            <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60">Incoming Stream</p>
+          </div>
           <button
             onClick={() => onNavigate("inbox")}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            className="h-6 px-2 rounded-md bg-muted/50 hover:bg-muted text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all flex items-center gap-1.5"
           >
-            View all
-            <ArrowRight size={12} />
+            Inbox
+            <ArrowRight size={10} weight="bold" />
           </button>
         </div>
         {emails.length === 0 ? (
@@ -618,12 +674,9 @@ function RecentEmails({
             <Tray
               size={32}
               weight="duotone"
-              className="mx-auto mb-2 text-muted-foreground"
+              className="mx-auto mb-2 text-muted-foreground opacity-20"
             />
-            <p className="text-sm text-muted-foreground">No emails yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Forward newsletters to your workspace email to get started.
-            </p>
+            <p className="text-xs italic opacity-40 uppercase tracking-widest">No recent emails</p>
           </div>
         ) : (
           <div className="space-y-1">
@@ -633,7 +686,7 @@ function RecentEmails({
                 onClick={() =>
                   onNavigate("inbox", `/app/inbox?email=${e.id}`)
                 }
-                className="flex items-start gap-3 w-full text-left rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors group"
+                className="flex items-start gap-3 w-full text-left rounded-lg px-2 py-2.5 hover:bg-muted/50 transition-colors group"
               >
                 <div className="mt-1.5 shrink-0">
                   {e.status === "received" ? (
@@ -647,37 +700,17 @@ function RecentEmails({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                  <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                     {e.subject || "(no subject)"}
                   </p>
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="text-[11px] text-muted-foreground truncate">
                       {e.from_address}
                     </p>
-                    <span className="text-xs text-muted-foreground shrink-0">
+                    <span className="text-[10px] font-medium text-muted-foreground/40 shrink-0 uppercase tracking-tighter">
                       {formatRelative(e.created_at)}
                     </span>
                   </div>
-                  {e.tags && e.tags.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1">
-                      {e.tags.map((tag) => (
-                        <span
-                          key={tag.id}
-                          className="inline-flex items-center gap-0.5 text-[10px] leading-none px-1.5 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: tag.color + "20",
-                            color: tag.color,
-                          }}
-                        >
-                          <span
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ backgroundColor: tag.color }}
-                          />
-                          {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </button>
             ))}
@@ -718,31 +751,31 @@ function EmptyDashboard({
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6">
+    <div className="flex-1 flex items-center justify-center p-6 bg-background">
       <div className="max-w-lg w-full text-center">
-        <Logo className="h-16 w-auto mx-auto mb-6" />
-        <h1 className="text-2xl font-bold text-foreground">
+        <Logo className="h-16 w-auto mx-auto mb-6 opacity-80" />
+        <h1 className="text-3xl font-bold text-foreground tracking-tight">
           Welcome to Peckmail
         </h1>
-        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          Subscribe to newsletters and forward emails to your unique address to
-          start tracking, tagging, and analyzing your inbox.
+        <p className="text-muted-foreground mt-3 text-sm leading-relaxed max-w-sm mx-auto">
+          Forward your favorite newsletters to your unique address to
+          unlock automated insights and deep inbox analytics.
         </p>
 
         {projectEmail && (
-          <div className="mt-8">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-              Your workspace email
+          <div className="mt-10">
+            <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-[0.2em] mb-4">
+              Your Workspace Email
             </p>
             <button
               onClick={copyEmail}
-              className="group inline-flex items-center gap-3 bg-muted/60 hover:bg-muted border border-border rounded-xl px-5 py-4 transition-colors w-full max-w-md mx-auto"
+              className="group inline-flex items-center gap-4 bg-muted/40 hover:bg-muted/60 border border-border/60 rounded-2xl px-6 py-5 transition-all w-full max-w-md mx-auto shadow-sm"
             >
               <EnvelopeSimple
-                size={20}
-                className="text-primary shrink-0"
+                size={24}
+                className="text-primary shrink-0 opacity-80"
               />
-              <code className="text-base font-mono text-foreground truncate flex-1 text-left">
+              <code className="text-base font-mono font-bold text-foreground truncate flex-1 text-left tracking-tight">
                 {projectEmail}
               </code>
               {copied ? (
@@ -753,46 +786,111 @@ function EmptyDashboard({
               ) : (
                 <Copy
                   size={18}
-                  className="text-muted-foreground group-hover:text-foreground shrink-0 transition-colors"
+                  className="text-muted-foreground/40 group-hover:text-foreground shrink-0 transition-colors"
                 />
               )}
             </button>
-            <p className="text-xs text-muted-foreground mt-2">
-              Click to copy
+            <p className="text-[10px] font-bold text-muted-foreground/40 mt-3 uppercase tracking-wider">
+              Click to copy address
             </p>
           </div>
         )}
 
-        <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
-          <div className="rounded-lg border border-border p-4">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-              <EnvelopeSimple size={16} className="text-primary" />
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-5 text-left">
+          {[
+            { icon: EnvelopeSimple, title: "Subscribe", desc: "Use your address for newsletter signups" },
+            { icon: Tray, title: "Receive", desc: "Emails arrive and get auto-tagged by AI" },
+            { icon: TrendUp, title: "Analyze", desc: "Track trends and senders across time" }
+          ].map((item, i) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+              <div className="w-8 h-8 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center mb-4">
+                <item.icon size={16} className="text-primary opacity-80" />
+              </div>
+              <p className="text-sm font-bold text-foreground">{item.title}</p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground mt-1.5 font-medium opacity-80">
+                {item.desc}
+              </p>
             </div>
-            <p className="text-sm font-medium text-foreground">Subscribe</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Use your workspace email to sign up for newsletters
-            </p>
-          </div>
-          <div className="rounded-lg border border-border p-4">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-              <Tray size={16} className="text-primary" />
-            </div>
-            <p className="text-sm font-medium text-foreground">Receive</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Emails arrive in your inbox, auto-tagged by AI
-            </p>
-          </div>
-          <div className="rounded-lg border border-border p-4">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-              <TrendUp size={16} className="text-primary" />
-            </div>
-            <p className="text-sm font-medium text-foreground">Analyze</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Track trends, senders, and content across all your emails
-            </p>
-          </div>
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MultiCountrySelector({
+  availableCountries,
+  selectedCountries,
+  onChange,
+}: {
+  availableCountries: string[];
+  selectedCountries: string[];
+  onChange: (codes: string[]) => void;
+}) {
+  const toggleCountry = (code: string) => {
+    if (selectedCountries.includes(code)) {
+      onChange(selectedCountries.filter((c) => c !== code));
+    } else {
+      onChange([...selectedCountries, code]);
+    }
+  };
+
+  const label =
+    selectedCountries.length === 0
+      ? "Global View"
+      : selectedCountries.length === 1
+      ? countryLabel(selectedCountries[0])
+      : `${selectedCountries.length} Countries`;
+
+  return (
+    <div className="flex items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs border-transparent bg-muted/30 shadow-none px-3 gap-2 hover:bg-muted/50"
+          >
+            <Globe size={13} className="text-muted-foreground/60" />
+            {label}
+            <ArrowsDownUp size={10} className="ml-1 opacity-40" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[200px]">
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-widest opacity-50">Filter by Origin</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={selectedCountries.length === 0}
+            onCheckedChange={() => onChange([])}
+            className="text-xs"
+          >
+            All Countries
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <div className="max-h-[300px] overflow-y-auto">
+            {availableCountries.sort().map((code) => (
+              <DropdownMenuCheckboxItem
+                key={code}
+                checked={selectedCountries.includes(code)}
+                onCheckedChange={() => toggleCountry(code)}
+                className="text-xs"
+              >
+                {countryLabel(code)}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      
+      {selectedCountries.length > 0 && (
+        <button
+          onClick={() => onChange([])}
+          className="text-muted-foreground/40 hover:text-foreground transition-colors p-1"
+          title="Clear all filters"
+        >
+          <XCircle size={14} weight="fill" />
+        </button>
+      )}
     </div>
   );
 }
@@ -805,16 +903,22 @@ export function DashboardView({
   onNavigate: (item: NavItem, path?: string) => void;
 }) {
   const projectId = useProjectId();
-  const [range, setRange] = useState<DateRange>("14d");
-  const days = daysFromRange(range);
+  const [range, setRange] = useState<DateRange>("14");
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [data, setData] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    
+    let url = `/api/projects/${projectId}/dashboard?days=${range}`;
+    selectedCountries.forEach(c => {
+      url += `&country=${c}`;
+    });
+
     api
-      .get<DashboardStats>(`/api/projects/${projectId}/dashboard?days=${days}`)
+      .get<DashboardStats>(url)
       .then((stats) => {
         if (!cancelled) {
           setData(stats);
@@ -827,35 +931,79 @@ export function DashboardView({
     return () => {
       cancelled = true;
     };
-  }, [projectId, days]);
+  }, [projectId, range, selectedCountries]);
 
   if (loading && !data) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <CircleNotch size={24} className="text-muted-foreground animate-spin" />
+      <div className="flex-1 overflow-y-auto p-6 bg-background">
+        <div className="max-w-5xl mx-auto space-y-8">
+          <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
+            <p className="text-sm text-muted-foreground mt-1">Calculating stats and trends...</p>
+          </div>
+          <div className="flex items-center justify-center py-24 bg-card border border-border/60 rounded-xl shadow-sm">
+            <CircleNotch size={24} className="animate-spin text-muted-foreground" />
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (!data || data.recent_emails.length === 0) {
+  if (!data || (data.recent_emails.length === 0 && selectedCountries.length === 0)) {
     return <EmptyDashboard onNavigate={onNavigate} />;
   }
 
   const { kpis } = data;
-  const avgPerDay = days > 0 ? (kpis.total / days).toFixed(1) : "0";
+  const daysNum = parseInt(range);
+  const avgPerDay = daysNum > 0 ? (kpis.total / daysNum).toFixed(1) : "0";
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
-        {/* Header with date selector */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Overview of your email activity
-            </p>
+    <div className="flex-1 overflow-y-auto p-6 bg-background">
+      <div className="max-w-5xl mx-auto space-y-8">
+        {/* Page Header */}
+        <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Dashboard
+            </h1>
+            <div className="flex items-center gap-3">
+              {/* Multi-Country Selector */}
+              {data.countries && data.countries.length > 0 && (
+                <MultiCountrySelector
+                  availableCountries={data.countries}
+                  selectedCountries={selectedCountries}
+                  onChange={setSelectedCountries}
+                />
+              )}
+
+              {/* Timeframe Selector */}
+              <div className="flex items-center gap-1.5 bg-muted/30 p-1 rounded-lg border border-border/40">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1.5 opacity-50">View</span>
+                <ToggleGroup
+                  type="single"
+                  value={range}
+                  onValueChange={(v) => v && setRange(v as DateRange)}
+                  className="h-6"
+                >
+                  {DATE_RANGES.map((r) => (
+                    <ToggleGroupItem
+                      key={r.value}
+                      value={r.value}
+                      className="h-6 px-2 text-[10px] font-bold min-w-0 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                    >
+                      {r.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+            </div>
           </div>
-          <DateRangeSelector value={range} onChange={setRange} />
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Overview of your inbox volume, tag distribution, and recent activity{" "}
+            {selectedCountries.length > 0
+              ? `from ${selectedCountries.length} selected countries`
+              : "globally"}.
+          </p>
         </div>
 
         {/* KPI row */}
@@ -864,29 +1012,28 @@ export function DashboardView({
             label="Total emails"
             value={kpis.total}
             icon={EnvelopeSimple}
-            subtitle={`Last ${days} days`}
+            subtitle={`L${range}D VOLUME`}
           />
-          <KpiCard label="Unread" value={kpis.unread} icon={Tray} />
-          <KpiCard label="Processed" value={kpis.processed} icon={CheckCircle} />
+          <KpiCard label="Unread" value={kpis.unread} icon={Tray} subtitle="CURRENT BALANCE" />
+          <KpiCard label="Processed" value={kpis.processed} icon={CheckCircle} subtitle="TOTAL LIFETIME" />
           <KpiCard
             label="Avg / day"
             value={avgPerDay}
             icon={TrendUp}
-            subtitle={`Last ${days} days`}
+            subtitle={`L${range}D VELOCITY`}
           />
         </div>
 
-        {/* Stacked bar chart (full width) */}
-        <StackedTagBarChart tagDaily={data.tag_daily} days={days} />
+        {/* Activity Section */}
+        <StackedTagBarChart tagDaily={data.tag_daily} days={daysNum} />
 
-        {/* Pie chart + Recent emails */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Details Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <TagPieChart tagDaily={data.tag_daily} />
           <RecentEmails emails={data.recent_emails} onNavigate={onNavigate} />
         </div>
 
-        {/* Activity grid + Top domains */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
           <ActivityGrid activityGrid={data.activity_grid} />
           <TopDomains domains={data.top_domains} onNavigate={onNavigate} />
         </div>

@@ -1706,15 +1706,18 @@ export interface DashboardStats {
     summary: string | null;
     tags: { id: string; name: string; color: string }[];
   }[];
+  countries: string[];
 }
 
 export async function getDashboardStats(
   projectId: string,
-  days: number
+  days: number,
+  countries?: string[]
 ): Promise<DashboardStats> {
   const { data, error } = await supabaseAdmin.rpc("get_dashboard_stats", {
     p_project_id: projectId,
     p_days: days,
+    p_countries: countries && countries.length > 0 ? countries : null,
   });
   if (error) throw error;
   return data as DashboardStats;

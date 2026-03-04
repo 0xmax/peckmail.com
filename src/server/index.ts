@@ -871,7 +871,8 @@ api.get("/projects/:id/dashboard", async (c) => {
 
   try {
     const days = Math.min(Math.max(parseInt(c.req.query("days") || "30") || 30, 1), 365);
-    const stats = await getDashboardStats(projectId, days);
+    const countries = c.req.queries("country");
+    const stats = await getDashboardStats(projectId, days, countries);
     return c.json(stats);
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to load dashboard" }, 500);
