@@ -46,6 +46,127 @@ export interface SenderStats {
   sparkline: number[];
 }
 
+export interface PricingSnapshot {
+  currency?: string;
+  cheapest_product?: { name: string | null; price: number };
+  most_expensive_product?: { name: string | null; price: number };
+  deepest_discount_pct?: number;
+}
+
+export interface SenderProfileData {
+  id: string;
+  sender_id: string;
+  profile: {
+    company_profile?: string;
+    industry?: string;
+    tags?: string[];
+    target_audiences?: string;
+    product_portfolio?: string;
+    top_products?: string[];
+    ongoing_sales?: string;
+    pricing_snapshot?: PricingSnapshot;
+    pricing_strategy?: string;
+    marketing_approach?: string;
+    strengths?: string;
+    weaknesses?: string;
+    recommendations?: string;
+  };
+  source_urls: string[];
+  model: string;
+  generated_at: string;
+}
+
+export interface EmailClassification {
+  id: string;
+  email_id: string;
+  email_type: string;
+  offer: string | null;
+  discount_pct: number | null;
+  urgency: string;
+  cta: string | null;
+  products_mentioned: string[];
+  tone: string;
+  personalization_level: string;
+  subject_length: number | null;
+  subject_has_emoji: boolean;
+  subject_has_personalization: boolean;
+  subject_urgency_words: string[];
+  classified_at: string;
+}
+
+export interface EmailFlow {
+  name: string;
+  detected: boolean;
+  email_count: number;
+  description: string;
+}
+
+export interface StrategyCadence {
+  avg_per_week: number;
+  consistency_score: number;
+  peak_days: string[];
+  peak_hours: number[];
+  pattern: string;
+}
+
+export interface StrategyDiscount {
+  avg_discount_pct: number;
+  max_discount_pct: number;
+  frequency: string;
+  tactics: string;
+}
+
+export interface StrategyContentMix {
+  [key: string]: number;
+}
+
+export interface StrategyContent {
+  primary_tone: string;
+  content_mix: StrategyContentMix;
+  personalization_usage: string;
+  key_themes: string[];
+}
+
+export interface StrategySubjectAnalysis {
+  avg_length: number;
+  emoji_pct: number;
+  urgency_pct: number;
+  personalization_pct: number;
+  common_patterns: string[];
+  top_urgency_words: string[];
+}
+
+export interface StrategyFunnel {
+  awareness: number;
+  consideration: number;
+  conversion: number;
+  retention: number;
+}
+
+export interface SenderStrategyData {
+  id: string;
+  sender_id: string;
+  strategy: {
+    executive_summary?: string;
+    email_flows?: EmailFlow[];
+    cadence?: StrategyCadence;
+    promotional_calendar?: string;
+    discount_strategy?: StrategyDiscount;
+    content_strategy?: StrategyContent;
+    subject_line_analysis?: StrategySubjectAnalysis;
+    segmentation_signals?: string;
+    ab_testing_signals?: string;
+    funnel_mapping?: StrategyFunnel;
+    competitive_insights?: string;
+    recommendations?: string[];
+  };
+  email_count: number;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  model: string;
+  generated_at: string;
+}
+
 export interface StoreState {
   projectId: string;
   projectName: string;

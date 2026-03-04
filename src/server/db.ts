@@ -1492,6 +1492,34 @@ export async function getSenderDailyStats(
   return (data ?? []) as SenderDailyStatsRow[];
 }
 
+export interface SenderProfileRow {
+  id: string;
+  sender_id: string;
+  project_id: string;
+  profile: Record<string, string>;
+  source_urls: string[];
+  model: string;
+  generated_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getSenderProfile(
+  projectId: string,
+  senderId: string
+): Promise<SenderProfileRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("sender_profiles")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("sender_id", senderId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as SenderProfileRow | null) ?? null;
+}
+
 export async function createProjectSender(params: {
   projectId: string;
   name: string;
@@ -1721,4 +1749,121 @@ export async function getDashboardStats(
   });
   if (error) throw error;
   return data as DashboardStats;
+}
+
+// --- Email Classifications & Sender Strategies ---
+
+export interface EmailClassificationRow {
+  id: string;
+  email_id: string;
+  project_id: string;
+  sender_id: string;
+  email_type: string;
+  offer: string | null;
+  discount_pct: number | null;
+  urgency: string;
+  cta: string | null;
+  products_mentioned: string[];
+  tone: string;
+  personalization_level: string;
+  subject_length: number | null;
+  subject_has_emoji: boolean;
+  subject_has_personalization: boolean;
+  subject_urgency_words: string[];
+  model: string;
+  classified_at: string;
+  created_at: string;
+}
+
+export interface SenderStrategyRow {
+  id: string;
+  sender_id: string;
+  project_id: string;
+  strategy: Record<string, any>;
+  email_count: number;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  model: string;
+  generated_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UnclassifiedEmail {
+  id: string;
+  subject: string | null;
+  body_text: string | null;
+  from_address: string;
+  created_at: string;
+}
+
+export async function listUnclassifiedSenderEmails(
+  projectId: string,
+  senderId: string,
+  limit = 500
+): Promise<UnclassifiedEmail[]> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "list_unclassified_sender_emails",
+    { p_project_id: projectId, p_sender_id: senderId, p_limit: limit }
+  );
+  if (error) throw error;
+  return (data ?? []) as UnclassifiedEmail[];
+}
+
+export async function getSenderClassifications(
+  projectId: string,
+  senderId: string
+): Promise<EmailClassificationRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("email_classifications")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("sender_id", senderId)
+    .order("classified_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EmailClassificationRow[];
+}
+
+export async function upsertEmailClassifications(
+  rows: Omit<EmailClassificationRow, "id" | "created_at">[]
+): Promise<void> {
+  if (!rows.length) return;
+  const { error } = await supabaseAdmin
+    .from("email_classifications")
+    .upsert(rows, { onConflict: "email_id" });
+  if (error) throw error;
+}
+
+export async function getSenderStrategy(
+  projectId: string,
+  senderId: string
+): Promise<SenderStrategyRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("sender_strategies")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("sender_id", senderId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as SenderStrategyRow | null) ?? null;
+}
+
+export async function insertSenderStrategy(row: {
+  sender_id: string;
+  project_id: string;
+  strategy: Record<string, any>;
+  email_count: number;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  model: string;
+}): Promise<SenderStrategyRow> {
+  const { data, error } = await supabaseAdmin
+    .from("sender_strategies")
+    .insert(row)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as SenderStrategyRow;
 }

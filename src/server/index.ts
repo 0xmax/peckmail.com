@@ -51,10 +51,15 @@ import {
   getDashboardStats,
   refreshSenderDailyStats,
   getSenderDailyStats,
+  getSenderProfile,
+  getSenderStrategy,
+  getSenderClassifications,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail, reprocessEmailTags } from "./inbound.js";
-import { resolveAllPendingDomains } from "./senderResolver.js";
+import { resolveAllPendingDomains, refreshSenderLogos } from "./senderResolver.js";
+import { generateSenderProfile, refreshMissingProfiles, refreshAllProfiles } from "./senderProfiler.js";
+import { generateSenderStrategy, classifySenderEmails, refreshAllStrategies } from "./senderStrategyAnalyzer.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
@@ -1221,6 +1226,22 @@ api.post("/projects/:id/senders/resolve-all", async (c) => {
   return c.json({ ok: true, message: "Resolution started" });
 });
 
+api.post("/projects/:id/senders/refresh-logos", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  // Run in background, return immediately
+  refreshSenderLogos(projectId).catch((err) =>
+    console.error("[senderResolver] Logo refresh failed:", err)
+  );
+
+  return c.json({ ok: true, message: "Logo refresh started" });
+});
+
 api.post("/projects/:id/senders/:senderId/merge", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
@@ -1241,6 +1262,112 @@ api.post("/projects/:id/senders/:senderId/merge", async (c) => {
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to merge senders" }, 500);
   }
+});
+
+// Sender profiles
+api.get("/projects/:id/senders/:senderId/profile", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  const profile = await getSenderProfile(projectId, senderId);
+  return c.json({ profile });
+});
+
+api.post("/projects/:id/senders/:senderId/profile", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  try {
+    const result = await generateSenderProfile(projectId, senderId);
+    if (!result) return c.json({ error: "Sender not found" }, 404);
+    return c.json({ profile: result.profile, sourceUrls: result.sourceUrls });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to generate profile" }, 500);
+  }
+});
+
+api.post("/projects/:id/senders/refresh-profiles", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  const all = c.req.query("all") === "1";
+  const fn = all ? refreshAllProfiles : refreshMissingProfiles;
+
+  // Run in background, return immediately
+  fn(projectId, 2).catch((err) =>
+    console.error("[senderProfiler] Batch refresh failed:", err)
+  );
+
+  return c.json({ ok: true, message: all ? "Refreshing all profiles" : "Generating missing profiles" });
+});
+
+// Sender strategy analysis
+api.get("/projects/:id/senders/:senderId/strategy", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  const strategy = await getSenderStrategy(projectId, senderId);
+  return c.json({ strategy });
+});
+
+api.post("/projects/:id/senders/:senderId/strategy", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  try {
+    const result = await generateSenderStrategy(projectId, senderId);
+    if (!result) return c.json({ error: "No emails to analyze" }, 404);
+    return c.json({ strategy: result.strategy, emailCount: result.emailCount });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to generate strategy" }, 500);
+  }
+});
+
+api.get("/projects/:id/senders/:senderId/classifications", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  const classifications = await getSenderClassifications(projectId, senderId);
+  return c.json({ classifications });
+});
+
+api.post("/projects/:id/senders/refresh-strategies", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  // Run in background, return immediately
+  refreshAllStrategies(projectId, 2).catch((err) =>
+    console.error("[strategyAnalyzer] Batch refresh failed:", err)
+  );
+
+  return c.json({ ok: true, message: "Refreshing all strategies" });
 });
 
 // Project attached email addresses (multiple)

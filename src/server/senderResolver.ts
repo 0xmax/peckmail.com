@@ -23,7 +23,7 @@ const MAX_TURNS = 5;
 
 // --- Search via Serper (Google) ---
 
-async function searchWeb(query: string, limit = 3): Promise<string> {
+export async function searchWeb(query: string, limit = 3): Promise<string> {
   const apiKey = process.env.SERPER_API_KEY;
   if (!apiKey) return "Error: Web search is not configured (SERPER_API_KEY not set).";
   try {
@@ -62,7 +62,7 @@ async function searchWeb(query: string, limit = 3): Promise<string> {
 
 // --- Page fetch via Firecrawl ---
 
-async function fetchPage(url: string): Promise<string> {
+export async function fetchPage(url: string, maxLength = 4000): Promise<string> {
   const apiKey = process.env.FIRECRAWL_API_KEY;
   if (!apiKey) return "Error: Page fetching is not configured.";
   try {
@@ -83,7 +83,7 @@ async function fetchPage(url: string): Promise<string> {
     };
     const md = data.data?.markdown || "";
     if (!md) return "Error: No content could be extracted from the page.";
-    const truncated = md.length > 4000 ? md.slice(0, 4000) + "\n\n... (truncated)" : md;
+    const truncated = md.length > maxLength ? md.slice(0, maxLength) + "\n\n... (truncated)" : md;
     return data.data?.title ? `# ${data.data.title}\n\n${truncated}` : truncated;
   } catch (err: any) {
     return `Error: Could not fetch page — ${err.message || "unknown error"}`;
@@ -176,6 +176,11 @@ ${sendersList}
 7. Limit yourself to 2-3 tool calls total, then call resolve_sender exactly once.
 8. If you absolutely cannot identify the brand, use a cleaned-up version of the domain name as the sender name.
 9. Always try to determine the brand's headquarters country. Use the website TLD, search results, or general knowledge. Provide the ISO 3166-1 alpha-2 country code (e.g. "US", "FR", "DE", "JP").
+10. **Logo**: Always try to find the brand's logo URL. Strategies:
+    - Fetch the brand website and look for og:image meta tags, apple-touch-icon links, or logo images in the page content.
+    - Try common patterns: \`https://{domain}/favicon.ico\`, \`https://{domain}/apple-touch-icon.png\`.
+    - Search for "{brand name} logo" if needed.
+    - The logo_url should be a direct URL to an image file (PNG, SVG, JPG, ICO). Prefer high-resolution square icons (apple-touch-icon, og:image) over tiny favicons.
 
 Call resolve_sender exactly once with your final answer.`;
 }
@@ -197,6 +202,38 @@ async function executeTool(
     default:
       return `Unknown tool: ${toolName}`;
   }
+}
+
+// --- Logo probing ---
+
+async function probeLogoUrl(websiteUrl: string): Promise<string | null> {
+  try {
+    const url = new URL(websiteUrl);
+    const origin = url.origin;
+    // Try high-quality icons first, then fallback
+    const candidates = [
+      `${origin}/apple-touch-icon.png`,
+      `${origin}/apple-touch-icon-precomposed.png`,
+      `${origin}/favicon-32x32.png`,
+      `${origin}/favicon.ico`,
+    ];
+    for (const candidate of candidates) {
+      try {
+        const res = await fetch(candidate, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const ct = res.headers.get("content-type") || "";
+          if (ct.startsWith("image/") || candidate.endsWith(".ico")) {
+            return candidate;
+          }
+        }
+      } catch {
+        // skip
+      }
+    }
+  } catch {
+    // invalid URL
+  }
+  return null;
 }
 
 // --- Main resolver ---
@@ -317,6 +354,17 @@ ${bodyExcerpt ? bodyExcerpt.slice(0, 1000) : "(not available)"}`;
       resolveResult = { name: fallbackName };
     }
 
+    // Auto-enrich logo if resolver didn't find one but we have a website
+    if (!resolveResult.logo_url && resolveResult.website) {
+      const logoUrl = await probeLogoUrl(resolveResult.website);
+      if (logoUrl) resolveResult.logo_url = logoUrl;
+    }
+    // Also try the email domain itself as fallback
+    if (!resolveResult.logo_url) {
+      const logoUrl = await probeLogoUrl(`https://${domain.split(".").slice(-2).join(".")}`);
+      if (logoUrl) resolveResult.logo_url = logoUrl;
+    }
+
     // Link to existing sender or create new one
     let sender: ProjectSender;
     if (resolveResult.existing_sender_id) {
@@ -417,6 +465,50 @@ export async function resolveAllPendingDomains(
   }
 
   return { total: pending.length, resolved, failed };
+}
+
+// --- Batch logo refresh ---
+
+export async function refreshSenderLogos(
+  projectId: string
+): Promise<{ total: number; updated: number }> {
+  const senders = await listProjectSenders(projectId);
+  // Only process senders missing a logo
+  const needsLogo = senders.filter((s) => !s.logo_url);
+  let updated = 0;
+
+  for (const sender of needsLogo) {
+    // Try website first, then domains linked to this sender
+    let logoUrl: string | null = null;
+    if (sender.website) {
+      logoUrl = await probeLogoUrl(sender.website);
+    }
+    if (!logoUrl) {
+      // Try to find a domain linked to this sender
+      const { data: domains } = await supabaseAdmin
+        .from("email_domains")
+        .select("domain")
+        .eq("sender_id", sender.id)
+        .limit(3);
+      if (domains) {
+        for (const d of domains) {
+          const rootDomain = d.domain.split(".").slice(-2).join(".");
+          logoUrl = await probeLogoUrl(`https://${rootDomain}`);
+          if (logoUrl) break;
+        }
+      }
+    }
+    if (logoUrl) {
+      await supabaseAdmin
+        .from("email_senders")
+        .update({ logo_url: logoUrl })
+        .eq("id", sender.id);
+      updated++;
+    }
+  }
+
+  console.log(`[senderResolver] Logo refresh: ${updated}/${needsLogo.length} updated`);
+  return { total: needsLogo.length, updated };
 }
 
 async function resetFailedDomains(projectId: string): Promise<void> {

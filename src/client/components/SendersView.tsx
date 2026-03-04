@@ -25,8 +25,21 @@ import {
   CaretLeft,
   CaretRight,
   GlobeSimple,
+  Buildings,
+  Package,
+  CurrencyDollar,
+  Megaphone,
+  Target,
+  ShieldCheck,
+  Warning,
+  Lightbulb,
+  Tag,
+  Storefront,
+  CheckCircle,
+  ChartPie,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.js";
@@ -58,10 +71,18 @@ import {
   YAxis,
   Area,
   AreaChart,
+  Pie,
+  PieChart,
+  Cell,
 } from "recharts";
 import { useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
-import type { Sender, IncomingEmail, SenderStats } from "../store/types.js";
+import type { Sender, IncomingEmail, SenderStats, SenderProfileData, PricingSnapshot, SenderStrategyData, EmailClassification } from "../store/types.js";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible.js";
 
 // --- Countries ---
 
@@ -259,6 +280,43 @@ function KpiCard({
 
 // --- Sender List ---
 
+// --- Sender Avatar ---
+
+function SenderAvatar({ sender, size = 32 }: { sender: Pick<Sender, "name" | "website" | "logo_url">; size?: number }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const src = useMemo(() => {
+    if (sender.logo_url) return sender.logo_url;
+    if (sender.website) {
+      try {
+        const hostname = new URL(sender.website).hostname;
+        return `https://www.google.com/s2/favicons?domain=${hostname}&sz=${size * 2}`;
+      } catch {}
+    }
+    return null;
+  }, [sender.logo_url, sender.website, size]);
+
+  if (src && !imgFailed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        className="rounded-lg object-contain bg-neutral-100"
+        loading="lazy"
+        onError={() => setImgFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span className="text-[11px] font-bold text-primary select-none">
+      {sender.name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 // --- Sparkline + trend helpers ---
 
 const sparklineConfig: ChartConfig = {
@@ -369,16 +427,24 @@ function SenderList({
   domains,
   loading,
   resolving,
+  refreshingLogos,
+  refreshingProfiles,
   onSelect,
   onResolveAll,
+  onRefreshLogos,
+  onRefreshProfiles,
   stats,
 }: {
   senders: Sender[];
   domains: Domain[];
   loading: boolean;
   resolving: boolean;
+  refreshingLogos: boolean;
+  refreshingProfiles: boolean;
   onSelect: (senderId: string) => void;
   onResolveAll: () => void;
+  onRefreshLogos: () => void;
+  onRefreshProfiles: (all?: boolean) => void;
   stats: Record<string, SenderStats> | null;
 }) {
   const [countryFilter, setCountryFilter] = useState<string>("all");
@@ -534,22 +600,52 @@ function SenderList({
                 {senders.length}
               </Badge>
             </h1>
-            {unlinkedDomains.length > 0 && (
+            <div className="flex items-center gap-1.5">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={onResolveAll}
-                disabled={resolving}
-                className="h-8 text-xs font-semibold px-3"
+                onClick={(e) => onRefreshProfiles(e.shiftKey)}
+                disabled={refreshingProfiles}
+                className="h-8 w-8 p-0 text-muted-foreground/50 hover:text-foreground"
+                title="Generate missing profiles (shift-click to refresh all)"
               >
-                {resolving ? (
-                  <CircleNotch size={14} className="animate-spin mr-2" />
+                {refreshingProfiles ? (
+                  <CircleNotch size={14} className="animate-spin" />
                 ) : (
-                  <MagicWand size={14} className="mr-2" />
+                  <Buildings size={14} />
                 )}
-                Resolve all ({unlinkedDomains.length})
               </Button>
-            )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onRefreshLogos}
+                disabled={refreshingLogos}
+                className="h-8 w-8 p-0 text-muted-foreground/50 hover:text-foreground"
+                title="Refresh sender logos"
+              >
+                {refreshingLogos ? (
+                  <CircleNotch size={14} className="animate-spin" />
+                ) : (
+                  <ArrowsClockwise size={14} />
+                )}
+              </Button>
+              {unlinkedDomains.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onResolveAll}
+                  disabled={resolving}
+                  className="h-8 text-xs font-semibold px-3"
+                >
+                  {resolving ? (
+                    <CircleNotch size={14} className="animate-spin mr-2" />
+                  ) : (
+                    <MagicWand size={14} className="mr-2" />
+                  )}
+                  Resolve all ({unlinkedDomains.length})
+                </Button>
+              )}
+            </div>
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
             Monitor sender activity and trends. Senders are automatically identified and grouped from incoming emails.
@@ -687,8 +783,8 @@ function SenderList({
                       onClick={() => onSelect(s.id)}
                       className="w-full flex items-center gap-4 px-3 py-2.5 rounded-lg hover:bg-muted/40 transition-colors text-left group"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center text-[11px] font-bold text-primary shrink-0 group-hover:bg-primary/10 transition-colors">
-                        {s.name.charAt(0).toUpperCase()}
+                      <div className="w-8 h-8 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors overflow-hidden">
+                        <SenderAvatar sender={s} size={32} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -863,6 +959,461 @@ function ResolverStatusBadge({ status, error }: { status: string; error: string 
   }
 }
 
+// --- Profile Section ---
+
+function ProfileSection({
+  icon: Icon,
+  title,
+  content,
+}: {
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  title: string;
+  content?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!content || content === "Not enough information available.") return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 px-1 rounded-md hover:bg-muted/40 transition-colors text-left group">
+        <Icon size={14} className="text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium text-foreground flex-1">{title}</span>
+        <CaretRight
+          size={12}
+          className={`text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <p className="text-sm text-muted-foreground pl-7 pb-2 leading-relaxed">
+          {content}
+        </p>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function PricingSnapshotCard({ snapshot }: { snapshot: PricingSnapshot }) {
+  const cur = snapshot.currency || "USD";
+  const fmt = (v: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(v);
+
+  const cheapest = snapshot.cheapest_product;
+  const expensive = snapshot.most_expensive_product;
+  const discount = snapshot.deepest_discount_pct;
+
+  const hasData =
+    (cheapest?.name && cheapest.price > 0) ||
+    (expensive?.name && expensive.price > 0) ||
+    (discount && discount > 0);
+
+  if (!hasData) return null;
+
+  return (
+    <div className="grid grid-cols-3 gap-3 pl-7 py-2">
+      {cheapest?.name && cheapest.price > 0 && (
+        <div className="rounded-lg border border-border/50 bg-muted/20 p-2.5">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Cheapest</p>
+          <p className="text-base font-bold text-foreground mt-0.5">{fmt(cheapest.price)}</p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5" title={cheapest.name}>{cheapest.name}</p>
+        </div>
+      )}
+      {expensive?.name && expensive.price > 0 && (
+        <div className="rounded-lg border border-border/50 bg-muted/20 p-2.5">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Most expensive</p>
+          <p className="text-base font-bold text-foreground mt-0.5">{fmt(expensive.price)}</p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5" title={expensive.name}>{expensive.name}</p>
+        </div>
+      )}
+      {discount != null && discount > 0 && (
+        <div className="rounded-lg border border-border/50 bg-muted/20 p-2.5">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Deepest discount</p>
+          <p className="text-base font-bold text-foreground mt-0.5">{discount}%</p>
+          <p className="text-xs text-muted-foreground mt-0.5">off</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Strategy Card ---
+
+const PIE_COLORS = [
+  "var(--color-primary)",
+  "hsl(200 70% 50%)",
+  "hsl(150 60% 45%)",
+  "hsl(35 90% 55%)",
+  "hsl(280 60% 55%)",
+  "hsl(0 70% 55%)",
+  "hsl(180 50% 45%)",
+  "hsl(60 70% 45%)",
+];
+
+const FUNNEL_COLORS: Record<string, string> = {
+  awareness: "hsl(200 70% 50%)",
+  consideration: "hsl(35 90% 55%)",
+  conversion: "hsl(150 60% 45%)",
+  retention: "hsl(280 60% 55%)",
+};
+
+function CollapsibleSection({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="flex items-center justify-between w-full py-2 text-sm font-medium text-foreground hover:text-primary transition-colors">
+          <span>{title}</span>
+          {open ? <CaretUp size={14} /> : <CaretDown size={14} />}
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="pb-3 text-sm text-muted-foreground">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function StatBox({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-muted/20 p-2.5 text-center">
+      <p className="text-base font-bold text-foreground">{value}</p>
+      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+function StrategyCard({
+  senderId,
+  projectId,
+}: {
+  senderId: string;
+  projectId: string;
+}) {
+  const [strategy, setStrategy] = useState<SenderStrategyData | null>(null);
+  const [classifications, setClassifications] = useState<EmailClassification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.allSettled([
+      api.get<{ strategy: SenderStrategyData | null }>(
+        `/api/projects/${projectId}/senders/${senderId}/strategy`
+      ),
+      api.get<{ classifications: EmailClassification[] }>(
+        `/api/projects/${projectId}/senders/${senderId}/classifications`
+      ),
+    ]).then(([stratRes, classRes]) => {
+      if (stratRes.status === "fulfilled") setStrategy(stratRes.value.strategy);
+      if (classRes.status === "fulfilled") setClassifications(classRes.value.classifications);
+    }).finally(() => setLoading(false));
+  }, [projectId, senderId]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await api.post(`/api/projects/${projectId}/senders/${senderId}/strategy`);
+      const [stratRes, classRes] = await Promise.allSettled([
+        api.get<{ strategy: SenderStrategyData | null }>(
+          `/api/projects/${projectId}/senders/${senderId}/strategy`
+        ),
+        api.get<{ classifications: EmailClassification[] }>(
+          `/api/projects/${projectId}/senders/${senderId}/classifications`
+        ),
+      ]);
+      if (stratRes.status === "fulfilled") setStrategy(stratRes.value.strategy);
+      if (classRes.status === "fulfilled") setClassifications(classRes.value.classifications);
+    } catch (err: any) {
+      alert(err.message || "Failed to generate strategy");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const s = strategy?.strategy;
+
+  const contentMixData = useMemo(() => {
+    if (!s?.content_strategy?.content_mix) return [];
+    return Object.entries(s.content_strategy.content_mix)
+      .filter(([, v]) => v > 0)
+      .map(([key, value]) => ({
+        name: key.charAt(0).toUpperCase() + key.slice(1),
+        value,
+      }));
+  }, [s?.content_strategy?.content_mix]);
+
+  const contentMixConfig: ChartConfig = useMemo(() => {
+    const cfg: ChartConfig = {};
+    contentMixData.forEach((d, i) => {
+      cfg[d.name] = { label: d.name, color: PIE_COLORS[i % PIE_COLORS.length] };
+    });
+    return cfg;
+  }, [contentMixData]);
+
+  const cadenceDayData = useMemo(() => {
+    if (!s?.cadence?.peak_days) return [];
+    const allDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    return allDays.map((day) => ({
+      day: day.slice(0, 3),
+      peak: s.cadence!.peak_days.includes(day) ? 1 : 0,
+    }));
+  }, [s?.cadence?.peak_days]);
+
+  const cadenceConfig: ChartConfig = {
+    peak: { label: "Peak day", color: "var(--color-primary)" },
+  };
+
+  const discountTrendData = useMemo(() => {
+    if (!classifications.length) return [];
+    const withDiscount = classifications
+      .filter((c) => c.discount_pct != null && c.discount_pct > 0)
+      .sort((a, b) => a.classified_at.localeCompare(b.classified_at));
+    if (!withDiscount.length) return [];
+    return withDiscount.map((c) => ({
+      date: new Date(c.classified_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      discount: c.discount_pct,
+    }));
+  }, [classifications]);
+
+  const discountConfig: ChartConfig = {
+    discount: { label: "Discount %", color: "hsl(35 90% 55%)" },
+  };
+
+  const funnelData = useMemo(() => {
+    if (!s?.funnel_mapping) return [];
+    return [
+      { stage: "Awareness", pct: s.funnel_mapping.awareness, fill: FUNNEL_COLORS.awareness },
+      { stage: "Consideration", pct: s.funnel_mapping.consideration, fill: FUNNEL_COLORS.consideration },
+      { stage: "Conversion", pct: s.funnel_mapping.conversion, fill: FUNNEL_COLORS.conversion },
+      { stage: "Retention", pct: s.funnel_mapping.retention, fill: FUNNEL_COLORS.retention },
+    ];
+  }, [s?.funnel_mapping]);
+
+  const funnelConfig: ChartConfig = {
+    pct: { label: "%" },
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-foreground">Email strategy</h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            {generating ? (
+              <CircleNotch size={14} className="animate-spin mr-1.5" />
+            ) : (
+              <MagicWand size={14} className="mr-1.5" />
+            )}
+            {strategy ? "Regenerate" : "Analyze"}
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <CircleNotch size={20} className="animate-spin text-muted-foreground" />
+          </div>
+        ) : !strategy ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <ChartPie size={32} weight="duotone" className="mx-auto mb-2 opacity-40" />
+            <p className="text-sm">No strategy analysis yet</p>
+            <p className="text-xs mt-1">Click Analyze to classify emails and generate insights</p>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {s?.executive_summary && (
+              <p className="text-sm text-muted-foreground leading-relaxed">{s.executive_summary}</p>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {contentMixData.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-2">Email type mix</p>
+                  <ChartContainer config={contentMixConfig} className="aspect-square max-h-[200px] w-full">
+                    <PieChart>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Pie
+                        data={contentMixData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={80}
+                        strokeWidth={2}
+                      >
+                        {contentMixData.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ChartContainer>
+                  <div className="flex flex-wrap gap-2 mt-2 justify-center">
+                    {contentMixData.map((d, i) => (
+                      <span key={d.name} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        {d.name} ({d.value}%)
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {cadenceDayData.length > 0 && s?.cadence && (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-2">Cadence</p>
+                  <ChartContainer config={cadenceConfig} className="aspect-[2/1] w-full">
+                    <BarChart data={cadenceDayData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                      <CartesianGrid vertical={false} />
+                      <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} />
+                      <YAxis hide />
+                      <Bar dataKey="peak" radius={[4, 4, 0, 0]} fill="var(--color-peak)" />
+                    </BarChart>
+                  </ChartContainer>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <StatBox label="Avg/week" value={s.cadence.avg_per_week} />
+                    <StatBox label="Consistency" value={`${Math.round(s.cadence.consistency_score * 100)}%`} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {discountTrendData.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-foreground mb-2">Discount trend</p>
+                <ChartContainer config={discountConfig} className="aspect-[3/1] w-full">
+                  <AreaChart data={discountTrendData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="fillDiscount" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--color-discount)" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="var(--color-discount)" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} interval="preserveStartEnd" />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={4} unit="%" />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Area dataKey="discount" type="monotone" stroke="var(--color-discount)" fill="url(#fillDiscount)" strokeWidth={2} />
+                  </AreaChart>
+                </ChartContainer>
+              </div>
+            )}
+
+            {s?.email_flows && s.email_flows.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-foreground mb-2">Email flows</p>
+                <div className="space-y-1.5">
+                  {s.email_flows.map((flow) => (
+                    <div key={flow.name} className="flex items-center gap-2">
+                      {flow.detected ? (
+                        <CheckCircle size={14} className="text-green-500 shrink-0" />
+                      ) : (
+                        <XCircle size={14} className="text-muted-foreground/40 shrink-0" />
+                      )}
+                      <span className={`text-sm ${flow.detected ? "text-foreground" : "text-muted-foreground/60"}`}>
+                        {flow.name}
+                      </span>
+                      {flow.detected && flow.email_count > 0 && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {flow.email_count} email{flow.email_count !== 1 ? "s" : ""}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {s?.subject_line_analysis && (
+              <div>
+                <p className="text-xs font-medium text-foreground mb-2">Subject line insights</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <StatBox label="Avg length" value={s.subject_line_analysis.avg_length} />
+                  <StatBox label="Emoji %" value={`${s.subject_line_analysis.emoji_pct}%`} />
+                  <StatBox label="Urgency %" value={`${s.subject_line_analysis.urgency_pct}%`} />
+                  <StatBox label="Personal %" value={`${s.subject_line_analysis.personalization_pct}%`} />
+                </div>
+              </div>
+            )}
+
+            {funnelData.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-foreground mb-2">Funnel distribution</p>
+                <ChartContainer config={funnelConfig} className="aspect-[4/1] w-full">
+                  <BarChart data={funnelData} layout="vertical" margin={{ top: 0, right: 4, bottom: 0, left: 0 }}>
+                    <CartesianGrid horizontal={false} />
+                    <YAxis dataKey="stage" type="category" tickLine={false} axisLine={false} width={90} tickMargin={4} />
+                    <XAxis type="number" tickLine={false} axisLine={false} unit="%" />
+                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                    <Bar dataKey="pct" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </div>
+            )}
+
+            <div className="border-t border-border/40 pt-2 space-y-0">
+              {s?.promotional_calendar && (
+                <CollapsibleSection title="Promotional calendar">
+                  {s.promotional_calendar}
+                </CollapsibleSection>
+              )}
+              {s?.discount_strategy && (
+                <CollapsibleSection title="Discount strategy">
+                  <div className="space-y-1">
+                    <p><strong>Avg discount:</strong> {s.discount_strategy.avg_discount_pct}%</p>
+                    <p><strong>Max discount:</strong> {s.discount_strategy.max_discount_pct}%</p>
+                    <p><strong>Frequency:</strong> {s.discount_strategy.frequency}</p>
+                    <p><strong>Tactics:</strong> {s.discount_strategy.tactics}</p>
+                  </div>
+                </CollapsibleSection>
+              )}
+              {s?.segmentation_signals && (
+                <CollapsibleSection title="Segmentation signals">
+                  {s.segmentation_signals}
+                </CollapsibleSection>
+              )}
+              {s?.ab_testing_signals && (
+                <CollapsibleSection title="A/B testing signals">
+                  {s.ab_testing_signals}
+                </CollapsibleSection>
+              )}
+              {s?.competitive_insights && (
+                <CollapsibleSection title="Competitive insights">
+                  {s.competitive_insights}
+                </CollapsibleSection>
+              )}
+              {s?.recommendations && s.recommendations.length > 0 && (
+                <CollapsibleSection title="Recommendations">
+                  <ul className="list-disc list-inside space-y-1">
+                    {s.recommendations.map((rec, i) => (
+                      <li key={i}>{rec}</li>
+                    ))}
+                  </ul>
+                </CollapsibleSection>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-border/40">
+              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <span>{strategy.email_count} emails analyzed</span>
+                {strategy.date_range_start && strategy.date_range_end && (
+                  <span>
+                    {new Date(strategy.date_range_start).toLocaleDateString()} – {new Date(strategy.date_range_end).toLocaleDateString()}
+                  </span>
+                )}
+                <span>Generated {new Date(strategy.generated_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // --- Sender Detail ---
 
 function SenderDetail({
@@ -887,6 +1438,9 @@ function SenderDetail({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState("");
   const [merging, setMerging] = useState(false);
+  const [profile, setProfile] = useState<SenderProfileData | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const projectId = useProjectId();
 
   // Fetch sender emails from API instead of filtering in-memory
@@ -901,6 +1455,36 @@ function SenderDetail({
       setHasMoreSenderEmails(data.hasMore);
     }).catch(() => {});
   }, [projectId, sender.id]);
+
+  // Fetch sender profile
+  useEffect(() => {
+    setProfileLoading(true);
+    api.get<{ profile: SenderProfileData | null }>(
+      `/api/projects/${projectId}/senders/${sender.id}/profile`
+    ).then((data) => {
+      setProfile(data.profile);
+    }).catch(() => {}).finally(() => {
+      setProfileLoading(false);
+    });
+  }, [projectId, sender.id]);
+
+  const handleGenerateProfile = async () => {
+    setGenerating(true);
+    try {
+      const data = await api.post<{ profile: Record<string, string>; sourceUrls: string[] }>(
+        `/api/projects/${projectId}/senders/${sender.id}/profile`
+      );
+      // Refetch to get the full row
+      const refreshed = await api.get<{ profile: SenderProfileData | null }>(
+        `/api/projects/${projectId}/senders/${sender.id}/profile`
+      );
+      setProfile(refreshed.profile);
+    } catch (err: any) {
+      alert(err.message || "Failed to generate profile");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const loadMoreSenderEmails = async () => {
     if (loadingMoreSenderEmails || !hasMoreSenderEmails) return;
@@ -999,60 +1583,95 @@ function SenderDetail({
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors"
-          >
-            <ArrowLeft size={18} className="text-muted-foreground" />
-          </button>
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
-            {sender.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-semibold text-foreground truncate">
-              {sender.name}
-            </h1>
-            {sender.website && (
-              <p className="text-xs text-muted-foreground truncate">
-                {sender.website}
-              </p>
-            )}
-            {sender.country && (
-              <p className="text-xs text-muted-foreground">
-                {countryLabel(sender.country)}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setEditName(sender.name);
-                setEditWebsite(sender.website || "");
-                setEditDescription(sender.description || "");
-                setEditCountry(sender.country || "");
-                setEditing(true);
-              }}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBack}
+              className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors"
             >
-              <Pencil size={14} />
-            </Button>
-            {mergeableSenders.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setMergeOpen(true)}>
-                <ArrowsMerge size={14} />
+              <ArrowLeft size={18} className="text-muted-foreground" />
+            </button>
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+              <SenderAvatar sender={sender} size={36} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold text-foreground truncate">
+                  {sender.name}
+                </h1>
+                {sender.country && COUNTRIES[sender.country] && (
+                  <span className="text-base leading-none shrink-0" title={COUNTRIES[sender.country].name}>
+                    {COUNTRIES[sender.country].flag}
+                  </span>
+                )}
+              </div>
+              {sender.website && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {sender.website}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditName(sender.name);
+                  setEditWebsite(sender.website || "");
+                  setEditDescription(sender.description || "");
+                  setEditCountry(sender.country || "");
+                  setEditing(true);
+                }}
+              >
+                <Pencil size={14} />
               </Button>
+              {mergeableSenders.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setMergeOpen(true)}>
+                  <ArrowsMerge size={14} />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={handleDelete}>
+                <Trash size={14} />
+              </Button>
+            </div>
+          </div>
+
+          {/* Inline KPIs + tags */}
+          <div className="flex items-center gap-3 flex-wrap pl-[68px]">
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <EnvelopeSimple size={13} className="text-muted-foreground/60" />
+              <span className="font-semibold text-foreground tabular-nums">{total}</span> emails
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <TrendUp size={13} className="text-muted-foreground/60" />
+              <span className="font-semibold text-foreground tabular-nums">{avgPerDay}</span>/day
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <LinkSimple size={13} className="text-muted-foreground/60" />
+              <span className="font-semibold text-foreground tabular-nums">{senderDomains.length}</span> domain{senderDomains.length !== 1 ? "s" : ""}
+            </span>
+            {profile?.profile.industry && (
+              <span className="inline-flex items-center text-[11px] font-medium bg-primary/10 text-primary rounded-md px-1.5 py-0.5">
+                {profile.profile.industry}
+              </span>
             )}
-            <Button variant="ghost" size="sm" onClick={handleDelete}>
-              <Trash size={14} />
-            </Button>
+            {profile?.profile.tags?.map((tag, i) => (
+              <span key={i} className="inline-flex items-center text-[11px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">
+                {tag}
+              </span>
+            ))}
           </div>
         </div>
 
-        {sender.description && (
-          <p className="text-sm text-muted-foreground">{sender.description}</p>
-        )}
+        <Tabs defaultValue="overview">
+          <TabsList variant="line">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="company">Company</TabsTrigger>
+            <TabsTrigger value="strategy">Strategy</TabsTrigger>
+            <TabsTrigger value="emails">Emails</TabsTrigger>
+          </TabsList>
 
+          <TabsContent value="overview" className="space-y-6 mt-6">
         {/* KPI row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Total emails" value={total} icon={EnvelopeSimple} />
@@ -1074,117 +1693,158 @@ function SenderDetail({
           />
         </div>
 
-        {/* Volume chart + recent emails */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-3">
-            <Card>
-              <CardContent className="p-4">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Email volume
-                  </h3>
-                  <p className="text-xs text-muted-foreground">Last 14 days</p>
-                </div>
-                <ChartContainer config={volumeConfig} className="aspect-[2.5/1] w-full">
-                  <AreaChart data={volumeData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                    <defs>
-                      <linearGradient id="fillSenderVolume" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-count)" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="var(--color-count)" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={4}
-                      allowDecimals={false}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Area
-                      dataKey="count"
-                      type="monotone"
-                      stroke="var(--color-count)"
-                      fill="url(#fillSenderVolume)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="lg:col-span-2">
-            <Card className="h-full">
-              <CardContent className="p-4">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Recent emails
-                  </h3>
-                </div>
-                {recent.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No emails from this sender</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {recent.map((e) => (
-                      <div key={e.id} className="flex items-start gap-3">
-                        <div className="mt-1.5 shrink-0">
-                          {e.status === "received" ? (
-                            <span className="block w-2 h-2 rounded-full bg-primary" />
-                          ) : e.status === "processing" ? (
-                            <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                          ) : e.status === "failed" ? (
-                            <span className="block w-2 h-2 rounded-full bg-red-400" />
-                          ) : (
-                            <span className="block w-2 h-2 rounded-full bg-green-400" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-foreground truncate">
-                            {e.subject || "(no subject)"}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs text-muted-foreground truncate">
-                              {e.from_address}
-                            </p>
-                            <span className="text-xs text-muted-foreground shrink-0">
-                              {formatRelative(e.created_at)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {hasMoreSenderEmails && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={loadMoreSenderEmails}
-                        disabled={loadingMoreSenderEmails}
-                      >
-                        {loadingMoreSenderEmails ? (
-                          <>
-                            <CircleNotch size={14} className="animate-spin mr-1.5" />
-                            Loading...
-                          </>
-                        ) : (
-                          "Load more"
-                        )}
-                      </Button>
-                    )}
+        {/* Volume chart - full width */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-foreground">
+                Email volume
+              </h3>
+              <p className="text-xs text-muted-foreground">Last 14 days</p>
+            </div>
+            <ChartContainer config={volumeConfig} className="aspect-[2.5/1] w-full">
+              <AreaChart data={volumeData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                <defs>
+                  <linearGradient id="fillSenderVolume" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-count)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="var(--color-count)" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={4}
+                  allowDecimals={false}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Area
+                  dataKey="count"
+                  type="monotone"
+                  stroke="var(--color-count)"
+                  fill="url(#fillSenderVolume)"
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        {/* About + Recent emails */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* About card */}
+          <Card>
+            <CardContent className="p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">About</h3>
+              <div className="space-y-2.5">
+                {sender.description && (
+                  <p className="text-sm text-muted-foreground leading-relaxed">{sender.description}</p>
+                )}
+                {sender.website && (
+                  <div className="flex items-center gap-2">
+                    <GlobeSimple size={14} className="text-muted-foreground shrink-0" />
+                    <a
+                      href={sender.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline truncate"
+                    >
+                      {sender.website}
+                    </a>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </div>
+                {sender.country && COUNTRIES[sender.country] && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-base leading-none">{COUNTRIES[sender.country].flag}</span>
+                    <span className="text-sm text-muted-foreground">{COUNTRIES[sender.country].name}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <LinkSimple size={14} className="text-muted-foreground shrink-0" />
+                  <span className="text-sm text-muted-foreground">
+                    {senderDomains.length} domain{senderDomains.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                {profile && (profile.profile.industry || (profile.profile.tags && profile.profile.tags.length > 0)) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {profile.profile.industry && (
+                      <span className="inline-flex items-center text-xs font-medium bg-primary/10 text-primary rounded-md px-2 py-0.5">
+                        {profile.profile.industry}
+                      </span>
+                    )}
+                    {profile.profile.tags?.map((tag, i) => (
+                      <span key={i} className="inline-flex items-center text-[11px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent emails */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Recent emails
+                </h3>
+              </div>
+              {recent.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">No emails from this sender</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {recent.map((e) => (
+                    <a
+                      key={e.id}
+                      href={`/app/inbox?email=${e.id}`}
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        window.history.pushState(null, "", `/app/inbox?email=${e.id}`);
+                        window.dispatchEvent(new PopStateEvent("popstate"));
+                      }}
+                      className="flex items-start gap-3 rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="mt-1.5 shrink-0">
+                        {e.status === "received" ? (
+                          <span className="block w-2 h-2 rounded-full bg-primary" />
+                        ) : e.status === "processing" ? (
+                          <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                        ) : e.status === "failed" ? (
+                          <span className="block w-2 h-2 rounded-full bg-red-400" />
+                        ) : (
+                          <span className="block w-2 h-2 rounded-full bg-green-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-foreground truncate">
+                          {e.subject || "(no subject)"}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {e.from_address}
+                          </p>
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {formatRelative(e.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Tag breakdown */}
@@ -1219,6 +1879,204 @@ function SenderDetail({
             </CardContent>
           </Card>
         )}
+          </TabsContent>
+
+          <TabsContent value="company" className="mt-6">
+        {/* Company profile */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">
+                Company profile
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleGenerateProfile}
+                disabled={generating || !sender.website}
+                title={!sender.website ? "Add a website to generate a profile" : undefined}
+              >
+                {generating ? (
+                  <CircleNotch size={14} className="animate-spin mr-1.5" />
+                ) : (
+                  <MagicWand size={14} className="mr-1.5" />
+                )}
+                {profile ? "Regenerate" : "Generate"}
+              </Button>
+            </div>
+            {profileLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <CircleNotch size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : !profile ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Buildings size={32} weight="duotone" className="mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No profile generated yet</p>
+                <p className="text-xs mt-1">
+                  {sender.website
+                    ? "Click Generate to create a company analysis"
+                    : "Add a website URL to this sender first"}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <ProfileSection icon={Buildings} title="Company profile" content={profile.profile.company_profile} />
+
+                {/* Industry & tags */}
+                {(profile.profile.industry || (profile.profile.tags && profile.profile.tags.length > 0)) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pl-7 py-1.5">
+                    {profile.profile.industry && (
+                      <span className="inline-flex items-center text-xs font-medium bg-primary/10 text-primary rounded-md px-2 py-0.5">
+                        {profile.profile.industry}
+                      </span>
+                    )}
+                    {profile.profile.tags?.map((tag, i) => (
+                      <span key={i} className="inline-flex items-center text-[11px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <ProfileSection icon={Target} title="Target audiences" content={profile.profile.target_audiences} />
+                <ProfileSection icon={Package} title="Product portfolio" content={profile.profile.product_portfolio} />
+
+                {/* Top products */}
+                {profile.profile.top_products && profile.profile.top_products.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pl-7 py-1.5">
+                    {profile.profile.top_products.map((p, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 text-xs bg-muted/60 text-foreground rounded-md px-2 py-0.5">
+                        <Storefront size={10} className="text-muted-foreground" />
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pricing snapshot */}
+                {profile.profile.pricing_snapshot && (
+                  <PricingSnapshotCard snapshot={profile.profile.pricing_snapshot} />
+                )}
+
+                <ProfileSection icon={Tag} title="Ongoing sales" content={profile.profile.ongoing_sales} />
+                <ProfileSection icon={CurrencyDollar} title="Pricing strategy" content={profile.profile.pricing_strategy} />
+                <ProfileSection icon={Megaphone} title="Marketing approach" content={profile.profile.marketing_approach} />
+                <ProfileSection icon={ShieldCheck} title="Strengths" content={profile.profile.strengths} />
+                <ProfileSection icon={Warning} title="Weaknesses" content={profile.profile.weaknesses} />
+                <ProfileSection icon={Lightbulb} title="Recommendations" content={profile.profile.recommendations} />
+
+                {profile.source_urls.length > 0 && (
+                  <div className="pt-3 border-t border-border/40 mt-3">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                      Sources
+                    </p>
+                    <div className="space-y-0.5">
+                      {profile.source_urls.map((url, i) => (
+                        <a
+                          key={i}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-xs text-muted-foreground hover:text-foreground truncate transition-colors"
+                        >
+                          {url}
+                        </a>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      Generated {new Date(profile.generated_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+          </TabsContent>
+
+          <TabsContent value="strategy" className="mt-6">
+        {/* Email strategy */}
+        <StrategyCard senderId={sender.id} projectId={projectId} />
+          </TabsContent>
+
+          <TabsContent value="emails" className="mt-6 space-y-6">
+        {/* All emails */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-foreground">
+                All emails
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {senderEmails.length} email{senderEmails.length !== 1 ? "s" : ""} loaded
+              </p>
+            </div>
+            {senderEmails.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">No emails from this sender</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {senderEmails.map((e) => (
+                  <a
+                    key={e.id}
+                    href={`/app/inbox?email=${e.id}`}
+                    onClick={(ev) => {
+                      ev.preventDefault();
+                      window.history.pushState(null, "", `/app/inbox?email=${e.id}`);
+                      window.dispatchEvent(new PopStateEvent("popstate"));
+                    }}
+                    className="flex items-start gap-3 rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="mt-1.5 shrink-0">
+                      {e.status === "received" ? (
+                        <span className="block w-2 h-2 rounded-full bg-primary" />
+                      ) : e.status === "processing" ? (
+                        <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                      ) : e.status === "failed" ? (
+                        <span className="block w-2 h-2 rounded-full bg-red-400" />
+                      ) : (
+                        <span className="block w-2 h-2 rounded-full bg-green-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-foreground truncate">
+                        {e.subject || "(no subject)"}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-muted-foreground truncate">
+                          {e.from_address}
+                        </p>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {formatRelative(e.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </a>
+                ))}
+                {hasMoreSenderEmails && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={loadMoreSenderEmails}
+                    disabled={loadingMoreSenderEmails}
+                  >
+                    {loadingMoreSenderEmails ? (
+                      <>
+                        <CircleNotch size={14} className="animate-spin mr-1.5" />
+                        Loading...
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Linked domains */}
         <Card>
@@ -1252,6 +2110,8 @@ function SenderDetail({
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Edit dialog */}
         <Dialog open={editing} onOpenChange={setEditing}>
@@ -1373,7 +2233,10 @@ export function SendersView() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
-  const [selectedSenderId, setSelectedSenderId] = useState<string | null>(null);
+  const [selectedSenderId, setSelectedSenderId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("sender");
+  });
   const [senderStats, setSenderStats] = useState<Record<string, SenderStats> | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -1412,6 +2275,40 @@ export function SendersView() {
     return () => window.removeEventListener("sender:resolved", handler);
   }, [fetchData]);
 
+  const [refreshingLogos, setRefreshingLogos] = useState(false);
+  const [refreshingProfiles, setRefreshingProfiles] = useState(false);
+
+  const handleRefreshProfiles = async (all = false) => {
+    setRefreshingProfiles(true);
+    try {
+      await api.post(`/api/projects/${projectId}/senders/refresh-profiles${all ? "?all=1" : ""}`);
+      setTimeout(() => {
+        setRefreshingProfiles(false);
+      }, 15000);
+    } catch (err: any) {
+      alert(err.message || "Failed to refresh profiles");
+      setRefreshingProfiles(false);
+    }
+  };
+
+  const handleRefreshLogos = async () => {
+    setRefreshingLogos(true);
+    try {
+      await api.post(`/api/projects/${projectId}/senders/refresh-logos`);
+      // Poll for updates
+      const interval = setInterval(async () => {
+        await fetchData();
+      }, 2000);
+      setTimeout(() => {
+        clearInterval(interval);
+        setRefreshingLogos(false);
+      }, 30000);
+    } catch (err: any) {
+      alert(err.message || "Failed to refresh logos");
+      setRefreshingLogos(false);
+    }
+  };
+
   const handleResolveAll = async () => {
     setResolving(true);
     try {
@@ -1431,6 +2328,26 @@ export function SendersView() {
     }
   };
 
+  const updateSenderParam = (id: string | null) => {
+    const url = new URL(window.location.href);
+    if (id) {
+      url.searchParams.set("sender", id);
+    } else {
+      url.searchParams.delete("sender");
+    }
+    window.history.replaceState(null, "", url.pathname + url.search);
+  };
+
+  const handleSelectSender = (id: string) => {
+    setSelectedSenderId(id);
+    updateSenderParam(id);
+  };
+
+  const handleBack = () => {
+    setSelectedSenderId(null);
+    updateSenderParam(null);
+  };
+
   const selectedSender = senders.find((s) => s.id === selectedSenderId);
 
   if (selectedSender) {
@@ -1439,7 +2356,7 @@ export function SendersView() {
         sender={selectedSender}
         domains={domains}
         allSenders={senders}
-        onBack={() => setSelectedSenderId(null)}
+        onBack={handleBack}
         onRefresh={fetchData}
       />
     );
@@ -1451,8 +2368,12 @@ export function SendersView() {
       domains={domains}
       loading={loading}
       resolving={resolving}
-      onSelect={setSelectedSenderId}
+      refreshingLogos={refreshingLogos}
+      refreshingProfiles={refreshingProfiles}
+      onSelect={handleSelectSender}
       onResolveAll={handleResolveAll}
+      onRefreshLogos={handleRefreshLogos}
+      onRefreshProfiles={handleRefreshProfiles}
       stats={senderStats}
     />
   );

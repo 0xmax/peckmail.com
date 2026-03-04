@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext.js";
 import { useIncomingEmails, useProjectId, useHasMoreEmails, useLoadingMoreEmails, useLoadMoreEmails } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
@@ -86,12 +86,20 @@ function EmailListItem({
   isSelected: boolean;
   onSelect: () => void;
 }) {
+  const ref = useRef<HTMLButtonElement>(null);
   const isUnread = email.status === "received";
   const senderName = extractSenderName(email.from_address);
   const initial = senderName[0]?.toUpperCase() || "?";
 
+  useEffect(() => {
+    if (isSelected && ref.current) {
+      ref.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [isSelected]);
+
   return (
     <button
+      ref={ref}
       onClick={onSelect}
       className={`w-full text-left px-3 py-3 flex items-start gap-3 transition-colors border-b border-border/50 ${
         isSelected
@@ -477,8 +485,12 @@ export function InboxView() {
           e.from_address?.toLowerCase().includes(q)
       );
     }
+    // Ensure the selected email appears in the list even if not in the loaded batch
+    if (selectedId && selectedEmail && !list.find((e) => e.id === selectedId)) {
+      list = [selectedEmail, ...list];
+    }
     return list;
-  }, [emails, filter, search]);
+  }, [emails, filter, search, selectedId, selectedEmail]);
 
   const unreadCount = emails.filter((e) => e.status === "received").length;
 
