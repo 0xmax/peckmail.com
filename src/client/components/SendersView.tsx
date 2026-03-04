@@ -257,14 +257,25 @@ const sparklineConfig: ChartConfig = {
 };
 
 function Sparkline({ sparkline, days = 30 }: { sparkline: number[]; days?: number }) {
-  const chartData = useMemo(
-    () => sparkline.slice(-days).map((count, i) => ({ day: i, count })),
-    [sparkline, days]
-  );
+  const chartData = useMemo(() => {
+    const data = sparkline.slice(-days);
+    return data.map((count, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (data.length - 1 - i));
+      return {
+        date: date.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        }),
+        count,
+      };
+    });
+  }, [sparkline, days]);
+
   return (
     <ChartContainer
       config={sparklineConfig}
-      className="h-9 w-24 aspect-auto shrink-0"
+      className="h-9 w-32 aspect-auto shrink-0"
     >
       <AreaChart
         data={chartData}
@@ -294,7 +305,13 @@ function Sparkline({ sparkline, days = 30 }: { sparkline: number[]; days?: numbe
           isAnimationActive={false}
         />
         <ChartTooltip
-          content={<ChartTooltipContent hideLabel hideIndicator />}
+          content={
+            <ChartTooltipContent
+              labelKey="date"
+              className="min-w-[100px]"
+              indicator="line"
+            />
+          }
           cursor={{ stroke: "var(--color-border)", strokeWidth: 1 }}
         />
       </AreaChart>
