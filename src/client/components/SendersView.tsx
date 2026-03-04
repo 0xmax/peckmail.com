@@ -17,6 +17,7 @@ import {
   ArrowsMerge,
   MagnifyingGlass,
   TrendDown,
+  SortAscending,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Button } from "@/components/ui/button.js";
@@ -373,6 +374,7 @@ function SenderList({
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [timeframe, setTimeframe] = useState<number>(30);
+  const [sortBy, setSortBy] = useState<"default" | "name" | "total" | "trending" | "declining">("default");
   const unlinkedDomains = domains.filter((d) => !d.sender_id);
   const totalEmails = senders.reduce((sum, s) => sum + s.email_count, 0);
 
@@ -401,8 +403,23 @@ function SenderList({
         return senderDomains.some((d) => d.domain.toLowerCase().includes(q));
       });
     }
+    if (sortBy !== "default") {
+      result = [...result].sort((a, b) => {
+        if (sortBy === "name") return a.name.localeCompare(b.name);
+        const stA = stats?.[a.id];
+        const stB = stats?.[b.id];
+        const totalA = stA?.sparkline.slice(-timeframe).reduce((s, v) => s + v, 0) ?? 0;
+        const totalB = stB?.sparkline.slice(-timeframe).reduce((s, v) => s + v, 0) ?? 0;
+        if (sortBy === "total") return totalB - totalA;
+        const deltaA = stA ? periodTrend(stA.sparkline, timeframe).delta : 0;
+        const deltaB = stB ? periodTrend(stB.sparkline, timeframe).delta : 0;
+        if (sortBy === "trending") return deltaB - deltaA;
+        if (sortBy === "declining") return deltaA - deltaB;
+        return 0;
+      });
+    }
     return result;
-  }, [senders, domains, countryFilter, search]);
+  }, [senders, domains, countryFilter, search, sortBy, stats, timeframe]);
 
   const filteredUnlinkedDomains = useMemo(() => {
     if (!search.trim()) return unlinkedDomains;
@@ -501,6 +518,19 @@ function SenderList({
                 </button>
               ))}
             </div>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+              <SelectTrigger className="w-[150px] h-8 text-xs">
+                <SortAscending size={14} className="mr-1.5 shrink-0 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="total">Most emails</SelectItem>
+                <SelectItem value="trending">Trending up</SelectItem>
+                <SelectItem value="declining">Trending down</SelectItem>
+              </SelectContent>
+            </Select>
             {availableCountries.length > 0 && (
               <Select value={countryFilter} onValueChange={setCountryFilter}>
                 <SelectTrigger className="w-[180px] h-8 text-xs">
