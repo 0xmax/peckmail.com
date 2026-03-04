@@ -1452,6 +1452,46 @@ export async function listProjectSenders(
   });
 }
 
+export async function refreshSenderDailyStats(projectId?: string) {
+  const { error } = await supabaseAdmin.rpc("refresh_sender_daily_stats", {
+    p_project_id: projectId ?? null,
+  });
+  if (error) throw error;
+}
+
+export interface SenderDailyStatsRow {
+  sender_id: string;
+  date: string;
+  email_count: number;
+}
+
+export async function getSenderDailyStats(
+  projectId: string
+): Promise<SenderDailyStatsRow[]> {
+  // Get sender IDs for this project
+  const { data: senders, error: sErr } = await supabaseAdmin
+    .from("email_senders")
+    .select("id")
+    .eq("project_id", projectId)
+    .is("deleted_at", null);
+  if (sErr) throw sErr;
+  const senderIds = (senders ?? []).map((s) => s.id);
+  if (!senderIds.length) return [];
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 60);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  const { data, error } = await supabaseAdmin
+    .from("sender_daily_stats")
+    .select("sender_id, date, email_count")
+    .gte("date", cutoffStr)
+    .in("sender_id", senderIds);
+
+  if (error) throw error;
+  return (data ?? []) as SenderDailyStatsRow[];
+}
+
 export async function createProjectSender(params: {
   projectId: string;
   name: string;

@@ -42,6 +42,10 @@ export interface Sender {
   created_at: string;
 }
 
+export interface SenderStats {
+  sparkline: number[];
+}
+
 export interface StoreState {
   projectId: string;
   projectName: string;

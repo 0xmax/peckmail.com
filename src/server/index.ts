@@ -49,6 +49,8 @@ import {
   deleteProject,
   listInsufficientCreditRetryEmails,
   getDashboardStats,
+  refreshSenderDailyStats,
+  getSenderDailyStats,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail, reprocessEmailTags } from "./inbound.js";
@@ -1073,6 +1075,47 @@ api.get("/projects/:id/senders", async (c) => {
   }
 });
 
+api.get("/projects/:id/senders/stats", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const rows = await getSenderDailyStats(projectId);
+
+    // Build per-sender stats
+    const bySender = new Map<string, Map<string, number>>();
+    for (const row of rows) {
+      let dateMap = bySender.get(row.sender_id);
+      if (!dateMap) {
+        dateMap = new Map();
+        bySender.set(row.sender_id, dateMap);
+      }
+      dateMap.set(row.date, row.email_count);
+    }
+
+    const today = new Date();
+    const stats: Record<string, any> = {};
+
+    for (const [senderId, dateMap] of bySender) {
+      // 60 daily values (oldest first), client slices per period
+      const sparkline: number[] = [];
+      for (let i = 59; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        sparkline.push(dateMap.get(key) || 0);
+      }
+      stats[senderId] = { sparkline };
+    }
+
+    return c.json({ stats });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load sender stats" }, 500);
+  }
+});
+
 api.get("/projects/:id/senders/:senderId/emails", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
@@ -1420,6 +1463,18 @@ setInterval(() => {
 retryInsufficientCreditEmails().catch((err) =>
   console.error("[inbound] Initial credit retry run error:", err)
 );
+
+// Refresh sender daily stats every 15 minutes
+setInterval(() => {
+  refreshSenderDailyStats().then(() => {
+    console.log("[senders] Daily stats refreshed");
+  }).catch((err) => console.error("[senders] Daily stats refresh error:", err));
+}, 15 * 60 * 1000);
+
+// Run once on startup
+refreshSenderDailyStats().then(() => {
+  console.log("[senders] Initial daily stats refresh complete");
+}).catch((err) => console.error("[senders] Initial daily stats refresh error:", err));
 
 // Share page HTML
 function sharePageHtml(

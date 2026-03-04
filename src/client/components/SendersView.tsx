@@ -14,6 +14,8 @@ import {
   Globe,
   LinkSimple,
   ArrowsMerge,
+  MagnifyingGlass,
+  TrendDown,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Button } from "@/components/ui/button.js";
@@ -49,7 +51,7 @@ import {
 } from "recharts";
 import { useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
-import type { Sender, IncomingEmail } from "../store/types.js";
+import type { Sender, IncomingEmail, SenderStats } from "../store/types.js";
 
 // --- Countries ---
 
@@ -247,6 +249,57 @@ function KpiCard({
 
 // --- Sender List ---
 
+// --- Sparkline + trend helpers ---
+
+const sparklineConfig: ChartConfig = {
+  count: { label: "Emails", color: "var(--color-primary)" },
+};
+
+function Sparkline({ sparkline }: { sparkline: number[] }) {
+  const chartData = useMemo(
+    () => sparkline.slice(-30).map((count, i) => ({ day: i, count })),
+    [sparkline]
+  );
+  return (
+    <ChartContainer config={sparklineConfig} className="h-[28px] w-[120px] shrink-0">
+      <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+        <ChartTooltip content={<ChartTooltipContent hideLabel />} cursor={false} />
+        <Bar dataKey="count" fill="var(--color-count)" radius={[1, 1, 0, 0]} />
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+function periodTrend(sparkline: number[], days: number) {
+  const current = sparkline.slice(-days);
+  const prev = sparkline.slice(-days * 2, -days);
+  const count = current.reduce((a, b) => a + b, 0);
+  const prevCount = prev.reduce((a, b) => a + b, 0);
+  return { count, delta: count - prevCount };
+}
+
+function TrendCell({ sparkline, days }: { sparkline: number[]; days: number }) {
+  const { count, delta } = useMemo(() => periodTrend(sparkline, days), [sparkline, days]);
+  return (
+    <div className="text-right">
+      <span className="text-xs tabular-nums text-foreground">{count}</span>
+      {delta !== 0 && (
+        <div className="flex items-center justify-end gap-0.5">
+          {delta > 0 ? (
+            <span className="flex items-center text-[10px] tabular-nums text-green-600">
+              <TrendUp size={10} className="mr-px" />+{delta}
+            </span>
+          ) : (
+            <span className="flex items-center text-[10px] tabular-nums text-red-500">
+              <TrendDown size={10} className="mr-px" />{delta}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SenderList({
   senders,
   domains,
@@ -254,6 +307,7 @@ function SenderList({
   resolving,
   onSelect,
   onResolveAll,
+  stats,
 }: {
   senders: Sender[];
   domains: Domain[];
@@ -261,8 +315,10 @@ function SenderList({
   resolving: boolean;
   onSelect: (senderId: string) => void;
   onResolveAll: () => void;
+  stats: Record<string, SenderStats> | null;
 }) {
   const [countryFilter, setCountryFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const unlinkedDomains = domains.filter((d) => !d.sender_id);
   const totalEmails = senders.reduce((sum, s) => sum + s.email_count, 0);
 
@@ -279,9 +335,26 @@ function SenderList({
   }, [senders]);
 
   const filteredSenders = useMemo(() => {
-    if (countryFilter === "all") return senders;
-    return senders.filter((s) => s.country === countryFilter);
-  }, [senders, countryFilter]);
+    let result = senders;
+    if (countryFilter !== "all") {
+      result = result.filter((s) => s.country === countryFilter);
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter((s) => {
+        if (s.name.toLowerCase().includes(q)) return true;
+        const senderDomains = domains.filter((d) => d.sender_id === s.id);
+        return senderDomains.some((d) => d.domain.toLowerCase().includes(q));
+      });
+    }
+    return result;
+  }, [senders, domains, countryFilter, search]);
+
+  const filteredUnlinkedDomains = useMemo(() => {
+    if (!search.trim()) return unlinkedDomains;
+    const q = search.trim().toLowerCase();
+    return unlinkedDomains.filter((d) => d.domain.toLowerCase().includes(q));
+  }, [unlinkedDomains, search]);
 
   if (loading) {
     return (
@@ -347,6 +420,18 @@ function SenderList({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="relative">
+              <MagnifyingGlass
+                size={14}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                placeholder="Search senders..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 text-xs pl-8 w-[200px]"
+              />
+            </div>
             {availableCountries.length > 0 && (
               <Select value={countryFilter} onValueChange={setCountryFilter}>
                 <SelectTrigger className="w-[180px] h-8 text-xs">
@@ -385,55 +470,81 @@ function SenderList({
         {filteredSenders.length > 0 && (
           <Card>
             <CardContent className="p-2">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
+                <div className="w-9 shrink-0" />
+                <div className="flex-1 min-w-0">Sender</div>
+                <div className="w-[120px] shrink-0 text-center">30d</div>
+                <div className="w-12 shrink-0 text-right">7d</div>
+                <div className="w-12 shrink-0 text-right">14d</div>
+                <div className="w-14 shrink-0 text-right">Total</div>
+              </div>
               <div className="divide-y divide-border">
-                {filteredSenders.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => onSelect(s.id)}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors text-left"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
-                      {s.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {s.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {s.domain_count} domain{s.domain_count !== 1 ? "s" : ""}{" "}
-                        &middot; {s.email_count} email{s.email_count !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    {s.country && COUNTRIES[s.country] && (
-                      <span className="text-sm shrink-0" title={COUNTRIES[s.country].name}>
-                        {COUNTRIES[s.country].flag}
-                      </span>
-                    )}
-                    {s.website && (
-                      <Globe size={14} className="text-muted-foreground shrink-0" />
-                    )}
-                  </button>
-                ))}
+                {filteredSenders.map((s) => {
+                  const st = stats?.[s.id];
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => onSelect(s.id)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
+                        {s.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {s.name}
+                          </p>
+                          {s.country && COUNTRIES[s.country] && (
+                            <span className="text-xs shrink-0" title={COUNTRIES[s.country].name}>
+                              {COUNTRIES[s.country].flag}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {s.domain_count} domain{s.domain_count !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <div className="w-[120px] shrink-0 flex items-center justify-center">
+                        {st ? (
+                          <Sparkline sparkline={st.sparkline} />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">&mdash;</span>
+                        )}
+                      </div>
+                      <div className="w-12 shrink-0">
+                        {st ? <TrendCell sparkline={st.sparkline} days={7} /> : <span className="text-xs text-muted-foreground block text-right">&mdash;</span>}
+                      </div>
+                      <div className="w-12 shrink-0">
+                        {st ? <TrendCell sparkline={st.sparkline} days={14} /> : <span className="text-xs text-muted-foreground block text-right">&mdash;</span>}
+                      </div>
+                      <div className="w-14 shrink-0 text-right">
+                        <span className="text-xs font-medium tabular-nums text-foreground">{s.email_count}</span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
         )}
 
         {/* Unlinked domains */}
-        {unlinkedDomains.length > 0 && (
+        {filteredUnlinkedDomains.length > 0 && (
           <>
             <div>
               <h2 className="text-sm font-semibold text-foreground">
                 Unlinked domains
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {unlinkedDomains.length} domain{unlinkedDomains.length !== 1 ? "s" : ""} not yet linked to a sender
+                {filteredUnlinkedDomains.length} domain{filteredUnlinkedDomains.length !== 1 ? "s" : ""} not yet linked to a sender
               </p>
             </div>
             <Card>
               <CardContent className="p-2">
                 <div className="divide-y divide-border">
-                  {unlinkedDomains.map((d) => (
+                  {filteredUnlinkedDomains.map((d) => (
                     <div
                       key={d.id}
                       className="flex items-center gap-3 p-3"
@@ -992,6 +1103,7 @@ export function SendersView() {
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [selectedSenderId, setSelectedSenderId] = useState<string | null>(null);
+  const [senderStats, setSenderStats] = useState<Record<string, SenderStats> | null>(null);
 
   const fetchData = useCallback(async () => {
     const [sendersRes, domainsRes] = await Promise.allSettled([
@@ -1003,6 +1115,17 @@ export function SendersView() {
     if (domainsRes.status === "fulfilled") setDomains(domainsRes.value.domains);
     else console.error("[SendersView] Failed to fetch domains:", domainsRes.reason);
     setLoading(false);
+  }, [projectId]);
+
+  // Fetch sender stats
+  useEffect(() => {
+    api.get<{ stats: Record<string, SenderStats> }>(
+      `/api/projects/${projectId}/senders/stats`
+    ).then((data) => {
+      setSenderStats(data.stats);
+    }).catch((err) => {
+      console.error("[SendersView] Failed to fetch sender stats:", err);
+    });
   }, [projectId]);
 
   useEffect(() => {
@@ -1059,6 +1182,7 @@ export function SendersView() {
       resolving={resolving}
       onSelect={setSelectedSenderId}
       onResolveAll={handleResolveAll}
+      stats={senderStats}
     />
   );
 }
