@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext.js";
-import { useIncomingEmails, useProjectId } from "../store/StoreContext.js";
+import { useIncomingEmails, useProjectId, useHasMoreEmails, useLoadingMoreEmails, useLoadMoreEmails } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
 import {
   Tray,
@@ -359,6 +359,9 @@ export function InboxView() {
   const { session } = useAuth();
   const projectId = useProjectId();
   const emails = useIncomingEmails();
+  const hasMoreEmails = useHasMoreEmails();
+  const loadingMoreEmails = useLoadingMoreEmails();
+  const loadMoreEmails = useLoadMoreEmails();
   const [projectEmail, setProjectEmail] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -570,14 +573,36 @@ export function InboxView() {
                 </p>
               </div>
             ) : (
-              filteredEmails.map((e) => (
-                <EmailListItem
-                  key={e.id}
-                  email={e}
-                  isSelected={selectedId === e.id}
-                  onSelect={() => handleSelect(e.id)}
-                />
-              ))
+              <>
+                {filteredEmails.map((e) => (
+                  <EmailListItem
+                    key={e.id}
+                    email={e}
+                    isSelected={selectedId === e.id}
+                    onSelect={() => handleSelect(e.id)}
+                  />
+                ))}
+                {hasMoreEmails && !search && filter === "all" && (
+                  <div className="px-3 py-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={loadMoreEmails}
+                      disabled={loadingMoreEmails}
+                    >
+                      {loadingMoreEmails ? (
+                        <>
+                          <CircleNotch size={14} className="animate-spin mr-1.5" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Load more"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

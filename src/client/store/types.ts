@@ -30,6 +30,18 @@ export interface IncomingEmail {
   tags?: EmailTagSummary[];
 }
 
+export interface Sender {
+  id: string;
+  name: string;
+  website: string | null;
+  description: string | null;
+  logo_url: string | null;
+  country: string | null;
+  domain_count: number;
+  email_count: number;
+  created_at: string;
+}
+
 export interface StoreState {
   projectId: string;
   projectName: string;
@@ -41,6 +53,8 @@ export interface StoreState {
   chatError: string | null;
   chatPrompt: string | null;
   incomingEmails: IncomingEmail[];
+  hasMoreEmails: boolean;
+  loadingMoreEmails: boolean;
 }
 
 export type StoreAction =

@@ -113,3 +113,16 @@ export function useRenameProject(): (name: string) => Promise<boolean> {
 export function useIncomingEmails(): IncomingEmail[] {
   return useSelector((s) => s.incomingEmails);
 }
+
+export function useHasMoreEmails(): boolean {
+  return useSelector((s) => s.hasMoreEmails);
+}
+
+export function useLoadingMoreEmails(): boolean {
+  return useSelector((s) => s.loadingMoreEmails);
+}
+
+export function useLoadMoreEmails(): () => void {
+  const store = useStore();
+  return () => store.loadMoreEmails();
+}

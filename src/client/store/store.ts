@@ -28,6 +28,8 @@ export class WorkspaceStore {
       chatError: null,
       chatPrompt: null,
       incomingEmails: [],
+      hasMoreEmails: false,
+      loadingMoreEmails: false,
     };
   }
 
@@ -158,6 +160,11 @@ export class WorkspaceStore {
               : e
           ),
         });
+        break;
+
+      case "sender:resolved":
+        // Notify SendersView to refetch
+        window.dispatchEvent(new CustomEvent("sender:resolved", { detail: msg }));
         break;
 
       case "pong":
@@ -331,12 +338,31 @@ export class WorkspaceStore {
 
   async loadEmails() {
     try {
-      const data = await api.get<{ emails: IncomingEmail[] }>(
-        `/api/projects/${this.state.projectId}/emails`
+      const data = await api.get<{ emails: IncomingEmail[]; hasMore: boolean }>(
+        `/api/projects/${this.state.projectId}/emails?limit=50`
       );
-      this.setState({ incomingEmails: data.emails });
+      this.setState({ incomingEmails: data.emails, hasMoreEmails: data.hasMore });
     } catch {
       // Ignore
+    }
+  }
+
+  async loadMoreEmails() {
+    if (this.state.loadingMoreEmails || !this.state.hasMoreEmails) return;
+    const lastEmail = this.state.incomingEmails[this.state.incomingEmails.length - 1];
+    if (!lastEmail) return;
+    this.setState({ loadingMoreEmails: true });
+    try {
+      const data = await api.get<{ emails: IncomingEmail[]; hasMore: boolean }>(
+        `/api/projects/${this.state.projectId}/emails?limit=50&before=${lastEmail.id}`
+      );
+      this.setState({
+        incomingEmails: [...this.state.incomingEmails, ...data.emails],
+        hasMoreEmails: data.hasMore,
+        loadingMoreEmails: false,
+      });
+    } catch {
+      this.setState({ loadingMoreEmails: false });
     }
   }
 

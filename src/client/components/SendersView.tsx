@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   UsersThree,
   EnvelopeSimple,
@@ -6,8 +6,32 @@ import {
   CalendarBlank,
   ArrowLeft,
   At,
+  Pencil,
+  Trash,
+  CircleNotch,
+  MagicWand,
+  ArrowsClockwise,
+  Globe,
+  LinkSimple,
+  ArrowsMerge,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
+import { Button } from "@/components/ui/button.js";
+import { Input } from "@/components/ui/input.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.js";
 import {
   ChartContainer,
   ChartTooltip,
@@ -23,8 +47,81 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { useIncomingEmails } from "../store/StoreContext.js";
-import type { IncomingEmail } from "../store/types.js";
+import { useProjectId } from "../store/StoreContext.js";
+import { api } from "../lib/api.js";
+import type { Sender, IncomingEmail } from "../store/types.js";
+
+// --- Countries ---
+
+const COUNTRIES: Record<string, { name: string; flag: string }> = {
+  US: { name: "United States", flag: "🇺🇸" },
+  GB: { name: "United Kingdom", flag: "🇬🇧" },
+  CA: { name: "Canada", flag: "🇨🇦" },
+  AU: { name: "Australia", flag: "🇦🇺" },
+  DE: { name: "Germany", flag: "🇩🇪" },
+  FR: { name: "France", flag: "🇫🇷" },
+  IT: { name: "Italy", flag: "🇮🇹" },
+  ES: { name: "Spain", flag: "🇪🇸" },
+  NL: { name: "Netherlands", flag: "🇳🇱" },
+  SE: { name: "Sweden", flag: "🇸🇪" },
+  NO: { name: "Norway", flag: "🇳🇴" },
+  DK: { name: "Denmark", flag: "🇩🇰" },
+  FI: { name: "Finland", flag: "🇫🇮" },
+  CH: { name: "Switzerland", flag: "🇨🇭" },
+  AT: { name: "Austria", flag: "🇦🇹" },
+  BE: { name: "Belgium", flag: "🇧🇪" },
+  PT: { name: "Portugal", flag: "🇵🇹" },
+  IE: { name: "Ireland", flag: "🇮🇪" },
+  PL: { name: "Poland", flag: "🇵🇱" },
+  CZ: { name: "Czech Republic", flag: "🇨🇿" },
+  JP: { name: "Japan", flag: "🇯🇵" },
+  KR: { name: "South Korea", flag: "🇰🇷" },
+  CN: { name: "China", flag: "🇨🇳" },
+  IN: { name: "India", flag: "🇮🇳" },
+  SG: { name: "Singapore", flag: "🇸🇬" },
+  HK: { name: "Hong Kong", flag: "🇭🇰" },
+  TW: { name: "Taiwan", flag: "🇹🇼" },
+  IL: { name: "Israel", flag: "🇮🇱" },
+  AE: { name: "UAE", flag: "🇦🇪" },
+  SA: { name: "Saudi Arabia", flag: "🇸🇦" },
+  BR: { name: "Brazil", flag: "🇧🇷" },
+  MX: { name: "Mexico", flag: "🇲🇽" },
+  AR: { name: "Argentina", flag: "🇦🇷" },
+  CO: { name: "Colombia", flag: "🇨🇴" },
+  CL: { name: "Chile", flag: "🇨🇱" },
+  ZA: { name: "South Africa", flag: "🇿🇦" },
+  NG: { name: "Nigeria", flag: "🇳🇬" },
+  EG: { name: "Egypt", flag: "🇪🇬" },
+  KE: { name: "Kenya", flag: "🇰🇪" },
+  NZ: { name: "New Zealand", flag: "🇳🇿" },
+  RU: { name: "Russia", flag: "🇷🇺" },
+  UA: { name: "Ukraine", flag: "🇺🇦" },
+  TR: { name: "Turkey", flag: "🇹🇷" },
+  TH: { name: "Thailand", flag: "🇹🇭" },
+  VN: { name: "Vietnam", flag: "🇻🇳" },
+  MY: { name: "Malaysia", flag: "🇲🇾" },
+  PH: { name: "Philippines", flag: "🇵🇭" },
+  ID: { name: "Indonesia", flag: "🇮🇩" },
+  RO: { name: "Romania", flag: "🇷🇴" },
+  GR: { name: "Greece", flag: "🇬🇷" },
+  HU: { name: "Hungary", flag: "🇭🇺" },
+};
+
+function countryLabel(code: string): string {
+  const c = COUNTRIES[code];
+  return c ? `${c.flag} ${c.name}` : code;
+}
+
+// --- Types ---
+
+interface Domain {
+  id: string;
+  domain: string;
+  enabled: boolean;
+  sender_id: string | null;
+  resolver_status: string;
+  resolver_error: string | null;
+}
 
 // --- Helpers ---
 
@@ -52,57 +149,6 @@ function dayLabel(dateStr: string) {
 }
 
 // --- Data hooks ---
-
-interface DomainSummary {
-  domain: string;
-  count: number;
-  latestDate: string;
-  firstDate: string;
-  addresses: string[];
-}
-
-function useSenderDomains(emails: IncomingEmail[]) {
-  return useMemo(() => {
-    const map = new Map<
-      string,
-      { count: number; latestDate: string; firstDate: string; addresses: Set<string> }
-    >();
-    for (const e of emails) {
-      const domain = e.from_domain || e.from_address.split("@")[1] || "unknown";
-      const existing = map.get(domain);
-      if (existing) {
-        existing.count++;
-        if (e.created_at > existing.latestDate) existing.latestDate = e.created_at;
-        if (e.created_at < existing.firstDate) existing.firstDate = e.created_at;
-        existing.addresses.add(e.from_address);
-      } else {
-        map.set(domain, {
-          count: 1,
-          latestDate: e.created_at,
-          firstDate: e.created_at,
-          addresses: new Set([e.from_address]),
-        });
-      }
-    }
-    return Array.from(map.entries())
-      .map(([domain, data]) => ({
-        domain,
-        count: data.count,
-        latestDate: data.latestDate,
-        firstDate: data.firstDate,
-        addresses: Array.from(data.addresses),
-      }))
-      .sort((a, b) => b.count - a.count) as DomainSummary[];
-  }, [emails]);
-}
-
-function useDomainEmails(emails: IncomingEmail[], domain: string) {
-  return useMemo(() => {
-    return emails.filter(
-      (e) => (e.from_domain || e.from_address.split("@")[1] || "unknown") === domain
-    );
-  }, [emails, domain]);
-}
 
 function useDailyVolume(emails: IncomingEmail[], days: number) {
   return useMemo(() => {
@@ -162,7 +208,7 @@ function useTagBreakdown(emails: IncomingEmail[]) {
   }, [emails]);
 }
 
-// --- Components ---
+// --- KPI Card ---
 
 function KpiCard({
   label,
@@ -199,25 +245,72 @@ function KpiCard({
   );
 }
 
-// --- Domain List ---
+// --- Sender List ---
 
-function DomainList({
+function SenderList({
+  senders,
   domains,
-  totalEmails,
+  loading,
+  resolving,
   onSelect,
+  onResolveAll,
 }: {
-  domains: DomainSummary[];
-  totalEmails: number;
-  onSelect: (domain: string) => void;
+  senders: Sender[];
+  domains: Domain[];
+  loading: boolean;
+  resolving: boolean;
+  onSelect: (senderId: string) => void;
+  onResolveAll: () => void;
 }) {
-  if (domains.length === 0) {
+  const [countryFilter, setCountryFilter] = useState<string>("all");
+  const unlinkedDomains = domains.filter((d) => !d.sender_id);
+  const totalEmails = senders.reduce((sum, s) => sum + s.email_count, 0);
+
+  const availableCountries = useMemo(() => {
+    const codes = new Set<string>();
+    for (const s of senders) {
+      if (s.country) codes.add(s.country);
+    }
+    return Array.from(codes).sort((a, b) => {
+      const nameA = COUNTRIES[a]?.name ?? a;
+      const nameB = COUNTRIES[b]?.name ?? b;
+      return nameA.localeCompare(nameB);
+    });
+  }, [senders]);
+
+  const filteredSenders = useMemo(() => {
+    if (countryFilter === "all") return senders;
+    return senders.filter((s) => s.country === countryFilter);
+  }, [senders, countryFilter]);
+
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-5xl mx-auto space-y-6">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Senders</h1>
+            <p className="text-sm text-muted-foreground mt-1">Loading...</p>
+          </div>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-center py-12">
+                <CircleNotch size={24} className="animate-spin text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (senders.length === 0 && unlinkedDomains.length === 0) {
     return (
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-5xl mx-auto space-y-6">
           <div>
             <h1 className="text-xl font-semibold text-foreground">Senders</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              0 domains &middot; 0 total emails
+              0 senders &middot; 0 total emails
             </p>
           </div>
           <Card>
@@ -229,10 +322,10 @@ function DomainList({
                   className="mx-auto mb-3 text-muted-foreground"
                 />
                 <p className="text-sm text-muted-foreground">
-                  No sender domains yet
+                  No senders yet
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Emails will be grouped by sender domain as they arrive.
+                  Senders are automatically identified when emails arrive.
                 </p>
               </div>
             </CardContent>
@@ -245,89 +338,220 @@ function DomainList({
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Senders</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {domains.length} domain{domains.length !== 1 ? "s" : ""} &middot;{" "}
-            {totalEmails} total email{totalEmails !== 1 ? "s" : ""}
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Senders</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {senders.length} sender{senders.length !== 1 ? "s" : ""} &middot;{" "}
+              {totalEmails} total email{totalEmails !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {availableCountries.length > 0 && (
+              <Select value={countryFilter} onValueChange={setCountryFilter}>
+                <SelectTrigger className="w-[180px] h-8 text-xs">
+                  <SelectValue placeholder="All countries" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All countries</SelectItem>
+                  <SelectSeparator />
+                  {availableCountries.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {countryLabel(code)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {unlinkedDomains.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onResolveAll}
+                disabled={resolving}
+              >
+                {resolving ? (
+                  <CircleNotch size={14} className="animate-spin mr-1.5" />
+                ) : (
+                  <MagicWand size={14} className="mr-1.5" />
+                )}
+                {resolving ? "Resolving..." : `Resolve all (${unlinkedDomains.length})`}
+              </Button>
+            )}
+          </div>
         </div>
-        <Card>
-          <CardContent className="p-2">
-            <div className="divide-y divide-border">
-              {domains.map((d) => (
-                <button
-                  key={d.domain}
-                  onClick={() => onSelect(d.domain)}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors text-left"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
-                    {d.domain.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {d.domain}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {d.addresses.length} address{d.addresses.length !== 1 ? "es" : ""}{" "}
-                      &middot; Last seen {formatRelative(d.latestDate)}
-                    </p>
-                  </div>
-                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md tabular-nums shrink-0">
-                    {d.count}
-                  </span>
-                </button>
-              ))}
+
+        {/* Sender list */}
+        {filteredSenders.length > 0 && (
+          <Card>
+            <CardContent className="p-2">
+              <div className="divide-y divide-border">
+                {filteredSenders.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => onSelect(s.id)}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
+                      {s.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {s.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.domain_count} domain{s.domain_count !== 1 ? "s" : ""}{" "}
+                        &middot; {s.email_count} email{s.email_count !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    {s.country && COUNTRIES[s.country] && (
+                      <span className="text-sm shrink-0" title={COUNTRIES[s.country].name}>
+                        {COUNTRIES[s.country].flag}
+                      </span>
+                    )}
+                    {s.website && (
+                      <Globe size={14} className="text-muted-foreground shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Unlinked domains */}
+        {unlinkedDomains.length > 0 && (
+          <>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Unlinked domains
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {unlinkedDomains.length} domain{unlinkedDomains.length !== 1 ? "s" : ""} not yet linked to a sender
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardContent className="p-2">
+                <div className="divide-y divide-border">
+                  {unlinkedDomains.map((d) => (
+                    <div
+                      key={d.id}
+                      className="flex items-center gap-3 p-3"
+                    >
+                      <div className="w-7 h-7 rounded bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
+                        {d.domain.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm text-foreground truncate flex-1">
+                        {d.domain}
+                      </span>
+                      <ResolverStatusBadge status={d.resolver_status} error={d.resolver_error} />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-// --- Domain Detail ---
+function ResolverStatusBadge({ status, error }: { status: string; error: string | null }) {
+  switch (status) {
+    case "resolving":
+      return (
+        <span className="flex items-center gap-1 text-xs text-amber-600">
+          <CircleNotch size={12} className="animate-spin" />
+          Resolving
+        </span>
+      );
+    case "resolved":
+      return <span className="text-xs text-green-600">Resolved</span>;
+    case "failed":
+      return (
+        <span className="text-xs text-red-500" title={error || undefined}>
+          Failed
+        </span>
+      );
+    case "skipped":
+      return <span className="text-xs text-muted-foreground">Skipped</span>;
+    default:
+      return <span className="text-xs text-muted-foreground">Pending</span>;
+  }
+}
 
-function DomainDetail({
-  domain,
-  allEmails,
+// --- Sender Detail ---
+
+function SenderDetail({
+  sender,
+  domains,
+  allSenders,
   onBack,
+  onRefresh,
 }: {
-  domain: string;
-  allEmails: IncomingEmail[];
+  sender: Sender;
+  domains: Domain[];
+  allSenders: Sender[];
   onBack: () => void;
+  onRefresh: () => void;
 }) {
-  const domainEmails = useDomainEmails(allEmails, domain);
-  const volumeData = useDailyVolume(domainEmails, 14);
-  const tagBreakdown = useTagBreakdown(domainEmails);
-  const recent = domainEmails.slice(0, 5);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(sender.name);
+  const [editWebsite, setEditWebsite] = useState(sender.website || "");
+  const [editDescription, setEditDescription] = useState(sender.description || "");
+  const [editCountry, setEditCountry] = useState(sender.country || "");
+  const [saving, setSaving] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeTarget, setMergeTarget] = useState("");
+  const [merging, setMerging] = useState(false);
+  const projectId = useProjectId();
 
-  const total = domainEmails.length;
-  const firstDate = domainEmails.length > 0
-    ? domainEmails[domainEmails.length - 1].created_at
-    : null;
-  const lastDate = domainEmails.length > 0
-    ? domainEmails[0].created_at
-    : null;
+  // Fetch sender emails from API instead of filtering in-memory
+  const [senderEmails, setSenderEmails] = useState<IncomingEmail[]>([]);
+  const [hasMoreSenderEmails, setHasMoreSenderEmails] = useState(false);
+  const [loadingMoreSenderEmails, setLoadingMoreSenderEmails] = useState(false);
+  useEffect(() => {
+    api.get<{ emails: IncomingEmail[]; hasMore: boolean }>(
+      `/api/projects/${projectId}/senders/${sender.id}/emails?limit=50`
+    ).then((data) => {
+      setSenderEmails(data.emails);
+      setHasMoreSenderEmails(data.hasMore);
+    }).catch(() => {});
+  }, [projectId, sender.id]);
 
+  const loadMoreSenderEmails = async () => {
+    if (loadingMoreSenderEmails || !hasMoreSenderEmails) return;
+    const lastEmail = senderEmails[senderEmails.length - 1];
+    if (!lastEmail) return;
+    setLoadingMoreSenderEmails(true);
+    try {
+      const data = await api.get<{ emails: IncomingEmail[]; hasMore: boolean }>(
+        `/api/projects/${projectId}/senders/${sender.id}/emails?limit=50&before=${lastEmail.id}`
+      );
+      setSenderEmails((prev) => [...prev, ...data.emails]);
+      setHasMoreSenderEmails(data.hasMore);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMoreSenderEmails(false);
+    }
+  };
+
+  const senderDomains = domains.filter((d) => d.sender_id === sender.id);
+  const volumeData = useDailyVolume(senderEmails, 14);
+  const tagBreakdown = useTagBreakdown(senderEmails);
+  const recent = senderEmails.slice(0, 5);
+
+  const total = sender.email_count;
   const avgPerDay = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 14);
-    const recentCount = domainEmails.filter(
+    const recentCount = senderEmails.filter(
       (e) => new Date(e.created_at) >= cutoff
     ).length;
     return (recentCount / 14).toFixed(1);
-  }, [domainEmails]);
-
-  const addresses = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const e of domainEmails) {
-      map.set(e.from_address, (map.get(e.from_address) || 0) + 1);
-    }
-    return Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([address, count]) => ({ address, count }));
-  }, [domainEmails]);
+  }, [senderEmails]);
 
   const volumeConfig: ChartConfig = {
     count: { label: "Emails", color: "var(--color-primary)" },
@@ -342,6 +566,53 @@ function DomainDetail({
     fill: t.color,
   }));
 
+  const mergeableSenders = allSenders.filter((s) => s.id !== sender.id);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.patch(`/api/projects/${projectId}/senders/${sender.id}`, {
+        name: editName.trim() || undefined,
+        website: editWebsite.trim() || null,
+        description: editDescription.trim() || null,
+        country: editCountry.trim() || null,
+      });
+      setEditing(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || "Failed to update sender");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete sender "${sender.name}"? Linked domains will be unlinked.`)) return;
+    try {
+      await api.del(`/api/projects/${projectId}/senders/${sender.id}`);
+      onBack();
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete sender");
+    }
+  };
+
+  const handleMerge = async () => {
+    if (!mergeTarget) return;
+    setMerging(true);
+    try {
+      await api.post(`/api/projects/${projectId}/senders/${sender.id}/merge`, {
+        merge_sender_id: mergeTarget,
+      });
+      setMergeOpen(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || "Failed to merge senders");
+    } finally {
+      setMerging(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -354,10 +625,51 @@ function DomainDetail({
             <ArrowLeft size={18} className="text-muted-foreground" />
           </button>
           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
-            {domain.charAt(0).toUpperCase()}
+            {sender.name.charAt(0).toUpperCase()}
           </div>
-          <h1 className="text-xl font-semibold text-foreground">{domain}</h1>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-semibold text-foreground truncate">
+              {sender.name}
+            </h1>
+            {sender.website && (
+              <p className="text-xs text-muted-foreground truncate">
+                {sender.website}
+              </p>
+            )}
+            {sender.country && (
+              <p className="text-xs text-muted-foreground">
+                {countryLabel(sender.country)}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setEditName(sender.name);
+                setEditWebsite(sender.website || "");
+                setEditDescription(sender.description || "");
+                setEditCountry(sender.country || "");
+                setEditing(true);
+              }}
+            >
+              <Pencil size={14} />
+            </Button>
+            {mergeableSenders.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setMergeOpen(true)}>
+                <ArrowsMerge size={14} />
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleDelete}>
+              <Trash size={14} />
+            </Button>
+          </div>
         </div>
+
+        {sender.description && (
+          <p className="text-sm text-muted-foreground">{sender.description}</p>
+        )}
 
         {/* KPI row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -369,18 +681,18 @@ function DomainDetail({
             subtitle="Last 14 days"
           />
           <KpiCard
-            label="First seen"
-            value={firstDate ? dayLabel(dateKey(firstDate)) : "—"}
-            icon={CalendarBlank}
+            label="Domains"
+            value={senderDomains.length}
+            icon={Globe}
           />
           <KpiCard
-            label="Last seen"
-            value={lastDate ? formatRelative(lastDate) : "—"}
+            label="Created"
+            value={dayLabel(dateKey(sender.created_at))}
             icon={CalendarBlank}
           />
         </div>
 
-        {/* Hero row: volume chart + recent emails */}
+        {/* Volume chart + recent emails */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-3">
             <Card>
@@ -436,7 +748,7 @@ function DomainDetail({
                 </div>
                 {recent.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No emails from this domain</p>
+                    <p className="text-sm">No emails from this sender</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -468,6 +780,24 @@ function DomainDetail({
                         </div>
                       </div>
                     ))}
+                    {hasMoreSenderEmails && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={loadMoreSenderEmails}
+                        disabled={loadingMoreSenderEmails}
+                      >
+                        {loadingMoreSenderEmails ? (
+                          <>
+                            <CircleNotch size={14} className="animate-spin mr-1.5" />
+                            Loading...
+                          </>
+                        ) : (
+                          "Load more"
+                        )}
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -508,35 +838,146 @@ function DomainDetail({
           </Card>
         )}
 
-        {/* Sender addresses */}
+        {/* Linked domains */}
         <Card>
           <CardContent className="p-4">
             <div className="mb-4">
               <h3 className="text-sm font-semibold text-foreground">
-                Sender addresses
+                Linked domains
               </h3>
               <p className="text-xs text-muted-foreground">
-                {addresses.length} unique address{addresses.length !== 1 ? "es" : ""}
+                {senderDomains.length} domain{senderDomains.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <div className="space-y-2">
-              {addresses.map(({ address, count }) => (
-                <div
-                  key={address}
-                  className="flex items-center gap-3 py-1.5"
-                >
-                  <At size={14} className="text-muted-foreground shrink-0" />
-                  <span className="text-sm text-foreground truncate flex-1">
-                    {address}
-                  </span>
-                  <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                    {count} email{count !== 1 ? "s" : ""}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {senderDomains.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No domains linked to this sender
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {senderDomains.map((d) => (
+                  <div
+                    key={d.id}
+                    className="flex items-center gap-3 py-1.5"
+                  >
+                    <LinkSimple size={14} className="text-muted-foreground shrink-0" />
+                    <span className="text-sm text-foreground truncate flex-1">
+                      {d.domain}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* Edit dialog */}
+        <Dialog open={editing} onOpenChange={setEditing}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit sender</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div>
+                <label className="text-sm font-medium text-foreground">Name</label>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Brand name"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Website</label>
+                <Input
+                  value={editWebsite}
+                  onChange={(e) => setEditWebsite(e.target.value)}
+                  placeholder="https://..."
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Description</label>
+                <Input
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Brief description"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Country</label>
+                <Select value={editCountry || "__none__"} onValueChange={(v) => setEditCountry(v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No country</SelectItem>
+                    <SelectSeparator />
+                    {Object.entries(COUNTRIES)
+                      .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+                      .map(([code, { name, flag }]) => (
+                        <SelectItem key={code} value={code}>
+                          {flag} {name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setEditing(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={saving || !editName.trim()}>
+                  {saving ? (
+                    <CircleNotch size={14} className="animate-spin mr-1.5" />
+                  ) : null}
+                  Save
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Merge dialog */}
+        <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Merge sender</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Merge another sender into <strong>{sender.name}</strong>. All domains
+              from the merged sender will be reassigned here.
+            </p>
+            <div className="pt-2">
+              <Select value={mergeTarget} onValueChange={setMergeTarget}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select sender to merge" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mergeableSenders.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} ({s.domain_count} domains)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setMergeOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleMerge} disabled={merging || !mergeTarget}>
+                {merging ? (
+                  <CircleNotch size={14} className="animate-spin mr-1.5" />
+                ) : (
+                  <ArrowsMerge size={14} className="mr-1.5" />
+                )}
+                Merge
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
@@ -545,25 +986,79 @@ function DomainDetail({
 // --- Main ---
 
 export function SendersView() {
-  const emails = useIncomingEmails();
-  const domains = useSenderDomains(emails);
-  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+  const projectId = useProjectId();
+  const [senders, setSenders] = useState<Sender[]>([]);
+  const [domains, setDomains] = useState<Domain[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [resolving, setResolving] = useState(false);
+  const [selectedSenderId, setSelectedSenderId] = useState<string | null>(null);
 
-  if (selectedDomain) {
+  const fetchData = useCallback(async () => {
+    const [sendersRes, domainsRes] = await Promise.allSettled([
+      api.get<{ senders: Sender[] }>(`/api/projects/${projectId}/senders`),
+      api.get<{ domains: Domain[] }>(`/api/projects/${projectId}/domains`),
+    ]);
+    if (sendersRes.status === "fulfilled") setSenders(sendersRes.value.senders);
+    else console.error("[SendersView] Failed to fetch senders:", sendersRes.reason);
+    if (domainsRes.status === "fulfilled") setDomains(domainsRes.value.domains);
+    else console.error("[SendersView] Failed to fetch domains:", domainsRes.reason);
+    setLoading(false);
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Listen for sender:resolved events from WS
+  useEffect(() => {
+    const handler = () => {
+      fetchData();
+    };
+    window.addEventListener("sender:resolved", handler);
+    return () => window.removeEventListener("sender:resolved", handler);
+  }, [fetchData]);
+
+  const handleResolveAll = async () => {
+    setResolving(true);
+    try {
+      await api.post(`/api/projects/${projectId}/senders/resolve-all`);
+      // Poll for updates — resolution happens in the background
+      const interval = setInterval(async () => {
+        await fetchData();
+      }, 3000);
+      // Stop polling after 2 minutes
+      setTimeout(() => {
+        clearInterval(interval);
+        setResolving(false);
+      }, 120000);
+    } catch (err: any) {
+      alert(err.message || "Failed to start resolution");
+      setResolving(false);
+    }
+  };
+
+  const selectedSender = senders.find((s) => s.id === selectedSenderId);
+
+  if (selectedSender) {
     return (
-      <DomainDetail
-        domain={selectedDomain}
-        allEmails={emails}
-        onBack={() => setSelectedDomain(null)}
+      <SenderDetail
+        sender={selectedSender}
+        domains={domains}
+        allSenders={senders}
+        onBack={() => setSelectedSenderId(null)}
+        onRefresh={fetchData}
       />
     );
   }
 
   return (
-    <DomainList
+    <SenderList
+      senders={senders}
       domains={domains}
-      totalEmails={emails.length}
-      onSelect={setSelectedDomain}
+      loading={loading}
+      resolving={resolving}
+      onSelect={setSelectedSenderId}
+      onResolveAll={handleResolveAll}
     />
   );
 }

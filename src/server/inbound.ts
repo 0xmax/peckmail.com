@@ -12,6 +12,7 @@ import {
   updateEmailStatus,
   type ProjectIncomingEmail,
 } from "./db.js";
+import { triggerSenderResolution } from "./senderResolver.js";
 import { runAgentHeadless } from "./chat.js";
 import { broadcast } from "./ws.js";
 import { sendEmail } from "./email.js";
@@ -108,9 +109,20 @@ export async function receiveInboundEmail(
   }
 
   if (fromDomain) {
-    upsertProjectEmailDomain(project.id, fromDomain).catch((err) =>
-      console.error("[inbound] Failed to upsert sender domain:", err)
-    );
+    upsertProjectEmailDomain(project.id, fromDomain)
+      .then((domain) => {
+        if (domain && !domain.sender_id && domain.resolver_status === "pending") {
+          const bodyExcerpt = (data.text || data.html || "").slice(0, 1000);
+          triggerSenderResolution(project.id, domain.id, fromDomain, {
+            fromAddress,
+            subject: subject || "",
+            bodyExcerpt,
+          }).catch((err) => console.error("[senderResolver]", err));
+        }
+      })
+      .catch((err) =>
+        console.error("[inbound] Failed to upsert sender domain:", err)
+      );
   }
 
   // Store in database with no body yet (idempotent — returns null on duplicate)

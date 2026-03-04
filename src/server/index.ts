@@ -38,13 +38,21 @@ import {
   setIncomingEmailReadAt,
   softDeleteIncomingEmail,
   getUserHandle,
+  listProjectSenders,
+  listSenderEmails,
+  createProjectSender,
+  updateProjectSender,
+  softDeleteProjectSender,
+  mergeSenders,
   getActiveProjectId,
   setActiveProjectId,
   deleteProject,
   listInsufficientCreditRetryEmails,
+  getDashboardStats,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail, reprocessEmailTags } from "./inbound.js";
+import { resolveAllPendingDomains } from "./senderResolver.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
@@ -755,8 +763,10 @@ api.get("/projects/:id/emails", async (c) => {
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership) return c.json({ error: "Access denied" }, 403);
   try {
-    const emails = await listProjectIncomingEmailSummaries(projectId, 50);
-    return c.json({ emails });
+    const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "50") || 50, 1), 100);
+    const before = c.req.query("before") || undefined;
+    const result = await listProjectIncomingEmailSummaries(projectId, limit, before);
+    return c.json(result);
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to load emails" }, 500);
   }
@@ -848,6 +858,22 @@ api.post("/projects/:id/emails/test", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// Dashboard aggregates
+api.get("/projects/:id/dashboard", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const days = Math.min(Math.max(parseInt(c.req.query("days") || "30") || 30, 1), 365);
+    const stats = await getDashboardStats(projectId, days);
+    return c.json(stats);
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load dashboard" }, 500);
+  }
 });
 
 // Email tags
@@ -978,7 +1004,7 @@ api.post("/projects/:id/reprocess-tags", async (c) => {
     return c.json({ error: "Only owners or editors can reprocess tags" }, 403);
   }
   try {
-    const emails = await listProjectIncomingEmailSummaries(projectId, 200);
+    const { emails } = await listProjectIncomingEmailSummaries(projectId, 100);
     let processed = 0;
     for (const summary of emails) {
       const email = await getProjectIncomingEmail(projectId, summary.id);
@@ -1016,21 +1042,160 @@ api.patch("/projects/:id/domains/:domainId", async (c) => {
     return c.json({ error: "Only owners or editors can update domains" }, 403);
   }
 
-  const body = await c.req.json<{ enabled?: unknown }>();
-  if (body.enabled === undefined) {
-    return c.json({ error: "enabled is required" }, 400);
-  }
+  const body = await c.req.json<{ enabled?: unknown; sender_id?: unknown }>();
 
   try {
     const domain = await updateProjectEmailDomain({
       projectId,
       domainId,
-      enabled: Boolean(body.enabled),
+      enabled: body.enabled !== undefined ? Boolean(body.enabled) : undefined,
+      sender_id: body.sender_id !== undefined ? (body.sender_id as string | null) : undefined,
     });
     if (!domain) return c.json({ error: "Domain not found" }, 404);
     return c.json({ domain });
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to update domain" }, 500);
+  }
+});
+
+// Email senders (brand entities)
+api.get("/projects/:id/senders", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const senders = await listProjectSenders(projectId);
+    return c.json({ senders });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load senders" }, 500);
+  }
+});
+
+api.get("/projects/:id/senders/:senderId/emails", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "50") || 50, 1), 100);
+    const before = c.req.query("before") || undefined;
+    const result = await listSenderEmails(projectId, senderId, limit, before);
+    return c.json(result);
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load sender emails" }, 500);
+  }
+});
+
+api.post("/projects/:id/senders", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can create senders" }, 403);
+  }
+
+  const body = await c.req.json<{ name?: string; website?: string; description?: string; logo_url?: string; country?: string }>();
+  if (!body.name?.trim()) return c.json({ error: "name is required" }, 400);
+
+  try {
+    const sender = await createProjectSender({
+      projectId,
+      name: body.name,
+      website: body.website,
+      description: body.description,
+      logo_url: body.logo_url,
+      country: body.country,
+    });
+    return c.json({ sender }, 201);
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to create sender" }, 500);
+  }
+});
+
+api.patch("/projects/:id/senders/:senderId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can update senders" }, 403);
+  }
+
+  const body = await c.req.json<{ name?: string; website?: string | null; description?: string | null; logo_url?: string | null; country?: string | null }>();
+  try {
+    const sender = await updateProjectSender({
+      projectId,
+      senderId,
+      name: body.name,
+      website: body.website,
+      description: body.description,
+      logo_url: body.logo_url,
+      country: body.country,
+    });
+    if (!sender) return c.json({ error: "Sender not found" }, 404);
+    return c.json({ sender });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to update sender" }, 500);
+  }
+});
+
+api.delete("/projects/:id/senders/:senderId", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can delete senders" }, 403);
+  }
+
+  try {
+    const deleted = await softDeleteProjectSender(projectId, senderId);
+    if (!deleted) return c.json({ error: "Sender not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to delete sender" }, 500);
+  }
+});
+
+api.post("/projects/:id/senders/resolve-all", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can trigger bulk resolution" }, 403);
+  }
+
+  // Run in background, return immediately
+  resolveAllPendingDomains(projectId, 3).catch((err) =>
+    console.error("[senderResolver] Bulk resolve failed:", err)
+  );
+
+  return c.json({ ok: true, message: "Resolution started" });
+});
+
+api.post("/projects/:id/senders/:senderId/merge", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Only owners or editors can merge senders" }, 403);
+  }
+
+  const body = await c.req.json<{ merge_sender_id?: string }>();
+  if (!body.merge_sender_id) return c.json({ error: "merge_sender_id is required" }, 400);
+  if (body.merge_sender_id === senderId) return c.json({ error: "Cannot merge sender with itself" }, 400);
+
+  try {
+    const merged = await mergeSenders(projectId, senderId, body.merge_sender_id);
+    if (!merged) return c.json({ error: "Sender not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to merge senders" }, 500);
   }
 });
 

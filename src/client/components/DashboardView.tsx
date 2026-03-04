@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Copy,
   Check,
+  CircleNotch,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import {
@@ -29,11 +30,31 @@ import {
   Cell,
   Label,
 } from "recharts";
-import { useIncomingEmails, useProjectId } from "../store/StoreContext.js";
+import { useProjectId } from "../store/StoreContext.js";
 import { useAuth } from "../context/AuthContext.js";
+import { api } from "../lib/api.js";
 import { Logo } from "./Logo.js";
-import type { IncomingEmail } from "../store/types.js";
 import type { NavItem } from "./AppSidebar.js";
+
+// --- Types ---
+
+interface DashboardStats {
+  kpis: { total: number; unread: number; processed: number; failed: number };
+  tag_daily: { date: string; tag_id: string; tag_name: string; tag_color: string; count: number }[];
+  top_domains: { domain: string; count: number; latest_date: string }[];
+  activity_grid: { date: string; count: number }[];
+  recent_emails: {
+    id: string;
+    from_address: string;
+    from_domain: string | null;
+    subject: string | null;
+    status: string;
+    created_at: string;
+    read_at: string | null;
+    summary: string | null;
+    tags: { id: string; name: string; color: string }[];
+  }[];
+}
 
 // --- Date range ---
 
@@ -66,10 +87,6 @@ function formatRelative(iso: string) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function dateKey(iso: string) {
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
 function dayLabel(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -78,208 +95,6 @@ function dayLabel(dateStr: string) {
 function weekdayLabel(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
   return d.toLocaleDateString(undefined, { weekday: "short" });
-}
-
-// --- Data hooks ---
-
-function useFilteredEmails(emails: IncomingEmail[], days: number) {
-  return useMemo(() => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return emails.filter((e) => new Date(e.created_at) >= cutoff);
-  }, [emails, days]);
-}
-
-function useTagPieData(emails: IncomingEmail[]) {
-  return useMemo(() => {
-    const tagCounts = new Map<
-      string,
-      { name: string; color: string; count: number }
-    >();
-    for (const e of emails) {
-      if (!e.tags || e.tags.length === 0) {
-        const existing = tagCounts.get("_untagged");
-        if (existing) {
-          existing.count++;
-        } else {
-          tagCounts.set("_untagged", {
-            name: "Untagged",
-            color: "#94a3b8",
-            count: 1,
-          });
-        }
-        continue;
-      }
-      for (const tag of e.tags) {
-        const existing = tagCounts.get(tag.id);
-        if (existing) {
-          existing.count++;
-        } else {
-          tagCounts.set(tag.id, {
-            name: tag.name,
-            color: tag.color,
-            count: 1,
-          });
-        }
-      }
-    }
-    return Array.from(tagCounts.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .map(([id, data]) => ({ id, ...data }));
-  }, [emails]);
-}
-
-function useStackedBarData(
-  emails: IncomingEmail[],
-  days: number,
-  tagIds: { id: string; name: string; color: string }[]
-) {
-  return useMemo(() => {
-    const now = new Date();
-    const bucketByWeek = days > 30;
-    const buckets: {
-      key: string;
-      label: string;
-      [tagId: string]: number | string;
-    }[] = [];
-
-    if (bucketByWeek) {
-      const numWeeks = Math.ceil(days / 7);
-      for (let i = numWeeks - 1; i >= 0; i--) {
-        const end = new Date(now);
-        end.setDate(end.getDate() - i * 7);
-        const start = new Date(end);
-        start.setDate(start.getDate() - 6);
-        const key = start.toISOString().slice(0, 10);
-        const label =
-          start.toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          }) +
-          "–" +
-          end.toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          });
-        const bucket: any = { key, label };
-        for (const t of tagIds) bucket[t.id] = 0;
-        bucket["_untagged"] = 0;
-        buckets.push(bucket);
-      }
-      for (const e of emails) {
-        const eDate = new Date(e.created_at);
-        for (let i = buckets.length - 1; i >= 0; i--) {
-          const bStart = new Date(buckets[i].key + "T00:00:00");
-          const bEnd = new Date(bStart);
-          bEnd.setDate(bEnd.getDate() + 7);
-          if (eDate >= bStart && eDate < bEnd) {
-            if (!e.tags || e.tags.length === 0) {
-              (buckets[i] as any)["_untagged"]++;
-            } else {
-              for (const tag of e.tags) {
-                if (tag.id in buckets[i]) {
-                  (buckets[i] as any)[tag.id]++;
-                }
-              }
-            }
-            break;
-          }
-        }
-      }
-    } else {
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
-        const label =
-          days <= 14
-            ? d.toLocaleDateString(undefined, {
-                weekday: "short",
-                day: "numeric",
-              })
-            : dayLabel(key);
-        const bucket: any = { key, label };
-        for (const t of tagIds) bucket[t.id] = 0;
-        bucket["_untagged"] = 0;
-        buckets.push(bucket);
-      }
-      for (const e of emails) {
-        const key = dateKey(e.created_at);
-        const bucket = buckets.find((b) => b.key === key);
-        if (!bucket) continue;
-        if (!e.tags || e.tags.length === 0) {
-          (bucket as any)["_untagged"]++;
-        } else {
-          for (const tag of e.tags) {
-            if (tag.id in bucket) {
-              (bucket as any)[tag.id]++;
-            }
-          }
-        }
-      }
-    }
-    return buckets;
-  }, [emails, days, tagIds]);
-}
-
-function useTopDomains(emails: IncomingEmail[], limit: number) {
-  return useMemo(() => {
-    const map = new Map<string, { count: number; latestDate: string }>();
-    for (const e of emails) {
-      const domain =
-        e.from_domain || e.from_address.split("@")[1] || "unknown";
-      const existing = map.get(domain);
-      if (existing) {
-        existing.count++;
-        if (e.created_at > existing.latestDate)
-          existing.latestDate = e.created_at;
-      } else {
-        map.set(domain, { count: 1, latestDate: e.created_at });
-      }
-    }
-    return Array.from(map.entries())
-      .map(([domain, data]) => ({ domain, ...data }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, limit);
-  }, [emails, limit]);
-}
-
-function useActivityGrid(emails: IncomingEmail[]) {
-  return useMemo(() => {
-    const weeks = 7;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dayOfWeek = today.getDay();
-    const startDate = new Date(today);
-    startDate.setDate(startDate.getDate() - (weeks * 7 - 1) - dayOfWeek);
-
-    const countMap = new Map<string, number>();
-    for (const e of emails) {
-      const key = dateKey(e.created_at);
-      countMap.set(key, (countMap.get(key) || 0) + 1);
-    }
-
-    const grid: { date: string; count: number; weekday: string }[][] = [];
-    let maxCount = 0;
-    const d = new Date(startDate);
-    for (let w = 0; w < weeks; w++) {
-      const week: { date: string; count: number; weekday: string }[] = [];
-      for (let dow = 0; dow < 7; dow++) {
-        const key = d.toISOString().slice(0, 10);
-        const count = countMap.get(key) || 0;
-        if (count > maxCount) maxCount = count;
-        const isFuture = d > now;
-        week.push({
-          date: key,
-          count: isFuture ? -1 : count,
-          weekday: weekdayLabel(key),
-        });
-        d.setDate(d.getDate() + 1);
-      }
-      grid.push(week);
-    }
-    return { grid, maxCount };
-  }, [emails]);
 }
 
 // --- Components ---
@@ -345,8 +160,30 @@ function KpiCard({
   );
 }
 
-function TagPieChart({ emails }: { emails: IncomingEmail[] }) {
-  const data = useTagPieData(emails);
+function TagPieChart({
+  tagDaily,
+}: {
+  tagDaily: DashboardStats["tag_daily"];
+}) {
+  const data = useMemo(() => {
+    const tagCounts = new Map<string, { name: string; color: string; count: number }>();
+    for (const row of tagDaily) {
+      const existing = tagCounts.get(row.tag_id);
+      if (existing) {
+        existing.count += Number(row.count);
+      } else {
+        tagCounts.set(row.tag_id, {
+          name: row.tag_name,
+          color: row.tag_color,
+          count: Number(row.count),
+        });
+      }
+    }
+    return Array.from(tagCounts.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([id, d]) => ({ id, ...d }));
+  }, [tagDaily]);
+
   const total = data.reduce((sum, d) => sum + d.count, 0);
   const config: ChartConfig = Object.fromEntries(
     data.map((t) => [t.id, { label: t.name, color: t.color }])
@@ -454,39 +291,92 @@ function TagPieChart({ emails }: { emails: IncomingEmail[] }) {
 }
 
 function StackedTagBarChart({
-  emails,
+  tagDaily,
   days,
 }: {
-  emails: IncomingEmail[];
+  tagDaily: DashboardStats["tag_daily"];
   days: number;
 }) {
-  const pieData = useTagPieData(emails);
-  const tagIds = useMemo(
-    () =>
-      pieData
-        .filter((t) => t.id !== "_untagged")
-        .map((t) => ({ id: t.id, name: t.name, color: t.color })),
-    [pieData]
-  );
-  const hasUntagged = pieData.some((t) => t.id === "_untagged");
-  const data = useStackedBarData(emails, days, tagIds);
+  // Derive unique tags from tag_daily
+  const tagIds = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; color: string }>();
+    for (const row of tagDaily) {
+      if (!seen.has(row.tag_id)) {
+        seen.set(row.tag_id, { id: row.tag_id, name: row.tag_name, color: row.tag_color });
+      }
+    }
+    return Array.from(seen.values());
+  }, [tagDaily]);
 
-  const allKeys = useMemo(() => {
-    const keys = tagIds.map((t) => t.id);
-    if (hasUntagged) keys.push("_untagged");
-    return keys;
-  }, [tagIds, hasUntagged]);
+  // Build bucketed data from tag_daily rows
+  const data = useMemo(() => {
+    const now = new Date();
+    const bucketByWeek = days > 30;
+    const buckets: { key: string; label: string; [tagId: string]: number | string }[] = [];
+
+    if (bucketByWeek) {
+      const numWeeks = Math.ceil(days / 7);
+      for (let i = numWeeks - 1; i >= 0; i--) {
+        const end = new Date(now);
+        end.setDate(end.getDate() - i * 7);
+        const start = new Date(end);
+        start.setDate(start.getDate() - 6);
+        const key = start.toISOString().slice(0, 10);
+        const label =
+          start.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+          "\u2013" +
+          end.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        const bucket: any = { key, label };
+        for (const t of tagIds) bucket[t.id] = 0;
+        buckets.push(bucket);
+      }
+      for (const row of tagDaily) {
+        const rowDate = new Date(row.date + "T00:00:00");
+        for (let i = buckets.length - 1; i >= 0; i--) {
+          const bStart = new Date(buckets[i].key + "T00:00:00");
+          const bEnd = new Date(bStart);
+          bEnd.setDate(bEnd.getDate() + 7);
+          if (rowDate >= bStart && rowDate < bEnd) {
+            (buckets[i] as any)[row.tag_id] =
+              ((buckets[i] as any)[row.tag_id] || 0) + Number(row.count);
+            break;
+          }
+        }
+      }
+    } else {
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        const label =
+          days <= 14
+            ? d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })
+            : dayLabel(key);
+        const bucket: any = { key, label };
+        for (const t of tagIds) bucket[t.id] = 0;
+        buckets.push(bucket);
+      }
+      for (const row of tagDaily) {
+        const dateStr = typeof row.date === "string" ? row.date.slice(0, 10) : row.date;
+        const bucket = buckets.find((b) => b.key === dateStr);
+        if (bucket) {
+          (bucket as any)[row.tag_id] =
+            ((bucket as any)[row.tag_id] || 0) + Number(row.count);
+        }
+      }
+    }
+    return buckets;
+  }, [tagDaily, days, tagIds]);
+
+  const allKeys = tagIds.map((t) => t.id);
 
   const config: ChartConfig = useMemo(() => {
     const cfg: ChartConfig = {};
     for (const t of tagIds) {
       cfg[t.id] = { label: t.name, color: t.color };
     }
-    if (hasUntagged) {
-      cfg["_untagged"] = { label: "Untagged", color: "#94a3b8" };
-    }
     return cfg;
-  }, [tagIds, hasUntagged]);
+  }, [tagIds]);
 
   if (allKeys.length === 0) {
     return (
@@ -549,8 +439,46 @@ function StackedTagBarChart({
   );
 }
 
-function ActivityGrid({ emails }: { emails: IncomingEmail[] }) {
-  const { grid, maxCount } = useActivityGrid(emails);
+function ActivityGrid({
+  activityGrid,
+}: {
+  activityGrid: DashboardStats["activity_grid"];
+}) {
+  const { grid, maxCount } = useMemo(() => {
+    const weeks = 7;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayOfWeek = today.getDay();
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - (weeks * 7 - 1) - dayOfWeek);
+
+    const countMap = new Map<string, number>();
+    for (const entry of activityGrid) {
+      const key = typeof entry.date === "string" ? entry.date.slice(0, 10) : entry.date;
+      countMap.set(key, Number(entry.count));
+    }
+
+    const result: { date: string; count: number; weekday: string }[][] = [];
+    let max = 0;
+    const d = new Date(startDate);
+    for (let w = 0; w < weeks; w++) {
+      const week: { date: string; count: number; weekday: string }[] = [];
+      for (let dow = 0; dow < 7; dow++) {
+        const key = d.toISOString().slice(0, 10);
+        const count = countMap.get(key) || 0;
+        if (count > max) max = count;
+        const isFuture = d > now;
+        week.push({
+          date: key,
+          count: isFuture ? -1 : count,
+          weekday: weekdayLabel(key),
+        });
+        d.setDate(d.getDate() + 1);
+      }
+      result.push(week);
+    }
+    return { grid: result, maxCount: max };
+  }, [activityGrid]);
 
   function intensity(count: number): string {
     if (count < 0) return "transparent";
@@ -589,7 +517,7 @@ function ActivityGrid({ emails }: { emails: IncomingEmail[] }) {
                   key={day.date}
                   className="w-3 h-3 rounded-sm"
                   style={{ backgroundColor: intensity(day.count) }}
-                  title={`${dayLabel(day.date)}: ${day.count < 0 ? "—" : day.count} email${day.count === 1 ? "" : "s"}`}
+                  title={`${dayLabel(day.date)}: ${day.count < 0 ? "\u2014" : day.count} email${day.count === 1 ? "" : "s"}`}
                 />
               ))}
             </div>
@@ -601,14 +529,12 @@ function ActivityGrid({ emails }: { emails: IncomingEmail[] }) {
 }
 
 function TopDomains({
-  emails,
+  domains,
   onNavigate,
 }: {
-  emails: IncomingEmail[];
+  domains: DashboardStats["top_domains"];
   onNavigate: (item: NavItem, path?: string) => void;
 }) {
-  const domains = useTopDomains(emails, 8);
-
   return (
     <Card className="flex flex-col">
       <CardContent className="p-4 flex-1 flex flex-col">
@@ -633,7 +559,7 @@ function TopDomains({
           </div>
         ) : (
           <div className="space-y-2">
-            {domains.map((d, i) => (
+            {domains.map((d) => (
               <button
                 key={d.domain}
                 onClick={() => onNavigate("senders")}
@@ -650,7 +576,7 @@ function TopDomains({
                     {d.domain}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {formatRelative(d.latestDate)}
+                    {formatRelative(d.latest_date)}
                   </p>
                 </div>
                 <span className="text-xs tabular-nums font-medium text-muted-foreground shrink-0">
@@ -669,11 +595,9 @@ function RecentEmails({
   emails,
   onNavigate,
 }: {
-  emails: IncomingEmail[];
+  emails: DashboardStats["recent_emails"];
   onNavigate: (item: NavItem, path?: string) => void;
 }) {
-  const recent = emails.slice(0, 5);
-
   return (
     <Card className="flex flex-col">
       <CardContent className="p-4 flex-1 flex flex-col">
@@ -689,7 +613,7 @@ function RecentEmails({
             <ArrowRight size={12} />
           </button>
         </div>
-        {recent.length === 0 ? (
+        {emails.length === 0 ? (
           <div className="text-center py-8 flex-1 flex flex-col items-center justify-center">
             <Tray
               size={32}
@@ -703,7 +627,7 @@ function RecentEmails({
           </div>
         ) : (
           <div className="space-y-1">
-            {recent.map((e) => (
+            {emails.map((e) => (
               <button
                 key={e.id}
                 onClick={() =>
@@ -880,22 +804,45 @@ export function DashboardView({
 }: {
   onNavigate: (item: NavItem, path?: string) => void;
 }) {
-  const emails = useIncomingEmails();
+  const projectId = useProjectId();
   const [range, setRange] = useState<DateRange>("14d");
   const days = daysFromRange(range);
-  const filtered = useFilteredEmails(emails, days);
+  const [data, setData] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const total = filtered.length;
-  const unread = filtered.filter((e) => e.status === "received").length;
-  const processed = filtered.filter((e) => e.status === "processed").length;
-  const avgPerDay = useMemo(
-    () => (days > 0 ? (total / days).toFixed(1) : "0"),
-    [total, days]
-  );
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api
+      .get<DashboardStats>(`/api/projects/${projectId}/dashboard?days=${days}`)
+      .then((stats) => {
+        if (!cancelled) {
+          setData(stats);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, days]);
 
-  if (emails.length === 0) {
+  if (loading && !data) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <CircleNotch size={24} className="text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (!data || data.recent_emails.length === 0) {
     return <EmptyDashboard onNavigate={onNavigate} />;
   }
+
+  const { kpis } = data;
+  const avgPerDay = days > 0 ? (kpis.total / days).toFixed(1) : "0";
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -915,12 +862,12 @@ export function DashboardView({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
             label="Total emails"
-            value={total}
+            value={kpis.total}
             icon={EnvelopeSimple}
             subtitle={`Last ${days} days`}
           />
-          <KpiCard label="Unread" value={unread} icon={Tray} />
-          <KpiCard label="Processed" value={processed} icon={CheckCircle} />
+          <KpiCard label="Unread" value={kpis.unread} icon={Tray} />
+          <KpiCard label="Processed" value={kpis.processed} icon={CheckCircle} />
           <KpiCard
             label="Avg / day"
             value={avgPerDay}
@@ -930,18 +877,18 @@ export function DashboardView({
         </div>
 
         {/* Stacked bar chart (full width) */}
-        <StackedTagBarChart emails={filtered} days={days} />
+        <StackedTagBarChart tagDaily={data.tag_daily} days={days} />
 
         {/* Pie chart + Recent emails */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <TagPieChart emails={filtered} />
-          <RecentEmails emails={emails} onNavigate={onNavigate} />
+          <TagPieChart tagDaily={data.tag_daily} />
+          <RecentEmails emails={data.recent_emails} onNavigate={onNavigate} />
         </div>
 
         {/* Activity grid + Top domains */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ActivityGrid emails={emails} />
-          <TopDomains emails={filtered} onNavigate={onNavigate} />
+          <ActivityGrid activityGrid={data.activity_grid} />
+          <TopDomains domains={data.top_domains} onNavigate={onNavigate} />
         </div>
       </div>
     </div>

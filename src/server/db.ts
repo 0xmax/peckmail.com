@@ -57,14 +57,34 @@ export interface ProjectEmailTag {
   deleted_at: string | null;
 }
 
+export type ResolverStatus = "pending" | "resolving" | "resolved" | "failed" | "skipped";
+
 export interface ProjectEmailDomain {
   id: string;
   project_id: string;
   domain: string;
   enabled: boolean;
+  sender_id: string | null;
+  resolver_status: ResolverStatus;
+  resolver_error: string | null;
   created_at: string;
   updated_at: string;
   last_seen_at: string;
+}
+
+export interface ProjectSender {
+  id: string;
+  project_id: string;
+  name: string;
+  website: string | null;
+  description: string | null;
+  logo_url: string | null;
+  country: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  domain_count?: number;
+  email_count?: number;
 }
 
 export interface IncomingEmailTagSummary {
@@ -790,18 +810,41 @@ async function listIncomingEmailTagMap(
   return map;
 }
 
+export interface PaginatedEmailResult {
+  emails: ProjectIncomingEmailSummary[];
+  hasMore: boolean;
+}
+
 export async function listProjectIncomingEmailSummaries(
   projectId: string,
-  limit = 20
-): Promise<ProjectIncomingEmailSummary[]> {
-  const clamped = Math.min(Math.max(Math.floor(limit), 1), 200);
-  const { data, error } = await supabaseAdmin
+  limit = 50,
+  beforeId?: string
+): Promise<PaginatedEmailResult> {
+  const clamped = Math.min(Math.max(Math.floor(limit), 1), 100);
+
+  let query = supabaseAdmin
     .from("incoming_emails")
     .select("id, from_address, from_domain, subject, status, error, created_at, read_at, summary")
     .eq("project_id", projectId)
-    .is("deleted_at", null)
+    .is("deleted_at", null);
+
+  if (beforeId) {
+    // Look up the cursor row's created_at
+    const { data: cursorRow } = await supabaseAdmin
+      .from("incoming_emails")
+      .select("created_at")
+      .eq("id", beforeId)
+      .single();
+    if (cursorRow) {
+      const ts = cursorRow.created_at;
+      query = query.or(`created_at.lt.${ts},and(created_at.eq.${ts},id.lt.${beforeId})`);
+    }
+  }
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
-    .limit(clamped);
+    .order("id", { ascending: false })
+    .limit(clamped + 1);
   if (error) throw error;
 
   type Row = {
@@ -815,21 +858,100 @@ export async function listProjectIncomingEmailSummaries(
     read_at: string | null;
     summary: string | null;
   };
-  const rows = (data ?? []) as Row[];
+  const allRows = (data ?? []) as Row[];
+  const hasMore = allRows.length > clamped;
+  const rows = hasMore ? allRows.slice(0, clamped) : allRows;
   const tagMap = await listIncomingEmailTagMap(rows.map((r) => r.id));
 
-  return rows.map((row) => ({
-    id: row.id,
-    from_address: row.from_address,
-    from_domain: row.from_domain,
-    subject: row.subject,
-    status: toIncomingEmailStatus(row.status),
-    error: row.error,
-    created_at: row.created_at,
-    read_at: row.read_at,
-    summary: row.summary,
-    tags: tagMap.get(row.id) ?? [],
-  }));
+  return {
+    emails: rows.map((row) => ({
+      id: row.id,
+      from_address: row.from_address,
+      from_domain: row.from_domain,
+      subject: row.subject,
+      status: toIncomingEmailStatus(row.status),
+      error: row.error,
+      created_at: row.created_at,
+      read_at: row.read_at,
+      summary: row.summary,
+      tags: tagMap.get(row.id) ?? [],
+    })),
+    hasMore,
+  };
+}
+
+export async function listSenderEmails(
+  projectId: string,
+  senderId: string,
+  limit = 50,
+  beforeId?: string
+): Promise<PaginatedEmailResult> {
+  // Get domains linked to this sender
+  const { data: domainRows } = await supabaseAdmin
+    .from("email_domains")
+    .select("domain")
+    .eq("sender_id", senderId);
+  const domainNames = (domainRows ?? []).map((d) => d.domain);
+  if (!domainNames.length) return { emails: [], hasMore: false };
+
+  const clamped = Math.min(Math.max(Math.floor(limit), 1), 100);
+
+  let query = supabaseAdmin
+    .from("incoming_emails")
+    .select("id, from_address, from_domain, subject, status, error, created_at, read_at, summary")
+    .eq("project_id", projectId)
+    .in("from_domain", domainNames)
+    .is("deleted_at", null);
+
+  if (beforeId) {
+    const { data: cursorRow } = await supabaseAdmin
+      .from("incoming_emails")
+      .select("created_at")
+      .eq("id", beforeId)
+      .single();
+    if (cursorRow) {
+      const ts = cursorRow.created_at;
+      query = query.or(`created_at.lt.${ts},and(created_at.eq.${ts},id.lt.${beforeId})`);
+    }
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(clamped + 1);
+  if (error) throw error;
+
+  type Row = {
+    id: string;
+    from_address: string;
+    from_domain: string | null;
+    subject: string | null;
+    status: string;
+    error: string | null;
+    created_at: string;
+    read_at: string | null;
+    summary: string | null;
+  };
+  const allRows = (data ?? []) as Row[];
+  const hasMore = allRows.length > clamped;
+  const rows = hasMore ? allRows.slice(0, clamped) : allRows;
+  const tagMap = await listIncomingEmailTagMap(rows.map((r) => r.id));
+
+  return {
+    emails: rows.map((row) => ({
+      id: row.id,
+      from_address: row.from_address,
+      from_domain: row.from_domain,
+      subject: row.subject,
+      status: toIncomingEmailStatus(row.status),
+      error: row.error,
+      created_at: row.created_at,
+      read_at: row.read_at,
+      summary: row.summary,
+      tags: tagMap.get(row.id) ?? [],
+    })),
+    hasMore,
+  };
 }
 
 export async function getIncomingEmailTags(
@@ -906,7 +1028,7 @@ export async function listProjectEmailDomains(
 ): Promise<ProjectEmailDomain[]> {
   const { data, error } = await supabaseAdmin
     .from("email_domains")
-    .select("id, project_id, domain, enabled, created_at, updated_at, last_seen_at")
+    .select("id, project_id, domain, enabled, sender_id, resolver_status, resolver_error, created_at, updated_at, last_seen_at")
     .eq("project_id", projectId)
     .order("domain", { ascending: true });
   if (error) throw error;
@@ -934,7 +1056,7 @@ export async function upsertProjectEmailDomain(
       },
       { onConflict: "project_id,domain" }
     )
-    .select("id, project_id, domain, enabled, created_at, updated_at, last_seen_at")
+    .select("id, project_id, domain, enabled, sender_id, resolver_status, resolver_error, created_at, updated_at, last_seen_at")
     .single();
   if (error) throw error;
   return data as ProjectEmailDomain;
@@ -944,10 +1066,14 @@ export async function updateProjectEmailDomain(params: {
   projectId: string;
   domainId: string;
   enabled?: boolean;
+  sender_id?: string | null;
 }): Promise<ProjectEmailDomain | null> {
   const update: Record<string, any> = {};
   if (params.enabled !== undefined) {
     update.enabled = Boolean(params.enabled);
+  }
+  if (params.sender_id !== undefined) {
+    update.sender_id = params.sender_id;
   }
   if (!Object.keys(update).length) return null;
 
@@ -956,7 +1082,7 @@ export async function updateProjectEmailDomain(params: {
     .update(update)
     .eq("project_id", params.projectId)
     .eq("id", params.domainId)
-    .select("id, project_id, domain, enabled, created_at, updated_at, last_seen_at")
+    .select("id, project_id, domain, enabled, sender_id, resolver_status, resolver_error, created_at, updated_at, last_seen_at")
     .maybeSingle();
   if (error) throw error;
   return (data as ProjectEmailDomain | null) ?? null;
@@ -1257,4 +1383,299 @@ export async function setActiveProjectId(userId: string, projectId: string): Pro
     .update({ active_project_id: projectId })
     .eq("id", userId);
   if (error) throw error;
+}
+
+// --- Email Sender Helpers ---
+
+const SENDER_SELECT = "id, project_id, name, website, description, logo_url, country, created_at, updated_at, deleted_at";
+
+export async function listProjectSenders(
+  projectId: string
+): Promise<ProjectSender[]> {
+  const { data, error } = await supabaseAdmin
+    .from("email_senders")
+    .select(SENDER_SELECT)
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .order("name", { ascending: true });
+  if (error) throw error;
+
+  const senders = (data ?? []) as ProjectSender[];
+  if (!senders.length) return senders;
+
+  const senderIds = senders.map((s) => s.id);
+
+  // Domain counts per sender
+  const { data: domainRows } = await supabaseAdmin
+    .from("email_domains")
+    .select("sender_id")
+    .in("sender_id", senderIds);
+  const domainCounts = new Map<string, number>();
+  for (const row of domainRows ?? []) {
+    domainCounts.set(row.sender_id, (domainCounts.get(row.sender_id) || 0) + 1);
+  }
+
+  // Email counts per sender (through domains)
+  const { data: domains } = await supabaseAdmin
+    .from("email_domains")
+    .select("sender_id, domain")
+    .in("sender_id", senderIds);
+  const domainsBySender = new Map<string, string[]>();
+  for (const d of domains ?? []) {
+    const arr = domainsBySender.get(d.sender_id) ?? [];
+    arr.push(d.domain);
+    domainsBySender.set(d.sender_id, arr);
+  }
+
+  const allDomains = [...new Set((domains ?? []).map((d) => d.domain))];
+  let emailCounts = new Map<string, number>();
+  if (allDomains.length > 0) {
+    const { data: emailRows } = await supabaseAdmin
+      .from("incoming_emails")
+      .select("from_domain")
+      .eq("project_id", projectId)
+      .in("from_domain", allDomains)
+      .is("deleted_at", null);
+    for (const row of emailRows ?? []) {
+      emailCounts.set(row.from_domain, (emailCounts.get(row.from_domain) || 0) + 1);
+    }
+  }
+
+  return senders.map((s) => {
+    const senderDomains = domainsBySender.get(s.id) ?? [];
+    const emailCount = senderDomains.reduce((sum, d) => sum + (emailCounts.get(d) || 0), 0);
+    return {
+      ...s,
+      domain_count: domainCounts.get(s.id) || 0,
+      email_count: emailCount,
+    };
+  });
+}
+
+export async function createProjectSender(params: {
+  projectId: string;
+  name: string;
+  website?: string;
+  description?: string;
+  logo_url?: string;
+  country?: string;
+}): Promise<ProjectSender> {
+  const name = params.name.trim();
+  if (!name) throw new Error("Sender name is required");
+
+  const { data, error } = await supabaseAdmin
+    .from("email_senders")
+    .insert({
+      project_id: params.projectId,
+      name,
+      website: params.website?.trim() || null,
+      description: params.description?.trim() || null,
+      logo_url: params.logo_url?.trim() || null,
+      country: params.country?.trim().toUpperCase() || null,
+    })
+    .select(SENDER_SELECT)
+    .single();
+
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new Error("A sender with this name already exists");
+    }
+    throw error;
+  }
+  return data as ProjectSender;
+}
+
+export async function updateProjectSender(params: {
+  projectId: string;
+  senderId: string;
+  name?: string;
+  website?: string | null;
+  description?: string | null;
+  logo_url?: string | null;
+  country?: string | null;
+}): Promise<ProjectSender | null> {
+  const update: Record<string, any> = {};
+  if (params.name !== undefined) {
+    const value = params.name.trim();
+    if (!value) throw new Error("Sender name is required");
+    update.name = value;
+  }
+  if (params.website !== undefined) update.website = params.website?.trim() || null;
+  if (params.description !== undefined) update.description = params.description?.trim() || null;
+  if (params.logo_url !== undefined) update.logo_url = params.logo_url?.trim() || null;
+  if (params.country !== undefined) update.country = params.country?.trim().toUpperCase() || null;
+  if (!Object.keys(update).length) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("email_senders")
+    .update(update)
+    .eq("project_id", params.projectId)
+    .eq("id", params.senderId)
+    .is("deleted_at", null)
+    .select(SENDER_SELECT)
+    .maybeSingle();
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new Error("A sender with this name already exists");
+    }
+    throw error;
+  }
+  return (data as ProjectSender | null) ?? null;
+}
+
+export async function softDeleteProjectSender(
+  projectId: string,
+  senderId: string
+): Promise<boolean> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("email_senders")
+    .update({ deleted_at: nowIso })
+    .eq("project_id", projectId)
+    .eq("id", senderId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return false;
+
+  // Unlink domains from deleted sender, reset to pending
+  await supabaseAdmin
+    .from("email_domains")
+    .update({ sender_id: null, resolver_status: "pending" })
+    .eq("sender_id", senderId);
+
+  return true;
+}
+
+export async function findSenderByName(
+  projectId: string,
+  name: string
+): Promise<ProjectSender | null> {
+  const { data, error } = await supabaseAdmin
+    .from("email_senders")
+    .select(SENDER_SELECT)
+    .eq("project_id", projectId)
+    .ilike("name", name.trim())
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as ProjectSender | null) ?? null;
+}
+
+export async function linkDomainToSender(
+  domainId: string,
+  senderId: string
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("email_domains")
+    .update({ sender_id: senderId, resolver_status: "resolved", resolver_error: null })
+    .eq("id", domainId);
+  if (error) throw error;
+}
+
+export async function mergeSenders(
+  projectId: string,
+  keepId: string,
+  mergeId: string
+): Promise<boolean> {
+  // Reassign all domains from mergeId to keepId
+  await supabaseAdmin
+    .from("email_domains")
+    .update({ sender_id: keepId })
+    .eq("sender_id", mergeId);
+
+  // Soft-delete the merged sender
+  return softDeleteProjectSender(projectId, mergeId);
+}
+
+export async function claimDomainForResolving(
+  domainId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("email_domains")
+    .update({ resolver_status: "resolving" })
+    .eq("id", domainId)
+    .eq("resolver_status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.id);
+}
+
+export async function setDomainResolverResult(
+  domainId: string,
+  status: ResolverStatus,
+  error?: string
+): Promise<void> {
+  const update: Record<string, any> = { resolver_status: status };
+  if (error !== undefined) update.resolver_error = error;
+  else update.resolver_error = null;
+  await supabaseAdmin
+    .from("email_domains")
+    .update(update)
+    .eq("id", domainId);
+}
+
+export async function listPendingDomains(
+  projectId: string,
+  statuses: ResolverStatus[] = ["pending", "failed"]
+): Promise<ProjectEmailDomain[]> {
+  const { data, error } = await supabaseAdmin
+    .from("email_domains")
+    .select("id, project_id, domain, enabled, sender_id, resolver_status, resolver_error, created_at, updated_at, last_seen_at")
+    .eq("project_id", projectId)
+    .in("resolver_status", statuses)
+    .order("domain", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as ProjectEmailDomain[];
+}
+
+export async function getLatestEmailForDomain(
+  projectId: string,
+  domain: string
+): Promise<{ from_address: string; subject: string | null; body_text: string | null } | null> {
+  const { data, error } = await supabaseAdmin
+    .from("incoming_emails")
+    .select("from_address, subject, body_text")
+    .eq("project_id", projectId)
+    .eq("from_domain", domain)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+// --- Dashboard Aggregates ---
+
+export interface DashboardStats {
+  kpis: { total: number; unread: number; processed: number; failed: number };
+  tag_daily: { date: string; tag_id: string; tag_name: string; tag_color: string; count: number }[];
+  top_domains: { domain: string; count: number; latest_date: string }[];
+  activity_grid: { date: string; count: number }[];
+  recent_emails: {
+    id: string;
+    from_address: string;
+    from_domain: string | null;
+    subject: string | null;
+    status: string;
+    created_at: string;
+    read_at: string | null;
+    summary: string | null;
+    tags: { id: string; name: string; color: string }[];
+  }[];
+}
+
+export async function getDashboardStats(
+  projectId: string,
+  days: number
+): Promise<DashboardStats> {
+  const { data, error } = await supabaseAdmin.rpc("get_dashboard_stats", {
+    p_project_id: projectId,
+    p_days: days,
+  });
+  if (error) throw error;
+  return data as DashboardStats;
 }
