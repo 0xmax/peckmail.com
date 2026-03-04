@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   UsersThree,
@@ -255,17 +256,48 @@ const sparklineConfig: ChartConfig = {
   count: { label: "Emails", color: "var(--color-primary)" },
 };
 
-function Sparkline({ sparkline }: { sparkline: number[] }) {
+function Sparkline({ sparkline, days = 30 }: { sparkline: number[]; days?: number }) {
   const chartData = useMemo(
-    () => sparkline.slice(-30).map((count, i) => ({ day: i, count })),
-    [sparkline]
+    () => sparkline.slice(-days).map((count, i) => ({ day: i, count })),
+    [sparkline, days]
   );
   return (
-    <ChartContainer config={sparklineConfig} className="h-[28px] w-[120px] shrink-0">
-      <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-        <ChartTooltip content={<ChartTooltipContent hideLabel />} cursor={false} />
-        <Bar dataKey="count" fill="var(--color-count)" radius={[1, 1, 0, 0]} />
-      </BarChart>
+    <ChartContainer
+      config={sparklineConfig}
+      className="h-9 w-24 aspect-auto shrink-0"
+    >
+      <AreaChart
+        data={chartData}
+        margin={{ top: 4, right: 0, bottom: 4, left: 0 }}
+      >
+        <defs>
+          <linearGradient id="sparkline-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop
+              offset="5%"
+              stopColor="var(--color-count)"
+              stopOpacity={0.3}
+            />
+            <stop
+              offset="95%"
+              stopColor="var(--color-count)"
+              stopOpacity={0}
+            />
+          </linearGradient>
+        </defs>
+        <Area
+          dataKey="count"
+          type="monotone"
+          fill="url(#sparkline-gradient)"
+          stroke="var(--color-count)"
+          strokeWidth={1.5}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <ChartTooltip
+          content={<ChartTooltipContent hideLabel hideIndicator />}
+          cursor={{ stroke: "var(--color-border)", strokeWidth: 1 }}
+        />
+      </AreaChart>
     </ChartContainer>
   );
 }
@@ -278,25 +310,29 @@ function periodTrend(sparkline: number[], days: number) {
   return { count, delta: count - prevCount };
 }
 
-function TrendCell({ sparkline, days }: { sparkline: number[]; days: number }) {
-  const { count, delta } = useMemo(() => periodTrend(sparkline, days), [sparkline, days]);
+function TrendLabel({ sparkline, days = 7 }: { sparkline: number[]; days?: number }) {
+  const { delta } = useMemo(() => periodTrend(sparkline, days), [sparkline, days]);
+
+  if (delta > 0) {
+    return (
+      <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-transparent font-bold text-[9px] uppercase tracking-wider px-1.5 h-5 flex items-center gap-1">
+        <TrendUp size={10} weight="bold" />
+        Increasing
+      </Badge>
+    );
+  }
+  if (delta < 0) {
+    return (
+      <Badge variant="secondary" className="bg-rose-500/10 text-rose-600 border-transparent font-bold text-[9px] uppercase tracking-wider px-1.5 h-5 flex items-center gap-1">
+        <TrendDown size={10} weight="bold" />
+        Decreasing
+      </Badge>
+    );
+  }
   return (
-    <div className="text-right">
-      <span className="text-xs tabular-nums text-foreground">{count}</span>
-      {delta !== 0 && (
-        <div className="flex items-center justify-end gap-0.5">
-          {delta > 0 ? (
-            <span className="flex items-center text-[10px] tabular-nums text-green-600">
-              <TrendUp size={10} className="mr-px" />+{delta}
-            </span>
-          ) : (
-            <span className="flex items-center text-[10px] tabular-nums text-red-500">
-              <TrendDown size={10} className="mr-px" />{delta}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
+    <Badge variant="outline" className="text-muted-foreground/60 border-border/50 font-bold text-[9px] uppercase tracking-wider px-1.5 h-5 flex items-center gap-1">
+      Stable
+    </Badge>
   );
 }
 
@@ -319,6 +355,7 @@ function SenderList({
 }) {
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [timeframe, setTimeframe] = useState<number>(30);
   const unlinkedDomains = domains.filter((d) => !d.sender_id);
   const totalEmails = senders.reduce((sum, s) => sum + s.email_count, 0);
 
@@ -432,6 +469,21 @@ function SenderList({
                 className="h-8 text-xs pl-8 w-[200px]"
               />
             </div>
+            <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
+              {[7, 14, 30].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setTimeframe(d)}
+                  className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
+                    timeframe === d
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
             {availableCountries.length > 0 && (
               <Select value={countryFilter} onValueChange={setCountryFilter}>
                 <SelectTrigger className="w-[180px] h-8 text-xs">
@@ -471,29 +523,29 @@ function SenderList({
           <Card>
             <CardContent className="p-2">
               {/* Header */}
-              <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-4 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-b border-border/50 mb-1">
                 <div className="w-9 shrink-0" />
                 <div className="flex-1 min-w-0">Sender</div>
-                <div className="w-[120px] shrink-0 text-center">30d</div>
-                <div className="w-12 shrink-0 text-right">7d</div>
-                <div className="w-12 shrink-0 text-right">14d</div>
-                <div className="w-14 shrink-0 text-right">Total</div>
+                <div className="w-32 shrink-0 text-center">Activity ({timeframe}d)</div>
+                <div className="w-28 shrink-0 text-right">Trend</div>
+                <div className="w-24 shrink-0 text-right">{timeframe}d Total</div>
               </div>
               <div className="divide-y divide-border">
                 {filteredSenders.map((s) => {
                   const st = stats?.[s.id];
+                  const periodTotal = st?.sparkline.slice(-timeframe).reduce((a, b) => a + b, 0) ?? 0;
                   return (
                     <button
                       key={s.id}
                       onClick={() => onSelect(s.id)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                      className="w-full flex items-center gap-4 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
                     >
                       <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
                         {s.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-medium text-foreground truncate">
+                        <div className="flex items-center gap-1.5 leading-none">
+                          <p className="text-sm font-semibold text-foreground truncate">
                             {s.name}
                           </p>
                           {s.country && COUNTRIES[s.country] && (
@@ -502,25 +554,28 @@ function SenderList({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-[11px] text-muted-foreground mt-1.5">
                           {s.domain_count} domain{s.domain_count !== 1 ? "s" : ""}
                         </p>
                       </div>
-                      <div className="w-[120px] shrink-0 flex items-center justify-center">
+                      <div className="w-32 shrink-0 flex items-center justify-center">
                         {st ? (
-                          <Sparkline sparkline={st.sparkline} />
+                          <Sparkline sparkline={st.sparkline} days={timeframe} />
                         ) : (
                           <span className="text-xs text-muted-foreground">&mdash;</span>
                         )}
                       </div>
-                      <div className="w-12 shrink-0">
-                        {st ? <TrendCell sparkline={st.sparkline} days={7} /> : <span className="text-xs text-muted-foreground block text-right">&mdash;</span>}
+                      <div className="w-28 shrink-0 flex justify-end">
+                        {st ? (
+                          <TrendLabel sparkline={st.sparkline} days={timeframe} />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">&mdash;</span>
+                        )}
                       </div>
-                      <div className="w-12 shrink-0">
-                        {st ? <TrendCell sparkline={st.sparkline} days={14} /> : <span className="text-xs text-muted-foreground block text-right">&mdash;</span>}
-                      </div>
-                      <div className="w-14 shrink-0 text-right">
-                        <span className="text-xs font-medium tabular-nums text-foreground">{s.email_count}</span>
+                      <div className="w-24 shrink-0 text-right">
+                        <span className="text-sm font-bold tabular-nums text-foreground">
+                          {st ? periodTotal : s.email_count}
+                        </span>
                       </div>
                     </button>
                   );
