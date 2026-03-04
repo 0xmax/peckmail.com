@@ -1,159 +1,326 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { openrouterChat, isOpenRouterConfigured, GEMINI_FLASH_MODEL, type ContentPart } from "./openrouter.js";
 import {
   supabaseAdmin,
   listProjectSenders,
-  listUnclassifiedSenderEmails,
-  getSenderClassifications,
-  upsertEmailClassifications,
+  listProjectExtractors,
+  listUnextractedSenderEmails,
+  listProjectEmailsForExtraction,
+  getSenderExtractions,
+  upsertEmailExtractions,
   getSenderStrategy,
   insertSenderStrategy,
-  type EmailClassificationRow,
+  type EmailExtractorRow,
 } from "./db.js";
 
 const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null;
 
-const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+const EXTRACTION_MODEL = GEMINI_FLASH_MODEL;
 const SONNET_MODEL = "claude-sonnet-4-6";
 const BATCH_SIZE = 25;
 const BODY_MAX_LENGTH = 1500;
 const CONCURRENCY = 2;
+const MAX_IMAGES_PER_EMAIL = 10;
+const MIN_IMAGE_DIMENSION = 50;
 
-// --- Pass 1: Classification (Haiku) ---
+// --- Pass 1: Extraction (Haiku) ---
 
-const CLASSIFY_SYSTEM = `You are an email marketing classifier. Given a batch of emails, classify each one.
+function buildExtractionPrompt(extractors: EmailExtractorRow[]): string {
+  const categories = extractors.filter((e) => e.kind === "category");
+  const fields = extractors.filter((e) => e.kind === "extractor");
+
+  const schemaLines: string[] = ['"email_id": "the id"'];
+  const ruleLines: string[] = [];
+
+  for (const category of categories) {
+    const vals = category.enum_values.join("|");
+    schemaLines.push(`"${category.name}": "${vals}"`);
+    if (category.description) ruleLines.push(`- "${category.name}": ${category.description}`);
+  }
+
+  for (const f of fields) {
+    let typeHint: string;
+    switch (f.value_type) {
+      case "text":
+        typeHint = "string or null";
+        break;
+      case "text_array":
+        typeHint = '["item1", "item2"]';
+        break;
+      case "number":
+        typeHint = "number or null";
+        break;
+      case "boolean":
+        typeHint = "boolean";
+        break;
+      case "enum":
+        typeHint = f.enum_values.join("|");
+        break;
+      default:
+        typeHint = "any";
+    }
+    schemaLines.push(`"${f.name}": ${typeHint}`);
+    if (f.description) ruleLines.push(`- "${f.name}": ${f.description}`);
+  }
+
+  return `You are an email marketing analyzer. Given a batch of emails, extract structured data from each one.
 
 Return ONLY a valid JSON array with one object per email, in the same order as input. Each object:
 {
-  "email_id": "the id",
-  "email_type": "welcome|promotional|newsletter|cart_abandon|winback|transactional|announcement|survey|loyalty|seasonal|other",
-  "offer": "brief description of offer or null",
-  "discount_pct": 0-100 or null,
-  "urgency": "none|soft|hard",
-  "cta": "primary call-to-action text or null",
-  "products_mentioned": ["product1", "product2"],
-  "tone": "formal|casual|urgent|friendly|luxury",
-  "personalization_level": "none|basic|moderate|advanced",
-  "subject_length": number,
-  "subject_has_emoji": boolean,
-  "subject_has_personalization": boolean,
-  "subject_urgency_words": ["word1", "word2"]
+  ${schemaLines.join(",\n  ")}
 }
 
 Rules:
-- "discount_pct": integer 0-100, the discount percentage if mentioned (e.g. "20% off" = 20). null if none.
-- "subject_length": character count of the subject line
-- "subject_has_emoji": true if the subject contains any emoji
-- "subject_has_personalization": true if the subject contains first name, location, or other personal tokens
-- "subject_urgency_words": array of urgency words found in the subject (e.g. "limited", "hurry", "last chance", "ends today", "don't miss")
-- "products_mentioned": specific product names mentioned. Empty array if none.
-- Be precise and factual. Only classify what you can determine from the content.`;
-
-interface ClassifyResult {
-  email_id: string;
-  email_type: string;
-  offer: string | null;
-  discount_pct: number | null;
-  urgency: string;
-  cta: string | null;
-  products_mentioned: string[];
-  tone: string;
-  personalization_level: string;
-  subject_length: number;
-  subject_has_emoji: boolean;
-  subject_has_personalization: boolean;
-  subject_urgency_words: string[];
+${ruleLines.join("\n")}
+- Be precise and factual. Only extract what you can determine from the content.`;
 }
 
-async function classifyBatch(
-  emails: { id: string; subject: string | null; body_text: string | null }[]
-): Promise<ClassifyResult[]> {
-  if (!anthropic) throw new Error("Anthropic API key not configured");
+interface ExtractionResult {
+  email_id: string;
+  [key: string]: any;
+}
 
-  const emailsText = emails
-    .map((e, i) => {
-      const body = (e.body_text || "").slice(0, BODY_MAX_LENGTH);
-      return `--- Email ${i + 1} ---\nID: ${e.id}\nSubject: ${e.subject || "(no subject)"}\nBody:\n${body}`;
-    })
-    .join("\n\n");
+function sanitizeImageUrl(raw: string): string | null {
+  try {
+    const trimmed = raw.trim();
+    if (!trimmed || !trimmed.startsWith("http")) return null;
+    // Fix spaces and other invalid chars
+    const url = new URL(trimmed);
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
 
-  const response = await anthropic.messages.create({
-    model: HAIKU_MODEL,
-    max_tokens: 4096,
-    system: CLASSIFY_SYSTEM,
-    messages: [{ role: "user", content: `Classify these ${emails.length} emails:\n\n${emailsText}` }],
-  });
+function extractImageUrls(html: string, max: number): string[] {
+  if (!html) return [];
+  const results: Array<{ url: string; area: number }> = [];
+  const imgRegex = /<img\s[^>]*?src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = imgRegex.exec(html)) !== null) {
+    const tag = match[0];
+    const rawUrl = match[1];
+    if (rawUrl.startsWith("data:")) continue;
+    if (/\btrack(ing)?\b|\/open\b|\/pixel\b|spacer|blank\./i.test(rawUrl)) continue;
+    const url = sanitizeImageUrl(rawUrl);
+    if (!url) continue;
+    const wm = tag.match(/width\s*=\s*["']?(\d+)/i);
+    const hm = tag.match(/height\s*=\s*["']?(\d+)/i);
+    const w = wm ? parseInt(wm[1]) : 300;
+    const h = hm ? parseInt(hm[1]) : 300;
+    if (w < MIN_IMAGE_DIMENSION || h < MIN_IMAGE_DIMENSION) continue;
+    results.push({ url, area: w * h });
+  }
+  // Return the largest images first
+  results.sort((a, b) => b.area - a.area);
+  return results.slice(0, max).map((r) => r.url);
+}
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error("Failed to extract JSON array from classification response");
+function buildExtractionParts(
+  emails: { id: string; subject: string | null; body_text: string | null; body_html?: string | null }[],
+  includeImages: boolean
+): ContentPart[] {
+  const parts: ContentPart[] = [
+    { type: "text", text: `Extract data from these ${emails.length} emails${includeImages ? ". Consider both text and images" : ""}:` },
+  ];
+  for (let i = 0; i < emails.length; i++) {
+    const e = emails[i];
+    const body = (e.body_text || "").slice(0, BODY_MAX_LENGTH);
+    parts.push({
+      type: "text",
+      text: `--- Email ${i + 1} ---\nID: ${e.id}\nSubject: ${e.subject || "(no subject)"}\nBody:\n${body}`,
+    });
+    if (includeImages) {
+      const images = extractImageUrls(e.body_html || "", MAX_IMAGES_PER_EMAIL);
+      for (const url of images) {
+        parts.push({ type: "image_url", image_url: { url } });
+      }
+    }
+  }
+  return parts;
+}
+
+async function callExtraction(parts: ContentPart[], systemPrompt: string): Promise<string> {
+  if (isOpenRouterConfigured()) {
+    return openrouterChat({
+      model: EXTRACTION_MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: parts },
+      ],
+    });
+  } else if (anthropic) {
+    const anthropicContent: any[] = parts.map((p) => {
+      if (p.type === "text") return p;
+      return { type: "image", source: { type: "url", url: p.image_url.url } };
+    });
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: "user", content: anthropicContent }],
+    });
+    return response.content[0].type === "text" ? response.content[0].text : "";
+  }
+  throw new Error("No API key configured (OpenRouter or Anthropic)");
+}
+
+async function extractBatch(
+  emails: { id: string; subject: string | null; body_text: string | null; body_html?: string | null }[],
+  systemPrompt: string
+): Promise<ExtractionResult[]> {
+  let text: string;
 
   try {
-    return JSON.parse(jsonMatch[0]) as ClassifyResult[];
+    const parts = buildExtractionParts(emails, true);
+    text = await callExtraction(parts, systemPrompt);
+  } catch (err: any) {
+    // If images caused a 400 (broken URL, 404, etc.), retry text-only
+    if (err.message?.includes("400")) {
+      console.warn("[strategyAnalyzer] Image error, retrying batch text-only:", err.message.slice(0, 120));
+      const textOnlyParts = buildExtractionParts(emails, false);
+      text = await callExtraction(textOnlyParts, systemPrompt);
+    } else {
+      throw err;
+    }
+  }
+
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error("Failed to extract JSON array from extraction response");
+
+  try {
+    return JSON.parse(jsonMatch[0]) as ExtractionResult[];
   } catch {
-    throw new Error("Failed to parse classification JSON");
+    throw new Error("Failed to parse extraction JSON");
   }
 }
 
-export async function classifySenderEmails(
+export async function extractSenderEmails(
   projectId: string,
   senderId: string
-): Promise<{ classified: number; total: number }> {
-  const unclassified = await listUnclassifiedSenderEmails(projectId, senderId, 500);
-  if (!unclassified.length) return { classified: 0, total: 0 };
+): Promise<{ extracted: number; total: number }> {
+  const unextracted = await listUnextractedSenderEmails(projectId, senderId, 500);
+  if (!unextracted.length) return { extracted: 0, total: 0 };
 
-  let classified = 0;
+  // Load project extractors and build prompt
+  const allExtractors = await listProjectExtractors(projectId);
+  const enabled = allExtractors.filter((e) => e.enabled);
+  if (!enabled.length) return { extracted: 0, total: 0 };
 
-  // Batch into groups of BATCH_SIZE
-  const batches: typeof unclassified[] = [];
-  for (let i = 0; i < unclassified.length; i += BATCH_SIZE) {
-    batches.push(unclassified.slice(i, i + BATCH_SIZE));
+  const systemPrompt = buildExtractionPrompt(enabled);
+  const categoryExtractors = enabled.filter((e) => e.kind === "category");
+  // Use first category (by sort_order) for the top-level `category` column
+  const primaryCategoryName = categoryExtractors.length > 0
+    ? categoryExtractors.reduce((a, b) => a.sort_order <= b.sort_order ? a : b).name
+    : "email_type";
+
+  let extracted = 0;
+
+  const batches: typeof unextracted[] = [];
+  for (let i = 0; i < unextracted.length; i += BATCH_SIZE) {
+    batches.push(unextracted.slice(i, i + BATCH_SIZE));
   }
 
-  // Process with concurrency
   for (let i = 0; i < batches.length; i += CONCURRENCY) {
     const chunk = batches.slice(i, i + CONCURRENCY);
     const results = await Promise.allSettled(
       chunk.map(async (batch) => {
-        const classifications = await classifyBatch(batch);
-        const rows = classifications.map((c) => ({
-          email_id: c.email_id,
-          project_id: projectId,
-          sender_id: senderId,
-          email_type: c.email_type,
-          offer: c.offer || null,
-          discount_pct: c.discount_pct ?? null,
-          urgency: c.urgency || "none",
-          cta: c.cta || null,
-          products_mentioned: c.products_mentioned || [],
-          tone: c.tone || "casual",
-          personalization_level: c.personalization_level || "none",
-          subject_length: c.subject_length ?? null,
-          subject_has_emoji: c.subject_has_emoji ?? false,
-          subject_has_personalization: c.subject_has_personalization ?? false,
-          subject_urgency_words: c.subject_urgency_words || [],
-          model: HAIKU_MODEL,
-          classified_at: new Date().toISOString(),
-        }));
-        await upsertEmailClassifications(rows as any);
+        const extractions = await extractBatch(batch, systemPrompt);
+        const rows = extractions.map((e) => {
+          const { email_id, ...rest } = e;
+          // Primary category goes into the dedicated column
+          const categoryValue = rest[primaryCategoryName] ?? null;
+          return {
+            email_id,
+            project_id: projectId,
+            sender_id: senderId,
+            category: categoryValue,
+            data: rest,
+            model: EXTRACTION_MODEL,
+            extracted_at: new Date().toISOString(),
+          };
+        });
+        await upsertEmailExtractions(rows);
         return rows.length;
       })
     );
 
     for (const result of results) {
-      if (result.status === "fulfilled") classified += result.value;
-      else console.error("[strategyAnalyzer] Batch classification failed:", result.reason);
+      if (result.status === "fulfilled") extracted += result.value;
+      else console.error("[strategyAnalyzer] Batch extraction failed:", result.reason);
     }
   }
 
-  console.log(`[strategyAnalyzer] Classified ${classified}/${unclassified.length} emails for sender ${senderId}`);
-  return { classified, total: unclassified.length };
+  console.log(`[strategyAnalyzer] Extracted ${extracted}/${unextracted.length} emails for sender ${senderId}`);
+  return { extracted, total: unextracted.length };
+}
+
+/**
+ * Extract categories + data fields for all emails in a project (re-extraction).
+ */
+export async function extractAllProjectEmails(
+  projectId: string,
+  onProgress?: (done: number, total: number) => void
+): Promise<{ extracted: number; total: number }> {
+  const allEmails = await listProjectEmailsForExtraction(projectId);
+  if (!allEmails.length) return { extracted: 0, total: 0 };
+
+  const allExtractors = await listProjectExtractors(projectId);
+  const enabled = allExtractors.filter((e) => e.enabled);
+  if (!enabled.length) return { extracted: 0, total: 0 };
+
+  const systemPrompt = buildExtractionPrompt(enabled);
+  const categoryExtractors = enabled.filter((e) => e.kind === "category");
+  const primaryCategoryName = categoryExtractors.length > 0
+    ? categoryExtractors.reduce((a, b) => a.sort_order <= b.sort_order ? a : b).name
+    : "email_type";
+
+  let extracted = 0;
+
+  const batches: typeof allEmails[] = [];
+  for (let i = 0; i < allEmails.length; i += BATCH_SIZE) {
+    batches.push(allEmails.slice(i, i + BATCH_SIZE));
+  }
+
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    const chunk = batches.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      chunk.map(async (batch) => {
+        const extractions = await extractBatch(batch, systemPrompt);
+        const rows = extractions.map((e) => {
+          const { email_id, ...rest } = e;
+          const categoryValue = rest[primaryCategoryName] ?? null;
+          return {
+            email_id,
+            project_id: projectId,
+            sender_id: null,
+            category: categoryValue,
+            data: rest,
+            model: EXTRACTION_MODEL,
+            extracted_at: new Date().toISOString(),
+          };
+        });
+        await upsertEmailExtractions(rows);
+        return rows.length;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled") extracted += result.value;
+      else console.error("[strategyAnalyzer] Batch extraction failed:", result.reason);
+    }
+    onProgress?.(extracted, allEmails.length);
+  }
+
+  console.log(`[strategyAnalyzer] Extracted ${extracted}/${allEmails.length} emails for project ${projectId}`);
+  return { extracted, total: allEmails.length };
 }
 
 // --- Pass 2: Strategy Analysis (Sonnet) ---
 
-const STRATEGY_SYSTEM = `You are an email marketing strategist. Given classified email data and subject lines from a sender, produce a comprehensive strategy analysis.
+const STRATEGY_SYSTEM = `You are an email marketing strategist. Given extracted email data and subject lines from a sender, produce a comprehensive strategy analysis.
 
 Return ONLY valid JSON with these exact keys:
 {
@@ -207,7 +374,7 @@ Rules:
 - "content_strategy.content_mix": percentages that sum to 100
 - "funnel_mapping": percentages that sum to 100
 - "subject_line_analysis": derive from the subject line data provided
-- Be data-driven. Reference specific numbers from the classifications.
+- Be data-driven. Reference specific numbers from the extraction data.
 - "recommendations": 3-7 actionable recommendations for someone analyzing this sender's strategy`;
 
 export async function generateSenderStrategy(
@@ -216,12 +383,12 @@ export async function generateSenderStrategy(
 ): Promise<{ strategy: Record<string, any>; emailCount: number } | null> {
   if (!anthropic) throw new Error("Anthropic API key not configured");
 
-  // Pass 1: Classify any new emails first
-  await classifySenderEmails(projectId, senderId);
+  // Pass 1: Extract any new emails first
+  await extractSenderEmails(projectId, senderId);
 
-  // Fetch all classifications (compact, no body text)
-  const classifications = await getSenderClassifications(projectId, senderId);
-  if (!classifications.length) return null;
+  // Fetch all extractions
+  const extractions = await getSenderExtractions(projectId, senderId);
+  if (!extractions.length) return null;
 
   // Fetch email subjects + dates for subject line analysis
   const { data: emailMeta } = await supabaseAdmin
@@ -229,7 +396,7 @@ export async function generateSenderStrategy(
     .select("id, subject, created_at")
     .in(
       "id",
-      classifications.map((c) => c.email_id)
+      extractions.map((e) => e.email_id)
     )
     .order("created_at", { ascending: true });
 
@@ -238,16 +405,10 @@ export async function generateSenderStrategy(
     date: e.created_at,
   }));
 
-  // Build classification summary (compact)
-  const classificationSummary = classifications.map((c) => ({
-    type: c.email_type,
-    offer: c.offer,
-    discount_pct: c.discount_pct,
-    urgency: c.urgency,
-    tone: c.tone,
-    personalization: c.personalization_level,
-    products: c.products_mentioned,
-    cta: c.cta,
+  // Build extraction summary (compact)
+  const extractionSummary = extractions.map((e) => ({
+    type: e.category,
+    ...e.data,
   }));
 
   const response = await anthropic.messages.create({
@@ -257,10 +418,10 @@ export async function generateSenderStrategy(
     messages: [
       {
         role: "user",
-        content: `Analyze the email marketing strategy for this sender based on ${classifications.length} classified emails.
+        content: `Analyze the email marketing strategy for this sender based on ${extractions.length} analyzed emails.
 
-Classification data:
-${JSON.stringify(classificationSummary, null, 0)}
+Extraction data:
+${JSON.stringify(extractionSummary, null, 0)}
 
 Subject lines with dates:
 ${JSON.stringify(subjects, null, 0)}`,
@@ -280,22 +441,22 @@ ${JSON.stringify(subjects, null, 0)}`,
   }
 
   // Determine date range
-  const dates = classifications.map((c) => c.classified_at).sort();
+  const dates = extractions.map((e) => e.extracted_at).sort();
   const subjectDates = subjects.map((s) => s.date).sort();
   const allDates = [...dates, ...subjectDates].sort();
 
-  const row = await insertSenderStrategy({
+  await insertSenderStrategy({
     sender_id: senderId,
     project_id: projectId,
     strategy,
-    email_count: classifications.length,
+    email_count: extractions.length,
     date_range_start: allDates[0] || null,
     date_range_end: allDates[allDates.length - 1] || null,
     model: SONNET_MODEL,
   });
 
-  console.log(`[strategyAnalyzer] Generated strategy for sender ${senderId} (${classifications.length} emails)`);
-  return { strategy, emailCount: classifications.length };
+  console.log(`[strategyAnalyzer] Generated strategy for sender ${senderId} (${extractions.length} emails)`);
+  return { strategy, emailCount: extractions.length };
 }
 
 // --- Batch ---
@@ -305,7 +466,6 @@ export async function refreshAllStrategies(
   concurrency = 2
 ): Promise<{ total: number; generated: number; failed: number }> {
   const senders = await listProjectSenders(projectId);
-  // Only senders with emails
   const targets = senders.filter((s) => s.email_count && s.email_count > 0);
   if (!targets.length) return { total: 0, generated: 0, failed: 0 };
 

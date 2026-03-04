@@ -28,6 +28,7 @@ export interface IncomingEmail {
   read_at?: string | null;
   summary?: string | null;
   tags?: EmailTagSummary[];
+  extraction_data?: Record<string, any> | null;
 }
 
 export interface Sender {
@@ -76,22 +77,26 @@ export interface SenderProfileData {
   generated_at: string;
 }
 
-export interface EmailClassification {
+export interface EmailExtraction {
   id: string;
   email_id: string;
-  email_type: string;
-  offer: string | null;
-  discount_pct: number | null;
-  urgency: string;
-  cta: string | null;
-  products_mentioned: string[];
-  tone: string;
-  personalization_level: string;
-  subject_length: number | null;
-  subject_has_emoji: boolean;
-  subject_has_personalization: boolean;
-  subject_urgency_words: string[];
-  classified_at: string;
+  category: string | null;
+  data: Record<string, any>;
+  extracted_at: string;
+}
+
+export interface EmailExtractor {
+  id: string;
+  kind: "category" | "extractor";
+  name: string;
+  label: string;
+  description: string;
+  value_type: "text" | "text_array" | "number" | "boolean" | "enum";
+  enum_values: string[];
+  enum_colors: string[];
+  required: boolean;
+  sort_order: number;
+  enabled: boolean;
 }
 
 export interface EmailFlow {

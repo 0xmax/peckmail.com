@@ -53,13 +53,18 @@ import {
   getSenderDailyStats,
   getSenderProfile,
   getSenderStrategy,
-  getSenderClassifications,
+  getSenderExtractions,
+  listProjectExtractors,
+  createProjectExtractor,
+  updateProjectExtractor,
+  softDeleteProjectExtractor,
+  seedDefaultExtractors,
   supabaseAdmin,
 } from "./db.js";
 import { verifyWebhookSignature, receiveInboundEmail, fetchEmailContentAndProcess, processInboundEmail, reprocessEmailTags } from "./inbound.js";
 import { resolveAllPendingDomains, refreshSenderLogos } from "./senderResolver.js";
 import { generateSenderProfile, refreshMissingProfiles, refreshAllProfiles } from "./senderProfiler.js";
-import { generateSenderStrategy, classifySenderEmails, refreshAllStrategies } from "./senderStrategyAnalyzer.js";
+import { generateSenderStrategy, extractSenderEmails, extractAllProjectEmails, refreshAllStrategies } from "./senderStrategyAnalyzer.js";
 import { sendInvitationEmail, sendEmail } from "./email.js";
 import { ttsRouter } from "./tts.js";
 import { mcpRouter } from "./mcp.js";
@@ -374,6 +379,11 @@ api.post("/projects", async (c) => {
   if (!body.name?.trim()) return c.json({ error: "Name required" }, 400);
 
   const project = await createProject(body.name.trim(), user.id);
+
+  // Seed default extractors for the new project
+  seedDefaultExtractors(project.id).catch((err) =>
+    console.error("[createProject] Failed to seed extractors:", err)
+  );
 
   // Auto-set as active project if user doesn't have one
   const currentActive = await getActiveProjectId(user.id);
@@ -984,14 +994,14 @@ api.delete("/projects/:id/tags/:tagId", async (c) => {
   }
 });
 
-// Reprocess tags for a single email
+// Reprocess tags for a single email (legacy alias)
 api.post("/projects/:id/emails/:emailId/reprocess-tags", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
   const emailId = c.req.param("emailId");
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership || !["owner", "editor"].includes(membership.role)) {
-    return c.json({ error: "Only owners or editors can reprocess tags" }, 403);
+    return c.json({ error: "Access denied" }, 403);
   }
   try {
     const email = await getProjectIncomingEmail(projectId, emailId);
@@ -999,31 +1009,112 @@ api.post("/projects/:id/emails/:emailId/reprocess-tags", async (c) => {
     const tags = await reprocessEmailTags(email);
     return c.json({ tags });
   } catch (err: any) {
-    return c.json({ error: err?.message || "Failed to reprocess tags" }, 500);
+    return c.json({ error: err?.message || "Failed to reprocess" }, 500);
   }
 });
 
-// Reprocess tags for all emails in a project
-api.post("/projects/:id/reprocess-tags", async (c) => {
+// --- Reprocess job tracking ---
+interface ReprocessJob {
+  status: "running" | "done" | "error";
+  tagsTotal: number;
+  tagsDone: number;
+  extractTotal: number;
+  extractDone: number;
+  error?: string;
+  startedAt: number;
+}
+const reprocessJobs = new Map<string, ReprocessJob>();
+
+// Start reprocessing all emails: tags + categories + extractors
+api.post("/projects/:id/reprocess", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership || !["owner", "editor"].includes(membership.role)) {
-    return c.json({ error: "Only owners or editors can reprocess tags" }, 403);
+    return c.json({ error: "Access denied" }, 403);
   }
-  try {
-    const { emails } = await listProjectIncomingEmailSummaries(projectId, 100);
-    let processed = 0;
-    for (const summary of emails) {
-      const email = await getProjectIncomingEmail(projectId, summary.id);
-      if (!email) continue;
-      await reprocessEmailTags(email);
-      processed++;
+
+  const existing = reprocessJobs.get(projectId);
+  if (existing?.status === "running") {
+    return c.json({ ok: true, message: "Already running" });
+  }
+
+  const job: ReprocessJob = {
+    status: "running",
+    tagsTotal: 0,
+    tagsDone: 0,
+    extractTotal: 0,
+    extractDone: 0,
+    startedAt: Date.now(),
+  };
+  reprocessJobs.set(projectId, job);
+
+  (async () => {
+    try {
+      // Collect ALL email IDs by paginating through summaries
+      const allSummaries: { id: string }[] = [];
+      let beforeId: string | undefined;
+      while (true) {
+        const page = await listProjectIncomingEmailSummaries(projectId, 100, beforeId);
+        allSummaries.push(...page.emails);
+        if (!page.hasMore || !page.emails.length) break;
+        beforeId = page.emails[page.emails.length - 1].id;
+      }
+      job.tagsTotal = allSummaries.length;
+
+      await Promise.all([
+        (async () => {
+          for (const summary of allSummaries) {
+            const email = await getProjectIncomingEmail(projectId, summary.id);
+            if (!email) { job.tagsDone++; continue; }
+            await reprocessEmailTags(email);
+            job.tagsDone++;
+          }
+        })(),
+        extractAllProjectEmails(projectId, (done, total) => {
+          job.extractTotal = total;
+          job.extractDone = done;
+        }),
+      ]);
+      job.status = "done";
+      console.log(`[reprocess] Completed for project ${projectId}`);
+    } catch (err: any) {
+      job.status = "error";
+      job.error = err.message || "Unknown error";
+      console.error(`[reprocess] Failed for project ${projectId}:`, err);
     }
-    return c.json({ ok: true, processed });
-  } catch (err: any) {
-    return c.json({ error: err?.message || "Failed to reprocess tags" }, 500);
-  }
+    // Clean up after 5 minutes
+    setTimeout(() => reprocessJobs.delete(projectId), 5 * 60_000);
+  })();
+
+  return c.json({ ok: true, message: "Reprocessing started" });
+});
+
+// Poll reprocess status
+api.get("/projects/:id/reprocess", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  const job = reprocessJobs.get(projectId);
+  if (!job) return c.json({ status: "idle" });
+  return c.json({
+    status: job.status,
+    tags_done: job.tagsDone,
+    tags_total: job.tagsTotal,
+    extract_done: job.extractDone,
+    extract_total: job.extractTotal,
+    error: job.error,
+  });
+});
+
+// Legacy alias
+api.post("/projects/:id/reprocess-tags", async (c) => {
+  // Forward to the new combined endpoint
+  const url = new URL(c.req.url);
+  url.pathname = url.pathname.replace("/reprocess-tags", "/reprocess");
+  return c.redirect(url.pathname, 307);
 });
 
 // Email sender domains
@@ -1313,6 +1404,106 @@ api.post("/projects/:id/senders/refresh-profiles", async (c) => {
   return c.json({ ok: true, message: all ? "Refreshing all profiles" : "Generating missing profiles" });
 });
 
+// --- Email Extractors CRUD ---
+api.get("/projects/:id/extractors", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  const extractors = await listProjectExtractors(projectId);
+  return c.json({ extractors });
+});
+
+api.post("/projects/:id/extractors", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  const body = await c.req.json<{
+    kind?: "category" | "extractor";
+    name: string;
+    label: string;
+    description?: string;
+    value_type: string;
+    enum_values?: string[];
+    enum_colors?: string[];
+    required?: boolean;
+    sort_order?: number;
+    enabled?: boolean;
+  }>();
+
+  if (!body.name?.trim() || !body.label?.trim() || !body.value_type) {
+    return c.json({ error: "name, label, and value_type are required" }, 400);
+  }
+
+  try {
+    const extractor = await createProjectExtractor({
+      projectId,
+      kind: body.kind ?? "extractor",
+      name: body.name.trim(),
+      label: body.label.trim(),
+      description: body.description,
+      value_type: body.value_type,
+      enum_values: body.enum_values,
+      enum_colors: body.enum_colors,
+      required: body.required,
+      sort_order: body.sort_order,
+      enabled: body.enabled,
+    });
+    return c.json({ extractor }, 201);
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to create extractor" }, 400);
+  }
+});
+
+api.patch("/projects/:id/extractors/:eid", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const eid = c.req.param("eid");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  const body = await c.req.json<{
+    label?: string;
+    description?: string;
+    enum_values?: string[];
+    enum_colors?: string[];
+    required?: boolean;
+    sort_order?: number;
+    enabled?: boolean;
+  }>();
+
+  try {
+    const extractor = await updateProjectExtractor(eid, body);
+    return c.json({ extractor });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to update extractor" }, 400);
+  }
+});
+
+api.delete("/projects/:id/extractors/:eid", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const eid = c.req.param("eid");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership || !["owner", "editor"].includes(membership.role)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  try {
+    await softDeleteProjectExtractor(eid);
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to delete extractor" }, 400);
+  }
+});
+
 // Sender strategy analysis
 api.get("/projects/:id/senders/:senderId/strategy", async (c) => {
   const user = getUser(c);
@@ -1343,15 +1534,15 @@ api.post("/projects/:id/senders/:senderId/strategy", async (c) => {
   }
 });
 
-api.get("/projects/:id/senders/:senderId/classifications", async (c) => {
+api.get("/projects/:id/senders/:senderId/extractions", async (c) => {
   const user = getUser(c);
   const projectId = c.req.param("id");
   const senderId = c.req.param("senderId");
   const membership = await getProjectMembership(projectId, user.id);
   if (!membership) return c.json({ error: "Access denied" }, 403);
 
-  const classifications = await getSenderClassifications(projectId, senderId);
-  return c.json({ classifications });
+  const extractions = await getSenderExtractions(projectId, senderId);
+  return c.json({ extractions });
 });
 
 api.post("/projects/:id/senders/refresh-strategies", async (c) => {

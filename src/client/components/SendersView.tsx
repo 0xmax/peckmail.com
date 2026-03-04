@@ -77,7 +77,7 @@ import {
 } from "recharts";
 import { useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
-import type { Sender, IncomingEmail, SenderStats, SenderProfileData, PricingSnapshot, SenderStrategyData, EmailClassification } from "../store/types.js";
+import type { Sender, IncomingEmail, SenderStats, SenderProfileData, PricingSnapshot, SenderStrategyData, EmailExtraction } from "../store/types.js";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -1080,7 +1080,7 @@ function StrategyCard({
   projectId: string;
 }) {
   const [strategy, setStrategy] = useState<SenderStrategyData | null>(null);
-  const [classifications, setClassifications] = useState<EmailClassification[]>([]);
+  const [extractions, setExtractions] = useState<EmailExtraction[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
@@ -1090,12 +1090,12 @@ function StrategyCard({
       api.get<{ strategy: SenderStrategyData | null }>(
         `/api/projects/${projectId}/senders/${senderId}/strategy`
       ),
-      api.get<{ classifications: EmailClassification[] }>(
-        `/api/projects/${projectId}/senders/${senderId}/classifications`
+      api.get<{ extractions: EmailExtraction[] }>(
+        `/api/projects/${projectId}/senders/${senderId}/extractions`
       ),
-    ]).then(([stratRes, classRes]) => {
+    ]).then(([stratRes, extRes]) => {
       if (stratRes.status === "fulfilled") setStrategy(stratRes.value.strategy);
-      if (classRes.status === "fulfilled") setClassifications(classRes.value.classifications);
+      if (extRes.status === "fulfilled") setExtractions(extRes.value.extractions);
     }).finally(() => setLoading(false));
   }, [projectId, senderId]);
 
@@ -1103,16 +1103,16 @@ function StrategyCard({
     setGenerating(true);
     try {
       await api.post(`/api/projects/${projectId}/senders/${senderId}/strategy`);
-      const [stratRes, classRes] = await Promise.allSettled([
+      const [stratRes, extRes] = await Promise.allSettled([
         api.get<{ strategy: SenderStrategyData | null }>(
           `/api/projects/${projectId}/senders/${senderId}/strategy`
         ),
-        api.get<{ classifications: EmailClassification[] }>(
-          `/api/projects/${projectId}/senders/${senderId}/classifications`
+        api.get<{ extractions: EmailExtraction[] }>(
+          `/api/projects/${projectId}/senders/${senderId}/extractions`
         ),
       ]);
       if (stratRes.status === "fulfilled") setStrategy(stratRes.value.strategy);
-      if (classRes.status === "fulfilled") setClassifications(classRes.value.classifications);
+      if (extRes.status === "fulfilled") setExtractions(extRes.value.extractions);
     } catch (err: any) {
       alert(err.message || "Failed to generate strategy");
     } finally {
@@ -1154,16 +1154,16 @@ function StrategyCard({
   };
 
   const discountTrendData = useMemo(() => {
-    if (!classifications.length) return [];
-    const withDiscount = classifications
-      .filter((c) => c.discount_pct != null && c.discount_pct > 0)
-      .sort((a, b) => a.classified_at.localeCompare(b.classified_at));
+    if (!extractions.length) return [];
+    const withDiscount = extractions
+      .filter((e) => e.data?.discount_pct != null && e.data.discount_pct > 0)
+      .sort((a, b) => a.extracted_at.localeCompare(b.extracted_at));
     if (!withDiscount.length) return [];
-    return withDiscount.map((c) => ({
-      date: new Date(c.classified_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      discount: c.discount_pct,
+    return withDiscount.map((e) => ({
+      date: new Date(e.extracted_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      discount: e.data.discount_pct,
     }));
-  }, [classifications]);
+  }, [extractions]);
 
   const discountConfig: ChartConfig = {
     discount: { label: "Discount %", color: "hsl(35 90% 55%)" },

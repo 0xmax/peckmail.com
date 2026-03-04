@@ -18,8 +18,9 @@ import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
-import type { IncomingEmail } from "../store/types.js";
+import type { IncomingEmail, EmailExtractor } from "../store/types.js";
 import { EmailIframe } from "./EmailIframe.js";
+import { TAG_COLORS } from "../lib/presets.js";
 
 interface EmailDetail extends IncomingEmail {
   body_text: string | null;
@@ -81,10 +82,12 @@ function EmailListItem({
   email,
   isSelected,
   onSelect,
+  extractors,
 }: {
   email: IncomingEmail;
   isSelected: boolean;
   onSelect: () => void;
+  extractors: EmailExtractor[];
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const isUnread = email.status === "received";
@@ -175,27 +178,59 @@ function EmailListItem({
           </p>
         )}
 
-        {/* Tags */}
-        {email.tags && email.tags.length > 0 && (
-          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-            {email.tags.map((tag) => (
+        {/* Tags + Categories */}
+        {(() => {
+          const tagChips = (email.tags ?? []).map((tag) => (
+            <span
+              key={"tag-" + tag.id}
+              className="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full font-medium"
+              style={{
+                backgroundColor: tag.color + "18",
+                color: tag.color,
+              }}
+            >
               <span
-                key={tag.id}
-                className="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full font-medium"
-                style={{
-                  backgroundColor: tag.color + "18",
-                  color: tag.color,
-                }}
-              >
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: tag.color }}
+              />
+              {tag.name}
+            </span>
+          ));
+
+          const catChips: React.ReactNode[] = [];
+          if (email.extraction_data) {
+            const cats = extractors.filter((e) => e.kind === "category");
+            for (const cat of cats) {
+              const val = email.extraction_data[cat.name];
+              if (!val) continue;
+              const idx = cat.enum_values.indexOf(val);
+              const color = cat.enum_colors?.[idx] ?? TAG_COLORS[(idx >= 0 ? idx : 0) % TAG_COLORS.length];
+              catChips.push(
                 <span
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ backgroundColor: tag.color }}
-                />
-                {tag.name}
-              </span>
-            ))}
-          </div>
-        )}
+                  key={"cat-" + cat.name}
+                  className="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full font-medium"
+                  style={{
+                    backgroundColor: color + "1a",
+                    color,
+                  }}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                  {val}
+                </span>
+              );
+            }
+          }
+
+          return (tagChips.length > 0 || catChips.length > 0) ? (
+            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+              {catChips}
+              {tagChips}
+            </div>
+          ) : null;
+        })()}
       </div>
     </button>
   );
@@ -206,11 +241,13 @@ function EmailDetailPanel({
   onBack,
   onDelete,
   deleting,
+  extractors,
 }: {
   email: EmailDetail | null;
   onBack: () => void;
   onDelete: () => void;
   deleting: boolean;
+  extractors: EmailExtractor[];
 }) {
   if (!email) return null;
 
@@ -262,27 +299,96 @@ function EmailDetailPanel({
             </Button>
           </div>
 
-          {/* Tags */}
-          {email.tags && email.tags.length > 0 && (
-            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-              {email.tags.map((tag) => (
-                <span
-                  key={tag.id}
-                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
-                  style={{
-                    backgroundColor: tag.color + "18",
-                    color: tag.color,
-                  }}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: tag.color }}
-                  />
-                  {tag.name}
-                </span>
-              ))}
-            </div>
-          )}
+          {/* Tags + Categories + Extractors */}
+          {(() => {
+            const tags = email.tags ?? [];
+            const data = email.extraction_data;
+            const cats = extractors.filter((e) => e.kind === "category");
+            const exts = extractors.filter((e) => e.kind !== "category" && e.enabled);
+            const hasCats = data && cats.some((c) => data[c.name]);
+            const hasExts = data && exts.some((e) => data[e.name] != null);
+
+            if (!tags.length && !hasCats && !hasExts) return null;
+
+            return (
+              <div className="mt-3 space-y-2">
+                {/* Category + tag chips */}
+                {(tags.length > 0 || hasCats) && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {data && cats.map((cat) => {
+                      const val = data[cat.name];
+                      if (!val) return null;
+                      const idx = cat.enum_values.indexOf(val);
+                      const color = cat.enum_colors?.[idx] ?? TAG_COLORS[(idx >= 0 ? idx : 0) % TAG_COLORS.length];
+                      return (
+                        <span
+                          key={"cat-" + cat.name}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+                          style={{ backgroundColor: color + "1a", color }}
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                          {val}
+                        </span>
+                      );
+                    })}
+                    {tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
+                        style={{
+                          backgroundColor: tag.color + "18",
+                          color: tag.color,
+                        }}
+                      >
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Extracted data fields */}
+                {data && hasExts && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {exts.map((ext) => {
+                      const val = data[ext.name];
+                      if (val == null) return null;
+
+                      let display: React.ReactNode;
+                      if (ext.value_type === "enum") {
+                        const idx = ext.enum_values.indexOf(val);
+                        const color = ext.enum_colors?.[idx] ?? TAG_COLORS[(idx >= 0 ? idx : 0) % TAG_COLORS.length];
+                        display = (
+                          <span
+                            className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium"
+                            style={{ backgroundColor: color + "1a", color }}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                            {val}
+                          </span>
+                        );
+                      } else if (ext.value_type === "boolean") {
+                        display = <span className="text-xs text-foreground">{val ? "Yes" : "No"}</span>;
+                      } else if (ext.value_type === "text_array" && Array.isArray(val)) {
+                        display = <span className="text-xs text-foreground">{val.join(", ")}</span>;
+                      } else if (ext.value_type === "number") {
+                        display = <span className="text-xs text-foreground font-mono">{val}{ext.name.includes("pct") || ext.name.includes("percent") ? "%" : ""}</span>;
+                      } else {
+                        display = <span className="text-xs text-foreground">{String(val)}</span>;
+                      }
+
+                      return (
+                        <div key={ext.name} className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground">{ext.label}:</span>
+                          {display}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Sender row */}
           <div className="flex items-center gap-3 mt-4">
@@ -372,6 +478,7 @@ export function InboxView() {
   const loadMoreEmails = useLoadMoreEmails();
   const [projectEmail, setProjectEmail] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(true);
+  const [extractors, setExtractors] = useState<EmailExtractor[]>([]);
   const [copied, setCopied] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -395,6 +502,14 @@ export function InboxView() {
       .catch(() => setProjectEmail(null))
       .finally(() => setEmailLoading(false));
   }, [projectId, session?.access_token]);
+
+  // Fetch project extractors
+  useEffect(() => {
+    api
+      .get<{ extractors: EmailExtractor[] }>(`/api/projects/${projectId}/extractors`)
+      .then((r) => setExtractors(r.extractors))
+      .catch(() => {});
+  }, [projectId]);
 
   // Fetch selected email detail
   const loadEmailDetail = useCallback(
@@ -592,6 +707,7 @@ export function InboxView() {
                     email={e}
                     isSelected={selectedId === e.id}
                     onSelect={() => handleSelect(e.id)}
+                    extractors={extractors}
                   />
                 ))}
                 {hasMoreEmails && !search && filter === "all" && (
@@ -642,6 +758,7 @@ export function InboxView() {
               }}
               onDelete={handleDelete}
               deleting={deleting}
+              extractors={extractors}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">

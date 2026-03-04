@@ -861,7 +861,11 @@ export async function listProjectIncomingEmailSummaries(
   const allRows = (data ?? []) as Row[];
   const hasMore = allRows.length > clamped;
   const rows = hasMore ? allRows.slice(0, clamped) : allRows;
-  const tagMap = await listIncomingEmailTagMap(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const [tagMap, extractionMap] = await Promise.all([
+    listIncomingEmailTagMap(ids),
+    listEmailExtractionMap(ids),
+  ]);
 
   return {
     emails: rows.map((row) => ({
@@ -875,6 +879,7 @@ export async function listProjectIncomingEmailSummaries(
       read_at: row.read_at,
       summary: row.summary,
       tags: tagMap.get(row.id) ?? [],
+      extraction_data: extractionMap.get(row.id) ?? null,
     })),
     hasMore,
   };
@@ -935,7 +940,11 @@ export async function listSenderEmails(
   const allRows = (data ?? []) as Row[];
   const hasMore = allRows.length > clamped;
   const rows = hasMore ? allRows.slice(0, clamped) : allRows;
-  const tagMap = await listIncomingEmailTagMap(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const [tagMap, extractionMap] = await Promise.all([
+    listIncomingEmailTagMap(ids),
+    listEmailExtractionMap(ids),
+  ]);
 
   return {
     emails: rows.map((row) => ({
@@ -949,6 +958,7 @@ export async function listSenderEmails(
       read_at: row.read_at,
       summary: row.summary,
       tags: tagMap.get(row.id) ?? [],
+      extraction_data: extractionMap.get(row.id) ?? null,
     })),
     hasMore,
   };
@@ -964,11 +974,14 @@ export async function getIncomingEmailTags(
 export async function getProjectIncomingEmailWithTags(
   projectId: string,
   emailId: string
-): Promise<(ProjectIncomingEmail & { tags: IncomingEmailTagSummary[] }) | null> {
+): Promise<(ProjectIncomingEmail & { tags: IncomingEmailTagSummary[]; extraction_data: Record<string, any> | null }) | null> {
   const email = await getProjectIncomingEmail(projectId, emailId);
   if (!email) return null;
-  const tags = await getIncomingEmailTags(email.id);
-  return { ...email, tags };
+  const [tags, extraction] = await Promise.all([
+    getIncomingEmailTags(email.id),
+    getEmailExtraction(email.id),
+  ]);
+  return { ...email, tags, extraction_data: extraction?.data ?? null };
 }
 
 export async function listInsufficientCreditRetryEmails(
@@ -1751,27 +1764,35 @@ export async function getDashboardStats(
   return data as DashboardStats;
 }
 
-// --- Email Classifications & Sender Strategies ---
+// --- Email Extractors & Extractions ---
 
-export interface EmailClassificationRow {
+export interface EmailExtractorRow {
+  id: string;
+  project_id: string;
+  kind: "category" | "extractor";
+  name: string;
+  label: string;
+  description: string;
+  value_type: "text" | "text_array" | "number" | "boolean" | "enum";
+  enum_values: string[];
+  enum_colors: string[];
+  required: boolean;
+  sort_order: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface EmailExtractionRow {
   id: string;
   email_id: string;
   project_id: string;
-  sender_id: string;
-  email_type: string;
-  offer: string | null;
-  discount_pct: number | null;
-  urgency: string;
-  cta: string | null;
-  products_mentioned: string[];
-  tone: string;
-  personalization_level: string;
-  subject_length: number | null;
-  subject_has_emoji: boolean;
-  subject_has_personalization: boolean;
-  subject_urgency_words: string[];
+  sender_id: string | null;
+  category: string | null;
+  data: Record<string, any>;
   model: string;
-  classified_at: string;
+  extracted_at: string;
   created_at: string;
 }
 
@@ -1789,47 +1810,333 @@ export interface SenderStrategyRow {
   updated_at: string;
 }
 
-export interface UnclassifiedEmail {
+export interface UnextractedEmail {
   id: string;
   subject: string | null;
   body_text: string | null;
+  body_html: string | null;
   from_address: string;
   created_at: string;
 }
 
-export async function listUnclassifiedSenderEmails(
+// --- Extractor CRUD ---
+
+export async function listProjectExtractors(
+  projectId: string
+): Promise<EmailExtractorRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("email_extractors")
+    .select("*")
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as EmailExtractorRow[];
+}
+
+export async function createProjectExtractor(params: {
+  projectId: string;
+  kind: "category" | "extractor";
+  name: string;
+  label: string;
+  description?: string;
+  value_type: string;
+  enum_values?: string[];
+  enum_colors?: string[];
+  required?: boolean;
+  sort_order?: number;
+  enabled?: boolean;
+}): Promise<EmailExtractorRow> {
+  const { data, error } = await supabaseAdmin
+    .from("email_extractors")
+    .insert({
+      project_id: params.projectId,
+      kind: params.kind,
+      name: params.name,
+      label: params.label,
+      description: params.description ?? "",
+      value_type: params.value_type,
+      enum_values: params.enum_values ?? [],
+      enum_colors: params.enum_colors ?? [],
+      required: params.required ?? false,
+      sort_order: params.sort_order ?? 0,
+      enabled: params.enabled ?? true,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as EmailExtractorRow;
+}
+
+export async function updateProjectExtractor(
+  extractorId: string,
+  updates: Partial<
+    Pick<
+      EmailExtractorRow,
+      "label" | "description" | "enum_values" | "enum_colors" | "required" | "sort_order" | "enabled"
+    >
+  >
+): Promise<EmailExtractorRow> {
+  const { data, error } = await supabaseAdmin
+    .from("email_extractors")
+    .update(updates)
+    .eq("id", extractorId)
+    .is("deleted_at", null)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as EmailExtractorRow;
+}
+
+export async function softDeleteProjectExtractor(
+  extractorId: string
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("email_extractors")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", extractorId)
+    .is("deleted_at", null);
+  if (error) throw error;
+}
+
+const DEFAULT_EXTRACTORS: Omit<
+  EmailExtractorRow,
+  "id" | "project_id" | "created_at" | "updated_at" | "deleted_at"
+>[] = [
+  {
+    kind: "category",
+    name: "email_type",
+    label: "Email Type",
+    description:
+      "Classify the email into one of the provided categories based on its content and purpose.",
+    value_type: "enum",
+    enum_values: [
+      "welcome",
+      "promotional",
+      "newsletter",
+      "cart_abandon",
+      "winback",
+      "transactional",
+      "announcement",
+      "survey",
+      "loyalty",
+      "seasonal",
+      "other",
+    ],
+    enum_colors: [
+      "#22c55e",
+      "#ef4444",
+      "#3b82f6",
+      "#f97316",
+      "#eab308",
+      "#06b6d4",
+      "#8b5cf6",
+      "#ec4899",
+      "#f59e0b",
+      "#14b8a6",
+      "#94a3b8",
+    ],
+    required: true,
+    sort_order: 0,
+    enabled: true,
+  },
+  {
+    kind: "category",
+    name: "mail_type",
+    label: "Mail Type",
+    description: "Classify the email as transactional or marketing.",
+    value_type: "enum",
+    enum_values: ["transactional", "marketing"],
+    enum_colors: ["#06b6d4", "#ef4444"],
+    required: true,
+    sort_order: 1,
+    enabled: true,
+  },
+  {
+    kind: "extractor",
+    name: "offer",
+    label: "Offer",
+    description: "Brief description of the offer/promotion. null if none.",
+    value_type: "text",
+    enum_values: [],
+    enum_colors: [],
+    required: false,
+    sort_order: 10,
+    enabled: true,
+  },
+  {
+    kind: "extractor",
+    name: "discount_pct",
+    label: "Discount %",
+    description: "Discount percentage (0-100). null if none.",
+    value_type: "number",
+    enum_values: [],
+    enum_colors: [],
+    required: false,
+    sort_order: 11,
+    enabled: true,
+  },
+  {
+    kind: "extractor",
+    name: "discount_codes",
+    label: "Discount Codes",
+    description: "Promo/discount codes mentioned in the email.",
+    value_type: "text_array",
+    enum_values: [],
+    enum_colors: [],
+    required: false,
+    sort_order: 12,
+    enabled: true,
+  },
+  {
+    kind: "extractor",
+    name: "products_mentioned",
+    label: "Products",
+    description: "Specific product names mentioned.",
+    value_type: "text_array",
+    enum_values: [],
+    enum_colors: [],
+    required: false,
+    sort_order: 13,
+    enabled: true,
+  },
+  {
+    kind: "extractor",
+    name: "urgency",
+    label: "Urgency",
+    description: "Urgency level of the email.",
+    value_type: "enum",
+    enum_values: ["none", "soft", "hard"],
+    enum_colors: ["#94a3b8", "#eab308", "#ef4444"],
+    required: false,
+    sort_order: 14,
+    enabled: true,
+  },
+  {
+    kind: "extractor",
+    name: "cta",
+    label: "CTA",
+    description: "Primary call-to-action text. null if none.",
+    value_type: "text",
+    enum_values: [],
+    enum_colors: [],
+    required: false,
+    sort_order: 15,
+    enabled: true,
+  },
+  {
+    kind: "extractor",
+    name: "tone",
+    label: "Tone",
+    description: "Overall tone of the email.",
+    value_type: "enum",
+    enum_values: ["formal", "casual", "urgent", "friendly", "luxury"],
+    enum_colors: ["#3b82f6", "#22c55e", "#ef4444", "#f97316", "#8b5cf6"],
+    required: false,
+    sort_order: 16,
+    enabled: true,
+  },
+];
+
+export async function seedDefaultExtractors(
+  projectId: string
+): Promise<void> {
+  const rows = DEFAULT_EXTRACTORS.map((e) => ({
+    ...e,
+    project_id: projectId,
+  }));
+  const { error } = await supabaseAdmin
+    .from("email_extractors")
+    .insert(rows);
+  if (error) throw error;
+}
+
+// --- Extraction CRUD ---
+
+export async function listProjectEmailsForExtraction(
+  projectId: string
+): Promise<UnextractedEmail[]> {
+  const all: UnextractedEmail[] = [];
+  const PAGE = 500;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("incoming_emails")
+      .select("id, subject, body_text, body_html, from_address, created_at")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as UnextractedEmail[];
+    all.push(...rows);
+    if (rows.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
+export async function listUnextractedSenderEmails(
   projectId: string,
   senderId: string,
   limit = 500
-): Promise<UnclassifiedEmail[]> {
+): Promise<UnextractedEmail[]> {
   const { data, error } = await supabaseAdmin.rpc(
-    "list_unclassified_sender_emails",
+    "list_unextracted_sender_emails",
     { p_project_id: projectId, p_sender_id: senderId, p_limit: limit }
   );
   if (error) throw error;
-  return (data ?? []) as UnclassifiedEmail[];
+  return (data ?? []) as UnextractedEmail[];
 }
 
-export async function getSenderClassifications(
+export async function getEmailExtraction(
+  emailId: string
+): Promise<EmailExtractionRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("email_extractions")
+    .select("*")
+    .eq("email_id", emailId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as EmailExtractionRow | null;
+}
+
+async function listEmailExtractionMap(
+  emailIds: string[]
+): Promise<Map<string, Record<string, any>>> {
+  const map = new Map<string, Record<string, any>>();
+  if (!emailIds.length) return map;
+  const { data, error } = await supabaseAdmin
+    .from("email_extractions")
+    .select("email_id, data")
+    .in("email_id", emailIds);
+  if (error) throw map; // degrade gracefully
+  for (const row of data ?? []) {
+    map.set(row.email_id, row.data ?? {});
+  }
+  return map;
+}
+
+export async function getSenderExtractions(
   projectId: string,
   senderId: string
-): Promise<EmailClassificationRow[]> {
+): Promise<EmailExtractionRow[]> {
   const { data, error } = await supabaseAdmin
-    .from("email_classifications")
+    .from("email_extractions")
     .select("*")
     .eq("project_id", projectId)
     .eq("sender_id", senderId)
-    .order("classified_at", { ascending: false });
+    .order("extracted_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as EmailClassificationRow[];
+  return (data ?? []) as EmailExtractionRow[];
 }
 
-export async function upsertEmailClassifications(
-  rows: Omit<EmailClassificationRow, "id" | "created_at">[]
+export async function upsertEmailExtractions(
+  rows: Omit<EmailExtractionRow, "id" | "created_at">[]
 ): Promise<void> {
   if (!rows.length) return;
   const { error } = await supabaseAdmin
-    .from("email_classifications")
+    .from("email_extractions")
     .upsert(rows, { onConflict: "email_id" });
   if (error) throw error;
 }

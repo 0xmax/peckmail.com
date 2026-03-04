@@ -1,6 +1,7 @@
 import { Webhook } from "svix";
 import { Resend } from "resend";
 import Anthropic from "@anthropic-ai/sdk";
+import { openrouterChat, isOpenRouterConfigured, GEMINI_FLASH_MODEL, type ContentPart } from "./openrouter.js";
 import {
   getProjectByEmail,
   getProjectMemberEmails,
@@ -35,6 +36,8 @@ const EMAIL_TAGGING_MODEL = process.env.EMAIL_TAGGING_MODEL || DEFAULT_EMAIL_MOD
 const EMAIL_SUMMARY_MODEL = process.env.EMAIL_SUMMARY_MODEL || DEFAULT_EMAIL_MODEL;
 const MAX_TAGGING_INPUT_CHARS = 12000;
 const MAX_SUMMARY_INPUT_CHARS = 16000;
+const MAX_IMAGES_PER_EMAIL = 10;
+const MIN_IMAGE_DIMENSION = 50; // skip tiny tracking pixels
 
 export function verifyWebhookSignature(
   rawBody: string,
@@ -477,25 +480,44 @@ ${record.body_text}`;
 async function summarizeIncomingEmail(
   record: InboundEmailRecord
 ): Promise<string | null> {
-  const emailInput = buildEmailModelInput(record, MAX_SUMMARY_INPUT_CHARS);
-  if (!emailInput) return null;
+  const blocks = buildEmailContentBlocks(record, MAX_SUMMARY_INPUT_CHARS);
+  if (!blocks.length) return null;
+
+  if (isOpenRouterConfigured()) {
+    const parts = openRouterPartsFromBlocks(blocks);
+    const summary = await openrouterChat({
+      temperature: 0.3,
+      messages: [
+        {
+          role: "system",
+          content: "You summarize inbound emails for a workspace inbox. Return plain text only. Keep the summary concise (2-4 sentences) and mention the key request, context, and any concrete action items. If the email contains images, describe any key visual offers, products, or promotions shown.",
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "Summarize this inbound email:" }, ...parts],
+        },
+      ],
+    });
+    return summary.trim() || null;
+  }
+
   if (!anthropic) {
-    console.warn("[inbound] Skipping summary: ANTHROPIC_API_KEY not configured");
+    console.warn("[inbound] Skipping summary: no API key configured");
     return null;
   }
+
+  const content: any[] = [
+    { type: "text", text: "Summarize this inbound email:" },
+    ...blocks,
+  ];
 
   const response = await anthropic.messages.create({
     model: EMAIL_SUMMARY_MODEL,
     max_tokens: 300,
-    temperature: 0,
+    temperature: 0.3,
     system:
-      "You summarize inbound emails for a workspace inbox. Return plain text only. Keep the summary concise (2-4 sentences) and mention the key request, context, and any concrete action items.",
-    messages: [
-      {
-        role: "user",
-        content: `Summarize this inbound email:\n\n${emailInput}`,
-      },
-    ],
+      "You summarize inbound emails for a workspace inbox. Return plain text only. Keep the summary concise (2-4 sentences) and mention the key request, context, and any concrete action items. If the email contains images, describe any key visual offers, products, or promotions shown.",
+    messages: [{ role: "user", content }],
   });
 
   const summary = extractTextFromAnthropicContent(response.content).trim();
@@ -510,11 +532,8 @@ async function classifyIncomingEmailTags(
     return setIncomingEmailTags(record.project_id, record.id, []);
   }
 
-  const emailInput = buildEmailModelInput(record, MAX_TAGGING_INPUT_CHARS);
-  if (!emailInput || !anthropic) {
-    if (!anthropic) {
-      console.warn("[inbound] Skipping tag classification: ANTHROPIC_API_KEY not configured");
-    }
+  const blocks = buildEmailContentBlocks(record, MAX_TAGGING_INPUT_CHARS);
+  if (!blocks.length) {
     return setIncomingEmailTags(record.project_id, record.id, []);
   }
 
@@ -524,24 +543,46 @@ async function classifyIncomingEmailTags(
     condition: tag.condition,
   }));
 
-  const response = await anthropic.messages.create({
-    model: EMAIL_TAGGING_MODEL,
-    max_tokens: 400,
-    temperature: 0,
-    system:
-      "You classify emails against project-defined tag conditions. Respond with strict JSON only: {\"matching_tag_ids\":[\"...\"]}. Include only tag IDs that clearly apply.",
-    messages: [
-      {
-        role: "user",
-        content:
-          `Available tags (JSON):\n${JSON.stringify(tagPayload, null, 2)}\n\n` +
-          `Inbound email:\n${emailInput}\n\n` +
-          `Return only JSON.`,
-      },
-    ],
-  });
+  const systemMsg = "You classify emails against project-defined tag conditions. Respond with strict JSON only: {\"matching_tag_ids\":[\"...\"]}. Include only tag IDs that clearly apply. Consider both text content and any images in the email.";
 
-  const raw = extractTextFromAnthropicContent(response.content);
+  let raw: string;
+
+  if (isOpenRouterConfigured()) {
+    const parts = openRouterPartsFromBlocks(blocks);
+    raw = await openrouterChat({
+      temperature: 0,
+      messages: [
+        { role: "system", content: systemMsg },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `Available tags (JSON):\n${JSON.stringify(tagPayload, null, 2)}\n\nInbound email:` },
+            ...parts,
+            { type: "text", text: "Return only JSON." },
+          ],
+        },
+      ],
+    });
+  } else if (anthropic) {
+    const content: any[] = [
+      { type: "text", text: `Available tags (JSON):\n${JSON.stringify(tagPayload, null, 2)}\n\nInbound email:` },
+      ...blocks,
+      { type: "text", text: "Return only JSON." },
+    ];
+
+    const response = await anthropic.messages.create({
+      model: EMAIL_TAGGING_MODEL,
+      max_tokens: 400,
+      temperature: 0,
+      system: systemMsg,
+      messages: [{ role: "user", content }],
+    });
+    raw = extractTextFromAnthropicContent(response.content);
+  } else {
+    console.warn("[inbound] Skipping tag classification: no API key configured");
+    return setIncomingEmailTags(record.project_id, record.id, []);
+  }
+
   const parsed = parseJsonObject(raw);
   const candidateIds = Array.isArray(parsed?.matching_tag_ids)
     ? parsed.matching_tag_ids.filter((id: unknown): id is string => typeof id === "string")
@@ -562,6 +603,87 @@ function buildEmailModelInput(record: InboundEmailRecord, maxChars: number): str
   ].join("\n");
   if (raw.length <= maxChars) return raw;
   return `${raw.slice(0, maxChars)}\n\n...[truncated]`;
+}
+
+/**
+ * Extract meaningful image URLs from email HTML.
+ * Skips tracking pixels (1x1), data URIs, and tiny images.
+ */
+function sanitizeImageUrl(raw: string): string | null {
+  try {
+    const trimmed = raw.trim();
+    if (!trimmed || !trimmed.startsWith("http")) return null;
+    const url = new URL(trimmed);
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractImageUrls(html: string): string[] {
+  if (!html) return [];
+  const results: Array<{ url: string; area: number }> = [];
+  const imgRegex = /<img\s[^>]*?src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = imgRegex.exec(html)) !== null) {
+    const tag = match[0];
+    const rawUrl = match[1];
+    if (rawUrl.startsWith("data:")) continue;
+    if (/\btrack(ing)?\b|\/open\b|\/pixel\b|spacer|blank\./i.test(rawUrl)) continue;
+    const url = sanitizeImageUrl(rawUrl);
+    if (!url) continue;
+    const wm = tag.match(/width\s*=\s*["']?(\d+)/i);
+    const hm = tag.match(/height\s*=\s*["']?(\d+)/i);
+    const w = wm ? parseInt(wm[1]) : 300;
+    const h = hm ? parseInt(hm[1]) : 300;
+    if (w < MIN_IMAGE_DIMENSION || h < MIN_IMAGE_DIMENSION) continue;
+    results.push({ url, area: w * h });
+  }
+  // Return the largest images first
+  results.sort((a, b) => b.area - a.area);
+  return results.slice(0, MAX_IMAGES_PER_EMAIL).map((r) => r.url);
+}
+
+type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "url"; url: string } };
+
+/**
+ * Build multi-modal content blocks: text + images from email HTML.
+ */
+function buildEmailContentBlocks(
+  record: { from_address: string; to_address?: string; subject: string; body_text: string; body_html: string },
+  maxTextChars: number
+): ContentBlock[] {
+  const textInput = buildEmailModelInput(
+    record as InboundEmailRecord,
+    maxTextChars
+  );
+  const blocks: ContentBlock[] = [];
+  if (textInput) {
+    blocks.push({ type: "text", text: textInput });
+  }
+  const imageUrls = extractImageUrls(record.body_html || "");
+  if (imageUrls.length > 0) {
+    blocks.push({
+      type: "text",
+      text: `The email also contains ${imageUrls.length} image(s). These are the visual content blocks from the email:`,
+    });
+    for (const url of imageUrls) {
+      blocks.push({ type: "image", source: { type: "url", url } });
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Convert Anthropic-style content blocks to OpenRouter/OpenAI content parts.
+ */
+function openRouterPartsFromBlocks(blocks: ContentBlock[]): ContentPart[] {
+  return blocks.map((b) => {
+    if (b.type === "text") return { type: "text" as const, text: b.text };
+    return { type: "image_url" as const, image_url: { url: b.source.url } };
+  });
 }
 
 function extractTextFromAnthropicContent(content: Array<{ type: string; text?: string }>): string {
