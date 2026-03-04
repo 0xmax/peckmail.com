@@ -18,10 +18,13 @@ import {
   MagnifyingGlass,
   TrendDown,
   SortAscending,
+  ArrowsDownUp,
+  XCircle,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.js";
 import {
   Dialog,
   DialogContent,
@@ -429,19 +432,15 @@ function SenderList({
 
   if (loading) {
     return (
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Senders</h1>
-            <p className="text-sm text-muted-foreground mt-1">Loading...</p>
+      <div className="flex-1 overflow-y-auto p-6 bg-background">
+        <div className="max-w-5xl mx-auto space-y-8">
+          <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Senders</h1>
+            <p className="text-sm text-muted-foreground mt-1">Loading senders and stats...</p>
           </div>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-center py-12">
-                <CircleNotch size={24} className="animate-spin text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-center py-24 bg-card border border-border/60 rounded-xl shadow-sm">
+            <CircleNotch size={24} className="animate-spin text-muted-foreground" />
+          </div>
         </div>
       </div>
     );
@@ -449,127 +448,158 @@ function SenderList({
 
   if (senders.length === 0 && unlinkedDomains.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Senders</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              0 senders &middot; 0 total emails
+      <div className="flex-1 overflow-y-auto p-6 bg-background">
+        <div className="max-w-5xl mx-auto space-y-8">
+          <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Senders</h1>
+            <p className="text-sm text-muted-foreground mt-1">0 senders &middot; 0 total emails</p>
+          </div>
+          <div className="text-center py-24 bg-card border border-border/60 rounded-xl shadow-sm">
+            <UsersThree
+              size={40}
+              weight="duotone"
+              className="mx-auto mb-3 text-muted-foreground"
+            />
+            <p className="text-sm text-muted-foreground font-medium">No senders yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Senders are automatically identified when emails arrive.
             </p>
           </div>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center py-12">
-                <UsersThree
-                  size={40}
-                  weight="duotone"
-                  className="mx-auto mb-3 text-muted-foreground"
-                />
-                <p className="text-sm text-muted-foreground">
-                  No senders yet
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Senders are automatically identified when emails arrive.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Senders</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {senders.length} sender{senders.length !== 1 ? "s" : ""} &middot;{" "}
-              {totalEmails} total email{totalEmails !== 1 ? "s" : ""}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlass
-                size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                placeholder="Search senders..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-8 text-xs pl-8 w-[200px]"
-              />
-            </div>
-            <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
-              {[7, 14, 30].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setTimeframe(d)}
-                  className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
-                    timeframe === d
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {d}d
-                </button>
-              ))}
-            </div>
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-              <SelectTrigger className="w-[150px] h-8 text-xs">
-                <SortAscending size={14} className="mr-1.5 shrink-0 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="total">Most emails</SelectItem>
-                <SelectItem value="trending">Trending up</SelectItem>
-                <SelectItem value="declining">Trending down</SelectItem>
-              </SelectContent>
-            </Select>
-            {availableCountries.length > 0 && (
-              <Select value={countryFilter} onValueChange={setCountryFilter}>
-                <SelectTrigger className="w-[180px] h-8 text-xs">
-                  <SelectValue placeholder="All countries" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All countries</SelectItem>
-                  <SelectSeparator />
-                  {availableCountries.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {countryLabel(code)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+    <div className="flex-1 overflow-y-auto p-6 bg-background">
+      <div className="max-w-5xl mx-auto space-y-8">
+        {/* Page Header */}
+        <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              Senders
+              <Badge variant="outline" className="font-mono text-[10px] py-0 h-4 px-1.5 opacity-60">
+                {senders.length}
+              </Badge>
+            </h1>
             {unlinkedDomains.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onResolveAll}
                 disabled={resolving}
+                className="h-8 text-xs font-semibold px-3"
               >
                 {resolving ? (
-                  <CircleNotch size={14} className="animate-spin mr-1.5" />
+                  <CircleNotch size={14} className="animate-spin mr-2" />
                 ) : (
-                  <MagicWand size={14} className="mr-1.5" />
+                  <MagicWand size={14} className="mr-2" />
                 )}
-                {resolving ? "Resolving..." : `Resolve all (${unlinkedDomains.length})`}
+                Resolve all ({unlinkedDomains.length})
               </Button>
             )}
           </div>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Monitor sender activity and trends. Senders are automatically identified and grouped from incoming emails.
+          </p>
         </div>
 
-        {/* Sender list */}
-        {filteredSenders.length > 0 && (
-          <Card>
-            <CardContent className="p-2">
-              {/* Header */}
+        {/* Unified Search & List Container */}
+        <div className="flex flex-col border border-border/60 rounded-xl overflow-hidden shadow-sm bg-card">
+          {/* Top Panel: Filters & Controls */}
+          <div className="flex items-center justify-between gap-4 p-2 border-b border-border/60">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="relative flex-1 max-w-sm group">
+                <MagnifyingGlass
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60"
+                />
+                <Input
+                  placeholder="Search senders..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-8 text-xs pl-8 pr-8 border-transparent bg-muted/30 focus-visible:bg-muted/50 transition-colors w-full shadow-none"
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-foreground transition-colors"
+                  >
+                    <XCircle size={14} weight="fill" />
+                  </button>
+                )}
+              </div>
+              
+              {availableCountries.length > 0 && (
+                <div className="relative">
+                  <Select value={countryFilter} onValueChange={setCountryFilter}>
+                    <SelectTrigger className="w-[140px] h-8 text-xs border-transparent bg-muted/30 shadow-none pr-8">
+                      <Globe size={13} className="mr-1.5 text-muted-foreground/60" />
+                      <SelectValue placeholder="Country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Countries</SelectItem>
+                      <SelectSeparator />
+                      {availableCountries.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {countryLabel(code)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {countryFilter !== "all" && (
+                    <button
+                      onClick={() => setCountryFilter("all")}
+                      className="absolute right-7 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-foreground transition-colors"
+                    >
+                      <XCircle size={12} weight="fill" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-1.5 bg-muted/30 p-1 rounded-lg border border-border/40">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1.5 opacity-50">View</span>
+                <ToggleGroup
+                  type="single"
+                  value={String(timeframe)}
+                  onValueChange={(v) => v && setTimeframe(Number(v))}
+                  className="h-6"
+                >
+                  {[7, 14, 30].map((d) => (
+                    <ToggleGroupItem
+                      key={d}
+                      value={String(d)}
+                      className="h-6 px-2 text-[10px] font-bold min-w-0 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                    >
+                      {d}D
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                <SelectTrigger className="w-[130px] h-8 text-xs border-transparent bg-muted/30 shadow-none">
+                  <ArrowsDownUp size={13} className="mr-1.5 text-muted-foreground/60" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="total">Most emails</SelectItem>
+                  <SelectItem value="trending">Trending up</SelectItem>
+                  <SelectItem value="declining">Trending down</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* List Section */}
+          {filteredSenders.length > 0 ? (
+            <div className="p-2">
+              {/* Table Header */}
               <div className="flex items-center gap-4 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-b border-border/50 mb-1">
                 <div className="w-9 shrink-0" />
                 <div className="flex-1 min-w-0">Sender</div>
@@ -628,42 +658,62 @@ function SenderList({
                   );
                 })}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          ) : (
+            <div className="py-24 text-center">
+              <MagnifyingGlass
+                size={32}
+                className="mx-auto mb-3 text-muted-foreground opacity-20"
+              />
+              <p className="text-sm text-muted-foreground font-medium">No results found</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Try adjusting your search or filters to find what you're looking for.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setCountryFilter("all");
+                }}
+                className="mt-6 h-8 text-xs px-4 border-dashed hover:border-solid transition-all"
+              >
+                Clear all filters
+              </Button>
+            </div>
+          )}
+        </div>
 
         {/* Unlinked domains */}
         {filteredUnlinkedDomains.length > 0 && (
-          <>
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-lg font-bold tracking-tight text-foreground">
                 Unlinked domains
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground">
                 {filteredUnlinkedDomains.length} domain{filteredUnlinkedDomains.length !== 1 ? "s" : ""} not yet linked to a sender
               </p>
             </div>
-            <Card>
-              <CardContent className="p-2">
-                <div className="divide-y divide-border">
-                  {filteredUnlinkedDomains.map((d) => (
-                    <div
-                      key={d.id}
-                      className="flex items-center gap-3 p-3"
-                    >
-                      <div className="w-7 h-7 rounded bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
-                        {d.domain.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm text-foreground truncate flex-1">
-                        {d.domain}
-                      </span>
-                      <ResolverStatusBadge status={d.resolver_status} error={d.resolver_error} />
+            <div className="border border-border/60 rounded-xl overflow-hidden shadow-sm bg-card p-2">
+              <div className="divide-y divide-border">
+                {filteredUnlinkedDomains.map((d) => (
+                  <div
+                    key={d.id}
+                    className="flex items-center gap-3 p-3"
+                  >
+                    <div className="w-7 h-7 rounded bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
+                      {d.domain.charAt(0).toUpperCase()}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </>
+                    <span className="text-sm text-foreground truncate flex-1">
+                      {d.domain}
+                    </span>
+                    <ResolverStatusBadge status={d.resolver_status} error={d.resolver_error} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
