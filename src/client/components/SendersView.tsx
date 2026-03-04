@@ -251,28 +251,26 @@ function KpiCard({
 }: {
   label: string;
   value: string | number;
-  icon: typeof EnvelopeSimple;
+  icon: any;
   subtitle?: string;
 }) {
   return (
     <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold text-foreground tabular-nums mt-1">
-              {value}
-            </p>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {subtitle}
-              </p>
-            )}
-          </div>
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Icon size={18} className="text-primary" />
-          </div>
+      <CardContent className="p-3.5 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+            {label}
+          </p>
+          <Icon size={14} className="text-muted-foreground/40" />
         </div>
+        <p className="text-lg font-bold text-foreground tabular-nums tracking-tight leading-none">
+          {value}
+        </p>
+        {subtitle && (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {subtitle}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -970,25 +968,18 @@ function ProfileSection({
   title: string;
   content?: string;
 }) {
-  const [open, setOpen] = useState(false);
   if (!content || content === "Not enough information available.") return null;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 px-1 rounded-md hover:bg-muted/40 transition-colors text-left group">
+    <div className="py-2 px-1">
+      <div className="flex items-center gap-2 mb-1">
         <Icon size={14} className="text-muted-foreground shrink-0" />
-        <span className="text-sm font-medium text-foreground flex-1">{title}</span>
-        <CaretRight
-          size={12}
-          className={`text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <p className="text-sm text-muted-foreground pl-7 pb-2 leading-relaxed">
-          {content}
-        </p>
-      </CollapsibleContent>
-    </Collapsible>
+        <span className="text-sm font-medium text-foreground">{title}</span>
+      </div>
+      <p className="text-sm text-muted-foreground pl-7 leading-relaxed">
+        {content}
+      </p>
+    </div>
   );
 }
 
@@ -1074,9 +1065,9 @@ function CollapsibleSection({ title, children }: { title: string; children: Reac
 
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border border-border/50 bg-muted/20 p-2.5 text-center">
-      <p className="text-base font-bold text-foreground">{value}</p>
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5">{label}</p>
+    <div className="rounded-xl border border-border/40 bg-card/40 p-3 text-center transition-all hover:bg-card/60">
+      <p className="text-lg font-bold text-foreground tabular-nums tracking-tight">{value}</p>
+      <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest mt-1">{label}</p>
     </div>
   );
 }
@@ -1196,7 +1187,7 @@ function StrategyCard({
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-foreground">Email strategy</h3>
+          <p className="text-xs font-medium text-foreground">Email strategy</p>
           <Button
             variant="ghost"
             size="sm"
@@ -1213,14 +1204,24 @@ function StrategyCard({
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-16">
             <CircleNotch size={20} className="animate-spin text-muted-foreground" />
           </div>
         ) : !strategy ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <ChartPie size={32} weight="duotone" className="mx-auto mb-2 opacity-40" />
-            <p className="text-sm">No strategy analysis yet</p>
-            <p className="text-xs mt-1">Click Analyze to classify emails and generate insights</p>
+          <div className="flex flex-col items-center justify-center py-16">
+            <ChartPie size={40} weight="duotone" className="mb-4 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground mb-4">Classify emails and generate strategy insights</p>
+            <Button
+              onClick={handleGenerate}
+              disabled={generating}
+            >
+              {generating ? (
+                <CircleNotch size={16} className="animate-spin mr-2" />
+              ) : (
+                <MagicWand size={16} className="mr-2" />
+              )}
+              Analyze Strategy
+            </Button>
           </div>
         ) : (
           <div className="space-y-5">
@@ -1583,84 +1584,91 @@ function SenderDetail({
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onBack}
-              className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors"
-            >
-              <ArrowLeft size={18} className="text-muted-foreground" />
-            </button>
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
-              <SenderAvatar sender={sender} size={36} />
+        <div className="pb-6 border-b border-border/40 space-y-4">
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={16} />
+            <span>Senders</span>
+          </button>
+
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-primary/5 p-1 border border-primary/10 shadow-sm flex items-center justify-center shrink-0 overflow-hidden">
+              <SenderAvatar sender={sender} size={48} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold text-foreground truncate">
-                  {sender.name}
-                </h1>
-                {sender.country && COUNTRIES[sender.country] && (
-                  <span className="text-base leading-none shrink-0" title={COUNTRIES[sender.country].name}>
-                    {COUNTRIES[sender.country].flag}
-                  </span>
-                )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-2xl font-bold text-foreground tracking-tight leading-none">
+                    {sender.name}
+                  </h1>
+                  {sender.country && COUNTRIES[sender.country] && (
+                    <span className="text-lg leading-none shrink-0" title={COUNTRIES[sender.country].name}>
+                      {COUNTRIES[sender.country].flag}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => {
+                      setEditName(sender.name);
+                      setEditWebsite(sender.website || "");
+                      setEditDescription(sender.description || "");
+                      setEditCountry(sender.country || "");
+                      setEditing(true);
+                    }}
+                  >
+                    <Pencil size={14} className="mr-1.5" /> Edit
+                  </Button>
+                  {mergeableSenders.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setMergeOpen(true)}
+                    >
+                      <ArrowsMerge size={14} className="mr-1.5" /> Merge
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20"
+                    onClick={handleDelete}
+                  >
+                    <Trash size={14} className="mr-1.5" /> Delete
+                  </Button>
+                </div>
               </div>
               {sender.website && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {sender.website}
-                </p>
+                <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground/60 hover:text-primary transition-colors truncate">
+                  <GlobeSimple size={14} />
+                  <a href={sender.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    {sender.website.replace(/^https?:\/\//, "")}
+                  </a>
+                </div>
               )}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditName(sender.name);
-                  setEditWebsite(sender.website || "");
-                  setEditDescription(sender.description || "");
-                  setEditCountry(sender.country || "");
-                  setEditing(true);
-                }}
-              >
-                <Pencil size={14} />
-              </Button>
-              {mergeableSenders.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setMergeOpen(true)}>
-                  <ArrowsMerge size={14} />
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={handleDelete}>
-                <Trash size={14} />
-              </Button>
             </div>
           </div>
 
-          {/* Inline KPIs + tags */}
-          <div className="flex items-center gap-3 flex-wrap pl-[68px]">
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <EnvelopeSimple size={13} className="text-muted-foreground/60" />
-              <span className="font-semibold text-foreground tabular-nums">{total}</span> emails
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <TrendUp size={13} className="text-muted-foreground/60" />
-              <span className="font-semibold text-foreground tabular-nums">{avgPerDay}</span>/day
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <LinkSimple size={13} className="text-muted-foreground/60" />
-              <span className="font-semibold text-foreground tabular-nums">{senderDomains.length}</span> domain{senderDomains.length !== 1 ? "s" : ""}
-            </span>
-            {profile?.profile.industry && (
-              <span className="inline-flex items-center text-[11px] font-medium bg-primary/10 text-primary rounded-md px-1.5 py-0.5">
-                {profile.profile.industry}
-              </span>
-            )}
-            {profile?.profile.tags?.map((tag, i) => (
-              <span key={i} className="inline-flex items-center text-[11px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">
-                {tag}
-              </span>
-            ))}
-          </div>
+          {(profile?.profile.industry || (profile?.profile.tags && profile.profile.tags.length > 0)) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {profile?.profile.industry && (
+                <span className="inline-flex items-center text-[11px] font-medium bg-primary/10 text-primary rounded-md px-1.5 py-0.5">
+                  {profile.profile.industry}
+                </span>
+              )}
+              {profile?.profile.tags?.map((tag, i) => (
+                <span key={i} className="inline-flex items-center text-[11px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <Tabs defaultValue="overview">
@@ -1671,224 +1679,191 @@ function SenderDetail({
             <TabsTrigger value="emails">Emails</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6 mt-6">
-        {/* KPI row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Total emails" value={total} icon={EnvelopeSimple} />
-          <KpiCard
-            label="Avg / day"
-            value={avgPerDay}
-            icon={TrendUp}
-            subtitle="Last 14 days"
-          />
-          <KpiCard
-            label="Domains"
-            value={senderDomains.length}
-            icon={Globe}
-          />
-          <KpiCard
-            label="Created"
-            value={dayLabel(dateKey(sender.created_at))}
-            icon={CalendarBlank}
-          />
-        </div>
+          <TabsContent value="overview" className="space-y-5 mt-6 outline-none">
+            {sender.description && (
+              <p className="text-sm text-muted-foreground leading-relaxed">{sender.description}</p>
+            )}
 
-        {/* Volume chart - full width */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">
-                Email volume
-              </h3>
-              <p className="text-xs text-muted-foreground">Last 14 days</p>
+            {/* KPI row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCard label="Total emails" value={total} icon={EnvelopeSimple} />
+              <KpiCard
+                label="Avg / day"
+                value={avgPerDay}
+                icon={TrendUp}
+                subtitle="Last 14 days"
+              />
+              <KpiCard
+                label="Domains"
+                value={senderDomains.length}
+                icon={Globe}
+              />
+              <KpiCard
+                label="Created"
+                value={dayLabel(dateKey(sender.created_at))}
+                icon={CalendarBlank}
+              />
             </div>
-            <ChartContainer config={volumeConfig} className="aspect-[2.5/1] w-full">
-              <AreaChart data={volumeData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                <defs>
-                  <linearGradient id="fillSenderVolume" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-count)" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="var(--color-count)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={4}
-                  allowDecimals={false}
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Area
-                  dataKey="count"
-                  type="monotone"
-                  stroke="var(--color-count)"
-                  fill="url(#fillSenderVolume)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
 
-        {/* About + Recent emails */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* About card */}
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="text-sm font-semibold text-foreground mb-3">About</h3>
-              <div className="space-y-2.5">
-                {sender.description && (
-                  <p className="text-sm text-muted-foreground leading-relaxed">{sender.description}</p>
-                )}
-                {sender.website && (
-                  <div className="flex items-center gap-2">
-                    <GlobeSimple size={14} className="text-muted-foreground shrink-0" />
-                    <a
-                      href={sender.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline truncate"
-                    >
-                      {sender.website}
-                    </a>
-                  </div>
-                )}
-                {sender.country && COUNTRIES[sender.country] && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-base leading-none">{COUNTRIES[sender.country].flag}</span>
-                    <span className="text-sm text-muted-foreground">{COUNTRIES[sender.country].name}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <LinkSimple size={14} className="text-muted-foreground shrink-0" />
-                  <span className="text-sm text-muted-foreground">
-                    {senderDomains.length} domain{senderDomains.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                {profile && (profile.profile.industry || (profile.profile.tags && profile.profile.tags.length > 0)) && (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    {profile.profile.industry && (
-                      <span className="inline-flex items-center text-xs font-medium bg-primary/10 text-primary rounded-md px-2 py-0.5">
-                        {profile.profile.industry}
-                      </span>
-                    )}
-                    {profile.profile.tags?.map((tag, i) => (
-                      <span key={i} className="inline-flex items-center text-[11px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            {/* Volume chart */}
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs font-medium text-foreground mb-3">Email frequency</p>
+                <ChartContainer config={volumeConfig} className="aspect-[3/1] w-full">
+                  <AreaChart data={volumeData} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="fillSenderVolumeDetail" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="oklch(var(--primary))" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="oklch(var(--primary))" stopOpacity={0.01} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={4}
+                      allowDecimals={false}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+                    <Area
+                      dataKey="count"
+                      type="monotone"
+                      stroke="oklch(var(--primary))"
+                      fill="url(#fillSenderVolumeDetail)"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
 
-          {/* Recent emails */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="mb-4">
-                <h3 className="text-sm font-semibold text-foreground">
-                  Recent emails
-                </h3>
-              </div>
-              {recent.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p className="text-sm">No emails from this sender</p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {recent.map((e) => (
-                    <a
-                      key={e.id}
-                      href={`/app/inbox?email=${e.id}`}
-                      onClick={(ev) => {
-                        ev.preventDefault();
-                        window.history.pushState(null, "", `/app/inbox?email=${e.id}`);
-                        window.dispatchEvent(new PopStateEvent("popstate"));
-                      }}
-                      className="flex items-start gap-3 rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="mt-1.5 shrink-0">
-                        {e.status === "received" ? (
-                          <span className="block w-2 h-2 rounded-full bg-primary" />
-                        ) : e.status === "processing" ? (
-                          <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                        ) : e.status === "failed" ? (
-                          <span className="block w-2 h-2 rounded-full bg-red-400" />
-                        ) : (
-                          <span className="block w-2 h-2 rounded-full bg-green-400" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-foreground truncate">
-                          {e.subject || "(no subject)"}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-muted-foreground truncate">
-                            {e.from_address}
-                          </p>
-                          <span className="text-xs text-muted-foreground shrink-0">
+            {/* Profile + Recent emails */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium text-foreground mb-3">Sender profile</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <StatBox
+                      label="Region"
+                      value={sender.country && COUNTRIES[sender.country] ? `${COUNTRIES[sender.country].flag} ${sender.country}` : "—"}
+                    />
+                    <StatBox
+                      label="Industry"
+                      value={profile?.profile.industry || "—"}
+                    />
+                    <StatBox
+                      label="Domains"
+                      value={senderDomains.length}
+                    />
+                    <StatBox
+                      label="First seen"
+                      value={new Date(sender.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    />
+                  </div>
+                  {profile?.profile.tags && profile.profile.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {profile.profile.tags.map((tag, i) => (
+                        <span key={i} className="text-[11px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium text-foreground mb-3">Recent emails</p>
+                  {recent.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">No emails yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {recent.map((e) => (
+                        <a
+                          key={e.id}
+                          href={`/app/inbox?email=${e.id}`}
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            window.history.pushState(null, "", `/app/inbox?email=${e.id}`);
+                            window.dispatchEvent(new PopStateEvent("popstate"));
+                          }}
+                          className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-muted/40 transition-colors"
+                        >
+                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            e.status === "received" ? "bg-primary" :
+                            e.status === "processing" ? "bg-amber-400 animate-pulse" :
+                            e.status === "failed" ? "bg-red-400" : "bg-green-400"
+                          }`} />
+                          <span className="text-sm text-foreground truncate flex-1">
+                            {e.subject || "(no subject)"}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground shrink-0">
                             {formatRelative(e.created_at)}
                           </span>
-                        </div>
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
-        {/* Tag breakdown */}
-        {tagData.length > 0 && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="mb-4">
-                <h3 className="text-sm font-semibold text-foreground">
-                  Emails by tag
-                </h3>
-              </div>
-              <ChartContainer config={tagConfig} className="aspect-[3/1] w-full">
-                <BarChart
-                  data={tagData}
-                  layout="vertical"
-                  margin={{ top: 0, right: 4, bottom: 0, left: 0 }}
-                >
-                  <CartesianGrid horizontal={false} />
-                  <YAxis
-                    dataKey="name"
-                    type="category"
-                    tickLine={false}
-                    axisLine={false}
-                    width={80}
-                    tickMargin={4}
-                  />
-                  <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} />
-                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-        )}
+            {/* Tag breakdown */}
+            {tagData.length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium text-foreground mb-3">Content distribution</p>
+                  <ChartContainer config={tagConfig} className="aspect-[2.5/1] w-full">
+                    <BarChart
+                      data={tagData}
+                      layout="vertical"
+                      margin={{ top: 0, right: 30, bottom: 0, left: 10 }}
+                    >
+                      <CartesianGrid horizontal={false} />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        tickLine={false}
+                        axisLine={false}
+                        width={100}
+                        tickMargin={4}
+                      />
+                      <XAxis
+                        type="number"
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                      <Bar
+                        dataKey="count"
+                        radius={[0, 4, 4, 0]}
+                        barSize={20}
+                      />
+                    </BarChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
-
-          <TabsContent value="company" className="mt-6">
+          <TabsContent value="company" className="mt-6 outline-none">
         {/* Company profile */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-foreground">
+              <p className="text-xs font-medium text-foreground">
                 Company profile
-              </h3>
+              </p>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1905,18 +1880,28 @@ function SenderDetail({
               </Button>
             </div>
             {profileLoading ? (
-              <div className="flex items-center justify-center py-8">
+              <div className="flex items-center justify-center py-16">
                 <CircleNotch size={20} className="animate-spin text-muted-foreground" />
               </div>
             ) : !profile ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Buildings size={32} weight="duotone" className="mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No profile generated yet</p>
-                <p className="text-xs mt-1">
+              <div className="flex flex-col items-center justify-center py-16">
+                <Buildings size={40} weight="duotone" className="mb-4 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground mb-4">
                   {sender.website
-                    ? "Click Generate to create a company analysis"
+                    ? "Analyze this sender's website to generate a company profile"
                     : "Add a website URL to this sender first"}
                 </p>
+                <Button
+                  onClick={handleGenerateProfile}
+                  disabled={generating || !sender.website}
+                >
+                  {generating ? (
+                    <CircleNotch size={16} className="animate-spin mr-2" />
+                  ) : (
+                    <MagicWand size={16} className="mr-2" />
+                  )}
+                  Analyze Company
+                </Button>
               </div>
             ) : (
               <div className="space-y-1">
@@ -1995,29 +1980,29 @@ function SenderDetail({
 
           </TabsContent>
 
-          <TabsContent value="strategy" className="mt-6">
+          <TabsContent value="strategy" className="mt-6 outline-none">
         {/* Email strategy */}
         <StrategyCard senderId={sender.id} projectId={projectId} />
           </TabsContent>
 
-          <TabsContent value="emails" className="mt-6 space-y-6">
+          <TabsContent value="emails" className="mt-6 space-y-5 outline-none">
         {/* All emails */}
         <Card>
           <CardContent className="p-4">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-medium text-foreground">
                 All emails
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {senderEmails.length} email{senderEmails.length !== 1 ? "s" : ""} loaded
               </p>
+              <span className="text-[11px] text-muted-foreground">
+                {senderEmails.length} loaded
+              </span>
             </div>
             {senderEmails.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <p className="text-sm">No emails from this sender</p>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {senderEmails.map((e) => (
                   <a
                     key={e.id}
@@ -2027,32 +2012,19 @@ function SenderDetail({
                       window.history.pushState(null, "", `/app/inbox?email=${e.id}`);
                       window.dispatchEvent(new PopStateEvent("popstate"));
                     }}
-                    className="flex items-start gap-3 rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-muted/40 transition-colors"
                   >
-                    <div className="mt-1.5 shrink-0">
-                      {e.status === "received" ? (
-                        <span className="block w-2 h-2 rounded-full bg-primary" />
-                      ) : e.status === "processing" ? (
-                        <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                      ) : e.status === "failed" ? (
-                        <span className="block w-2 h-2 rounded-full bg-red-400" />
-                      ) : (
-                        <span className="block w-2 h-2 rounded-full bg-green-400" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-foreground truncate">
-                        {e.subject || "(no subject)"}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs text-muted-foreground truncate">
-                          {e.from_address}
-                        </p>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {formatRelative(e.created_at)}
-                        </span>
-                      </div>
-                    </div>
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      e.status === "received" ? "bg-primary" :
+                      e.status === "processing" ? "bg-amber-400 animate-pulse" :
+                      e.status === "failed" ? "bg-red-400" : "bg-green-400"
+                    }`} />
+                    <span className="text-sm text-foreground truncate flex-1">
+                      {e.subject || "(no subject)"}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      {formatRelative(e.created_at)}
+                    </span>
                   </a>
                 ))}
                 {hasMoreSenderEmails && (
@@ -2081,13 +2053,13 @@ function SenderDetail({
         {/* Linked domains */}
         <Card>
           <CardContent className="p-4">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-medium text-foreground">
                 Linked domains
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {senderDomains.length} domain{senderDomains.length !== 1 ? "s" : ""}
               </p>
+              <span className="text-[11px] text-muted-foreground">
+                {senderDomains.length} domain{senderDomains.length !== 1 ? "s" : ""}
+              </span>
             </div>
             {senderDomains.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
