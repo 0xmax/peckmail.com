@@ -20,6 +20,11 @@ import {
   SortAscending,
   ArrowsDownUp,
   XCircle,
+  CaretUp,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  GlobeSimple,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Button } from "@/components/ui/button.js";
@@ -260,7 +265,7 @@ const sparklineConfig: ChartConfig = {
   count: { label: "Emails", color: "var(--color-primary)" },
 };
 
-function Sparkline({ sparkline, days = 30 }: { sparkline: number[]; days?: number }) {
+function Sparkline({ sparkline, days = 30, name }: { sparkline: number[]; days?: number; name: string }) {
   const chartData = useMemo(() => {
     const data = sparkline.slice(-days);
     return data.map((count, i) => {
@@ -276,6 +281,8 @@ function Sparkline({ sparkline, days = 30 }: { sparkline: number[]; days?: numbe
     });
   }, [sparkline, days]);
 
+  const gradientId = `sparkline-gradient-${name.replace(/[^a-zA-Z0-9]/g, "-")}`;
+
   return (
     <ChartContainer
       config={sparklineConfig}
@@ -286,15 +293,15 @@ function Sparkline({ sparkline, days = 30 }: { sparkline: number[]; days?: numbe
         margin={{ top: 4, right: 0, bottom: 4, left: 0 }}
       >
         <defs>
-          <linearGradient id="sparkline-gradient" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop
               offset="5%"
-              stopColor="var(--color-count)"
+              stopColor="var(--color-primary)"
               stopOpacity={0.3}
             />
             <stop
               offset="95%"
-              stopColor="var(--color-count)"
+              stopColor="var(--color-primary)"
               stopOpacity={0}
             />
           </linearGradient>
@@ -302,8 +309,8 @@ function Sparkline({ sparkline, days = 30 }: { sparkline: number[]; days?: numbe
         <Area
           dataKey="count"
           type="monotone"
-          fill="url(#sparkline-gradient)"
-          stroke="var(--color-count)"
+          fill={`url(#${gradientId})`}
+          stroke="var(--color-primary)"
           strokeWidth={1.5}
           dot={false}
           isAnimationActive={false}
@@ -336,7 +343,7 @@ function TrendLabel({ sparkline, days = 7 }: { sparkline: number[]; days?: numbe
 
   if (delta > 0) {
     return (
-      <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 border-transparent font-bold text-[9px] uppercase tracking-wider px-1.5 h-5 flex items-center gap-1">
+      <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-transparent font-bold text-[9px] uppercase tracking-wider px-1.5 h-5 flex items-center gap-1">
         <TrendUp size={10} weight="bold" />
         Increasing
       </Badge>
@@ -344,7 +351,7 @@ function TrendLabel({ sparkline, days = 7 }: { sparkline: number[]; days?: numbe
   }
   if (delta < 0) {
     return (
-      <Badge variant="secondary" className="bg-rose-500/10 text-rose-600 border-transparent font-bold text-[9px] uppercase tracking-wider px-1.5 h-5 flex items-center gap-1">
+      <Badge variant="secondary" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-transparent font-bold text-[9px] uppercase tracking-wider px-1.5 h-5 flex items-center gap-1">
         <TrendDown size={10} weight="bold" />
         Decreasing
       </Badge>
@@ -377,9 +384,12 @@ function SenderList({
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [timeframe, setTimeframe] = useState<number>(30);
-  const [sortBy, setSortBy] = useState<"default" | "name" | "total" | "trending" | "declining">("default");
+  const [sortBy, setSortBy] = useState<"name" | "total" | "trending" | "declining" | "country">("total");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+
   const unlinkedDomains = domains.filter((d) => !d.sender_id);
-  const totalEmails = senders.reduce((sum, s) => sum + s.email_count, 0);
 
   const availableCountries = useMemo(() => {
     const codes = new Set<string>();
@@ -394,7 +404,7 @@ function SenderList({
   }, [senders]);
 
   const filteredSenders = useMemo(() => {
-    let result = senders;
+    let result = [...senders];
     if (countryFilter !== "all") {
       result = result.filter((s) => s.country === countryFilter);
     }
@@ -406,23 +416,65 @@ function SenderList({
         return senderDomains.some((d) => d.domain.toLowerCase().includes(q));
       });
     }
-    if (sortBy !== "default") {
-      result = [...result].sort((a, b) => {
-        if (sortBy === "name") return a.name.localeCompare(b.name);
+
+    result.sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      if (sortBy === "name") {
+        valA = a.name.toLowerCase();
+        valB = b.name.toLowerCase();
+      } else if (sortBy === "country") {
+        valA = a.country || "ZZ";
+        valB = b.country || "ZZ";
+      } else {
         const stA = stats?.[a.id];
         const stB = stats?.[b.id];
-        const totalA = stA?.sparkline.slice(-timeframe).reduce((s, v) => s + v, 0) ?? 0;
-        const totalB = stB?.sparkline.slice(-timeframe).reduce((s, v) => s + v, 0) ?? 0;
-        if (sortBy === "total") return totalB - totalA;
-        const deltaA = stA ? periodTrend(stA.sparkline, timeframe).delta : 0;
-        const deltaB = stB ? periodTrend(stB.sparkline, timeframe).delta : 0;
-        if (sortBy === "trending") return deltaB - deltaA;
-        if (sortBy === "declining") return deltaA - deltaB;
-        return 0;
-      });
-    }
+        if (sortBy === "total") {
+          valA = stA?.sparkline.slice(-timeframe).reduce((s, v) => s + v, 0) ?? 0;
+          valB = stB?.sparkline.slice(-timeframe).reduce((s, v) => s + v, 0) ?? 0;
+        } else if (sortBy === "trending" || sortBy === "declining") {
+          valA = stA ? periodTrend(stA.sparkline, timeframe).delta : 0;
+          valB = stB ? periodTrend(stB.sparkline, timeframe).delta : 0;
+        }
+      }
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
     return result;
-  }, [senders, domains, countryFilter, search, sortBy, stats, timeframe]);
+  }, [senders, domains, countryFilter, search, sortBy, sortOrder, stats, timeframe]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [search, countryFilter, timeframe, sortBy, sortOrder]);
+
+  const totalPages = Math.ceil(filteredSenders.length / pageSize);
+  const paginatedSenders = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredSenders.slice(start, start + pageSize);
+  }, [filteredSenders, page, pageSize]);
+
+  const toggleSort = (field: typeof sortBy) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortOrder(field === "name" || field === "country" ? "asc" : "desc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: typeof sortBy }) => {
+    if (sortBy !== field) return <ArrowsDownUp size={10} className="ml-1 opacity-20" />;
+    return sortOrder === "asc" ? (
+      <CaretUp size={10} weight="bold" className="ml-1 text-primary" />
+    ) : (
+      <CaretDown size={10} weight="bold" className="ml-1 text-primary" />
+    );
+  };
 
   const filteredUnlinkedDomains = useMemo(() => {
     if (!search.trim()) return unlinkedDomains;
@@ -580,14 +632,14 @@ function SenderList({
                 </ToggleGroup>
               </div>
 
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
                 <SelectTrigger className="w-[130px] h-8 text-xs border-transparent bg-muted/30 shadow-none">
                   <ArrowsDownUp size={13} className="mr-1.5 text-muted-foreground/60" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Default</SelectItem>
                   <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="country">Region</SelectItem>
                   <SelectItem value="total">Most emails</SelectItem>
                   <SelectItem value="trending">Trending up</SelectItem>
                   <SelectItem value="declining">Trending down</SelectItem>
@@ -597,60 +649,78 @@ function SenderList({
           </div>
 
           {/* List Section */}
-          {filteredSenders.length > 0 ? (
-            <div className="p-2">
+          {paginatedSenders.length > 0 ? (
+            <div className="p-1">
               {/* Table Header */}
               <div className="flex items-center gap-4 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-b border-border/50 mb-1">
-                <div className="w-9 shrink-0" />
-                <div className="flex-1 min-w-0">Sender</div>
-                <div className="w-32 shrink-0 text-center">Activity ({timeframe}d)</div>
-                <div className="w-28 shrink-0 text-right">Trend</div>
-                <div className="w-24 shrink-0 text-right">{timeframe}d Total</div>
+                <div className="w-8 shrink-0" /> {/* Avatar space */}
+                <button
+                  onClick={() => toggleSort("name")}
+                  className="flex-1 min-w-0 flex items-center hover:text-foreground transition-colors text-left"
+                >
+                  Sender
+                  <SortIcon field="name" />
+                </button>
+                <div className="w-32 shrink-0 text-center">Activity</div>
+                <button
+                  onClick={() => toggleSort("trending")}
+                  className="w-24 shrink-0 flex items-center justify-end hover:text-foreground transition-colors"
+                >
+                  Trend
+                  <SortIcon field="trending" />
+                </button>
+                <button
+                  onClick={() => toggleSort("total")}
+                  className="w-20 shrink-0 flex items-center justify-end hover:text-foreground transition-colors"
+                >
+                  Vol
+                  <SortIcon field="total" />
+                </button>
               </div>
-              <div className="divide-y divide-border">
-                {filteredSenders.map((s) => {
+              <div className="divide-y divide-border/40">
+                {paginatedSenders.map((s) => {
                   const st = stats?.[s.id];
                   const periodTotal = st?.sparkline.slice(-timeframe).reduce((a, b) => a + b, 0) ?? 0;
                   return (
                     <button
                       key={s.id}
                       onClick={() => onSelect(s.id)}
-                      className="w-full flex items-center gap-4 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                      className="w-full flex items-center gap-4 px-3 py-2.5 rounded-lg hover:bg-muted/40 transition-colors text-left group"
                     >
-                      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center text-[11px] font-bold text-primary shrink-0 group-hover:bg-primary/10 transition-colors">
                         {s.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 leading-none">
-                          <p className="text-sm font-semibold text-foreground truncate">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13px] font-bold text-foreground truncate leading-tight">
                             {s.name}
                           </p>
                           {s.country && COUNTRIES[s.country] && (
-                            <span className="text-xs shrink-0" title={COUNTRIES[s.country].name}>
+                            <span className="text-base leading-none shrink-0" title={COUNTRIES[s.country].name}>
                               {COUNTRIES[s.country].flag}
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1.5">
+                        <p className="text-[10px] font-medium text-muted-foreground/60 mt-1 uppercase tracking-tight">
                           {s.domain_count} domain{s.domain_count !== 1 ? "s" : ""}
                         </p>
                       </div>
                       <div className="w-32 shrink-0 flex items-center justify-center">
                         {st ? (
-                          <Sparkline sparkline={st.sparkline} days={timeframe} />
+                          <Sparkline sparkline={st.sparkline} days={timeframe} name={s.id} />
                         ) : (
-                          <span className="text-xs text-muted-foreground">&mdash;</span>
+                          <span className="text-xs text-muted-foreground opacity-20">&mdash;</span>
                         )}
                       </div>
-                      <div className="w-28 shrink-0 flex justify-end">
+                      <div className="w-24 shrink-0 flex justify-end">
                         {st ? (
                           <TrendLabel sparkline={st.sparkline} days={timeframe} />
                         ) : (
-                          <span className="text-xs text-muted-foreground">&mdash;</span>
+                          <span className="text-xs text-muted-foreground opacity-20">&mdash;</span>
                         )}
                       </div>
-                      <div className="w-24 shrink-0 text-right">
-                        <span className="text-sm font-bold tabular-nums text-foreground">
+                      <div className="w-20 shrink-0 text-right">
+                        <span className="text-[13px] font-bold tabular-nums text-foreground">
                           {st ? periodTotal : s.email_count}
                         </span>
                       </div>
@@ -658,6 +728,55 @@ function SenderList({
                   );
                 })}
               </div>
+
+              {/* Pagination Footer */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between gap-4 px-3 py-4 mt-2 border-t border-border/40">
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    Showing <span className="text-foreground">{(page - 1) * pageSize + 1}</span> to <span className="text-foreground">{Math.min(page * pageSize, filteredSenders.length)}</span> of <span className="text-foreground">{filteredSenders.length}</span> senders
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={page === 1}
+                      onClick={() => setPage(page - 1)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <CaretLeft size={14} weight="bold" />
+                    </Button>
+                    <div className="flex items-center gap-1 px-2">
+                      {Array.from({ length: totalPages }).map((_, i) => {
+                        const p = i + 1;
+                        if (totalPages > 5 && Math.abs(p - page) > 1 && p !== 1 && p !== totalPages) {
+                          if (p === 2 || (p === totalPages - 1 && totalPages > 2)) return <span key={p} className="text-[10px] opacity-20 mx-0.5">...</span>;
+                          return null;
+                        }
+                        return (
+                          <Button
+                            key={p}
+                            variant={page === p ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => setPage(p)}
+                            className={`h-7 min-w-7 px-1.5 text-[10px] font-bold ${page === p ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
+                          >
+                            {p}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={page === totalPages}
+                      onClick={() => setPage(page + 1)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <CaretRight size={14} weight="bold" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="py-24 text-center">

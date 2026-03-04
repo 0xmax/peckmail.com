@@ -44,6 +44,8 @@ import {
 import {
   Bar,
   BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -214,13 +216,98 @@ function KpiCard({
   );
 }
 
+function VolumeChart({
+  tagDaily,
+  days,
+}: {
+  tagDaily: DashboardStats["tag_daily"];
+  days: number;
+}) {
+  const data = useMemo(() => {
+    const now = new Date();
+    const buckets: { key: string; label: string; count: number }[] = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      buckets.push({
+        key,
+        label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        count: 0,
+      });
+    }
+
+    for (const row of tagDaily) {
+      const dateStr = typeof row.date === "string" ? row.date.slice(0, 10) : row.date;
+      const bucket = buckets.find((b) => b.key === dateStr);
+      if (bucket) {
+        bucket.count += Number(row.count);
+      }
+    }
+    return buckets;
+  }, [tagDaily, days]);
+
+  const config: ChartConfig = {
+    count: { label: "Emails", color: "var(--color-primary)" },
+  };
+
+  return (
+    <Card className="border-border/60">
+      <CardContent className="p-5">
+        <h3 className="text-sm font-bold text-foreground">Frequency</h3>
+        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-6">Volume over time</p>
+        <ChartContainer config={config} className="aspect-[4/1] w-full">
+          <AreaChart
+            data={data}
+            margin={{ top: 10, right: 10, bottom: 0, left: -20 }}
+          >
+            <defs>
+              <linearGradient id="vol-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.1} />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              interval="preserveStartEnd"
+              fontSize={10}
+              className="font-bold opacity-40 uppercase tracking-tighter"
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tickMargin={4}
+              fontSize={10}
+              className="font-bold opacity-40"
+            />
+            <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+            <Area
+              dataKey="count"
+              type="monotone"
+              fill="url(#vol-gradient)"
+              stroke="var(--color-primary)"
+              strokeWidth={2}
+              dot={false}
+            />
+          </AreaChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
 function TagPieChart({
   tagDaily,
 }: {
   tagDaily: DashboardStats["tag_daily"];
 }) {
   const data = useMemo(() => {
-    const tagCounts = new Map<string, { name: string; color: string; count: number }>();
+    const tagCounts = new Map<string, { name: string; count: number }>();
     for (const row of tagDaily) {
       const existing = tagCounts.get(row.tag_id);
       if (existing) {
@@ -228,28 +315,35 @@ function TagPieChart({
       } else {
         tagCounts.set(row.tag_id, {
           name: row.tag_name,
-          color: row.tag_color,
           count: Number(row.count),
         });
       }
     }
     return Array.from(tagCounts.entries())
       .sort((a, b) => b[1].count - a[1].count)
-      .map(([id, d]) => ({ id, ...d }));
+      .map(([id, d]) => ({ 
+        id, 
+        ...d
+      }));
   }, [tagDaily]);
 
   const total = data.reduce((sum, d) => sum + d.count, 0);
-  const config: ChartConfig = Object.fromEntries(
-    data.map((t) => [t.id, { label: t.name, color: t.color }])
-  );
+  const config = useMemo(() => {
+    const cfg: ChartConfig = {};
+    data.forEach((d, i) => {
+      cfg[d.id] = { 
+        label: d.name, 
+        color: `oklch(var(--chart-${(i % 5) + 1}))` 
+      };
+    });
+    return cfg;
+  }, [data]);
 
   if (data.length === 0) {
     return (
       <Card className="flex flex-col border-border/60">
         <CardContent className="p-5 flex-1 flex flex-col">
-          <h3 className="text-sm font-bold text-foreground">
-            Distribution
-          </h3>
+          <h3 className="text-sm font-bold text-foreground">Distribution</h3>
           <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-4">By tag</p>
           <div className="flex items-center justify-center flex-1 text-muted-foreground">
             <p className="text-xs italic opacity-40 uppercase tracking-widest">No tagged emails</p>
@@ -262,19 +356,12 @@ function TagPieChart({
   return (
     <Card className="flex flex-col border-border/60">
       <CardContent className="p-5 flex-1 flex flex-col">
-        <h3 className="text-sm font-bold text-foreground">
-          Distribution
-        </h3>
+        <h3 className="text-sm font-bold text-foreground">Distribution</h3>
         <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-2">By tag</p>
         <div className="flex-1 flex items-center gap-6">
-          <ChartContainer
-            config={config}
-            className="aspect-square w-[140px] shrink-0"
-          >
+          <ChartContainer config={config} className="aspect-square w-[140px] shrink-0">
             <PieChart>
-              <ChartTooltip
-                content={<ChartTooltipContent nameKey="name" hideLabel />}
-              />
+              <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
               <Pie
                 data={data}
                 dataKey="count"
@@ -285,31 +372,21 @@ function TagPieChart({
                 stroke="var(--color-background)"
               >
                 {data.map((entry) => (
-                  <Cell key={entry.id} fill={entry.color} />
+                  <Cell 
+                    key={entry.id} 
+                    fill={`var(--color-${entry.id})`} 
+                  />
                 ))}
                 <Label
                   content={({ viewBox }) => {
                     if (viewBox && "cx" in viewBox && "cy" in viewBox) {
                       return (
-                        <text
-                          x={viewBox.cx}
-                          y={viewBox.cy}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                        >
-                          <tspan
-                            x={viewBox.cx}
-                            y={viewBox.cy}
-                            className="fill-foreground text-xl font-bold tracking-tight"
-                          >
+                        <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
+                          <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-xl font-bold tabular-nums">
                             {total}
                           </tspan>
-                          <tspan
-                            x={viewBox.cx}
-                            y={(viewBox.cy || 0) + 16}
-                            className="fill-muted-foreground text-[8px] font-bold uppercase tracking-widest opacity-40"
-                          >
-                            total
+                          <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 16} className="fill-muted-foreground text-[8px] font-bold uppercase tracking-widest opacity-40">
+                            TOTAL
                           </tspan>
                         </text>
                       );
@@ -319,174 +396,23 @@ function TagPieChart({
               </Pie>
             </PieChart>
           </ChartContainer>
-          <div className="flex-1 space-y-2 min-w-0">
-            {data.slice(0, 6).map((t) => (
+          <div className="flex-1 space-y-2.5 min-w-0">
+            {data.slice(0, 5).map((t) => (
               <div key={t.id} className="flex items-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: t.color }}
+                <span 
+                  className="w-1.5 h-1.5 rounded-full shrink-0" 
+                  style={{ backgroundColor: `var(--color-${t.id})` }} 
                 />
-                <span className="text-[11px] font-medium text-foreground truncate flex-1">
+                <span className="text-[11px] font-bold text-foreground truncate flex-1 uppercase tracking-tight">
                   {t.name}
                 </span>
-                <span className="text-[11px] tabular-nums font-bold text-muted-foreground shrink-0 w-8 text-right">
+                <span className="text-[11px] tabular-nums font-bold text-muted-foreground/60 shrink-0 w-8 text-right">
                   {total > 0 ? Math.round((t.count / total) * 100) : 0}%
                 </span>
               </div>
             ))}
           </div>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StackedTagBarChart({
-  tagDaily,
-  days,
-}: {
-  tagDaily: DashboardStats["tag_daily"];
-  days: number;
-}) {
-  const tagIds = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string; color: string }>();
-    for (const row of tagDaily) {
-      if (!seen.has(row.tag_id)) {
-        seen.set(row.tag_id, { id: row.tag_id, name: row.tag_name, color: row.tag_color });
-      }
-    }
-    return Array.from(seen.values());
-  }, [tagDaily]);
-
-  const data = useMemo(() => {
-    const now = new Date();
-    const bucketByWeek = days > 30;
-    const buckets: { key: string; label: string; [tagId: string]: number | string }[] = [];
-
-    if (bucketByWeek) {
-      const numWeeks = Math.ceil(days / 7);
-      for (let i = numWeeks - 1; i >= 0; i--) {
-        const end = new Date(now);
-        end.setDate(end.getDate() - i * 7);
-        const start = new Date(end);
-        start.setDate(start.getDate() - 6);
-        const key = start.toISOString().slice(0, 10);
-        const label =
-          start.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
-          "\u2013" +
-          end.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-        const bucket: any = { key, label };
-        for (const t of tagIds) bucket[t.id] = 0;
-        buckets.push(bucket);
-      }
-      for (const row of tagDaily) {
-        const rowDate = new Date(row.date + "T00:00:00");
-        for (let i = buckets.length - 1; i >= 0; i--) {
-          const bStart = new Date(buckets[i].key + "T00:00:00");
-          const bEnd = new Date(bStart);
-          bEnd.setDate(bEnd.getDate() + 7);
-          if (rowDate >= bStart && rowDate < bEnd) {
-            (buckets[i] as any)[row.tag_id] =
-              ((buckets[i] as any)[row.tag_id] || 0) + Number(row.count);
-            break;
-          }
-        }
-      }
-    } else {
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
-        const label =
-          days <= 14
-            ? d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })
-            : dayLabel(key);
-        const bucket: any = { key, label };
-        for (const t of tagIds) bucket[t.id] = 0;
-        buckets.push(bucket);
-      }
-      for (const row of tagDaily) {
-        const dateStr = typeof row.date === "string" ? row.date.slice(0, 10) : row.date;
-        const bucket = buckets.find((b) => b.key === dateStr);
-        if (bucket) {
-          (bucket as any)[row.tag_id] =
-            ((bucket as any)[row.tag_id] || 0) + Number(row.count);
-        }
-      }
-    }
-    return buckets;
-  }, [tagDaily, days, tagIds]);
-
-  const allKeys = tagIds.map((t) => t.id);
-
-  const config: ChartConfig = useMemo(() => {
-    const cfg: ChartConfig = {};
-    for (const t of tagIds) {
-      cfg[t.id] = { label: t.name, color: t.color };
-    }
-    return cfg;
-  }, [tagIds]);
-
-  if (allKeys.length === 0) {
-    return (
-      <Card className="border-border/60">
-        <CardContent className="p-5">
-          <h3 className="text-sm font-bold text-foreground">
-            Activity
-          </h3>
-          <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-4">By tag</p>
-          <div className="flex items-center justify-center py-24 text-muted-foreground">
-            <p className="text-xs italic opacity-40 uppercase tracking-widest">No emails in this period</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="border-border/60">
-      <CardContent className="p-5">
-        <h3 className="text-sm font-bold text-foreground">
-          Activity
-        </h3>
-        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-6">Emails stacked by tag</p>
-        <ChartContainer config={config} className="aspect-[4/1] w-full">
-          <BarChart
-            data={data}
-            margin={{ top: 4, right: 4, bottom: 0, left: -20 }}
-          >
-            <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              interval="preserveStartEnd"
-              fontSize={10}
-              className="font-bold opacity-60 uppercase tracking-tighter"
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tickMargin={4}
-              allowDecimals={false}
-              fontSize={10}
-              className="font-bold opacity-40"
-            />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <ChartLegend content={<ChartLegendContent />} />
-            {allKeys.map((key) => (
-              <Bar
-                key={key}
-                dataKey={key}
-                stackId="tags"
-                fill={`var(--color-${key})`}
-                radius={0}
-                isAnimationActive={false}
-              />
-            ))}
-          </BarChart>
-        </ChartContainer>
       </CardContent>
     </Card>
   );
@@ -537,10 +463,10 @@ function ActivityGrid({
     if (count < 0) return "transparent";
     if (count === 0) return "var(--color-muted)";
     const level = maxCount > 0 ? Math.min(count / maxCount, 1) : 0;
-    if (level <= 0.25) return "oklch(0.78 0.12 312)";
-    if (level <= 0.5) return "oklch(0.66 0.18 312)";
-    if (level <= 0.75) return "oklch(0.56 0.22 312)";
-    return "oklch(0.48 0.25 312)";
+    if (level <= 0.25) return "oklch(var(--primary) / 0.2)";
+    if (level <= 0.5) return "oklch(var(--primary) / 0.4)";
+    if (level <= 0.75) return "oklch(var(--primary) / 0.7)";
+    return "oklch(var(--primary))";
   }
 
   const dayLabels = ["", "Mon", "", "Wed", "", "Fri", ""];
@@ -1025,7 +951,7 @@ export function DashboardView({
         </div>
 
         {/* Activity Section */}
-        <StackedTagBarChart tagDaily={data.tag_daily} days={daysNum} />
+        <VolumeChart tagDaily={data.tag_daily} days={daysNum} />
 
         {/* Details Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
