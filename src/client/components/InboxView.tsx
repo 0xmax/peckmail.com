@@ -255,7 +255,7 @@ function EmailListItem({
 
           const catChips: React.ReactNode[] = [];
           if (email.extraction_data) {
-            const cats = extractors.filter((e) => e.kind === "category");
+            const cats = extractors.filter((e) => e.kind === "category" && e.enabled);
             for (const cat of cats) {
               const val = email.extraction_data[cat.name];
               if (!val) continue;
@@ -358,7 +358,7 @@ function EmailDetailPanel({
           {(() => {
             const tags = email.tags ?? [];
             const data = email.extraction_data;
-            const cats = extractors.filter((e) => e.kind === "category");
+            const cats = extractors.filter((e) => e.kind === "category" && e.enabled);
             const exts = extractors.filter((e) => e.kind !== "category" && e.enabled);
             const hasCats = data && cats.some((c) => data[c.name]);
             const hasExts = data && exts.some((e) => data[e.name] != null);

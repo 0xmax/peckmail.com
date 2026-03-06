@@ -183,8 +183,14 @@ export interface EmailExtractorEnumOption {
   condition: string;
 }
 
+interface EmailExtractorEnumOptionInput {
+  value: string;
+  color?: string;
+  condition?: string;
+}
+
 function normalizeEmailExtractorEnumOptions(
-  options: Array<{ value: string; color?: string; condition?: string }> | undefined,
+  options: EmailExtractorEnumOptionInput[] | undefined,
   {
     expectsOptions,
     requiresConditions,
@@ -225,7 +231,7 @@ function normalizeEmailExtractorEnumOptions(
 }
 
 function buildEnumOptions(
-  options: Array<{ value: string; color?: string; condition?: string }>
+  options: EmailExtractorEnumOptionInput[]
 ): EmailExtractorEnumOption[] {
   return options.map((option, index) => ({
     value: normalizeEmailEnumOptionValue(option.value),
@@ -2015,7 +2021,7 @@ export async function createProjectExtractor(params: {
   label: string;
   description?: string;
   value_type: string;
-  enum_options?: Array<{ value: string; color?: string; condition?: string }>;
+  enum_options?: EmailExtractorEnumOptionInput[];
   required?: boolean;
   sort_order?: number;
   enabled?: boolean;
@@ -2050,12 +2056,14 @@ export async function createProjectExtractor(params: {
 
 export async function updateProjectExtractor(
   extractorId: string,
-  updates: Partial<
-    Pick<
-      EmailExtractorRow,
-      "label" | "description" | "enum_options" | "required" | "sort_order" | "enabled"
-    >
-  >
+  updates: {
+    label?: string;
+    description?: string;
+    enum_options?: EmailExtractorEnumOptionInput[];
+    required?: boolean;
+    sort_order?: number;
+    enabled?: boolean;
+  }
 ): Promise<EmailExtractorRow> {
   const updatePayload: Record<string, unknown> = { ...updates };
   if (updates.enum_options !== undefined) {
