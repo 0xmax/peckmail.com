@@ -320,6 +320,17 @@ export class WorkspaceStore {
         this.setState({ connected: false });
         break;
       }
+
+      case "email:set-read-at": {
+        this.setState({
+          incomingEmails: this.state.incomingEmails.map((email) =>
+            email.id === action.emailId
+              ? { ...email, read_at: action.readAt }
+              : email
+          ),
+        });
+        break;
+      }
     }
   };
 

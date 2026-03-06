@@ -78,6 +78,8 @@ import {
 import { useProjectId } from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
 import type { Sender, IncomingEmail, SenderStats, SenderProfileData, PricingSnapshot, SenderStrategyData, EmailExtraction } from "../store/types.js";
+import { TAG_COLORS } from "../lib/presets.js";
+import { ContentBreakdownCard, type BreakdownItem, type BreakdownSection } from "./ContentBreakdownCard.js";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -156,6 +158,23 @@ interface Domain {
   resolver_error: string | null;
 }
 
+interface SenderOverviewStats {
+  total: number;
+  first_email_at: string | null;
+  latest_email_at: string | null;
+  tag_counts: { id: string; name: string; color: string; count: number }[];
+  category_breakdowns: {
+    category_id: string;
+    category_name: string;
+    category_label: string;
+    category_order: number;
+    value_id: string;
+    value_label: string;
+    color: string;
+    count: number;
+  }[];
+}
+
 // --- Helpers ---
 
 function formatRelative(iso: string) {
@@ -181,64 +200,126 @@ function dayLabel(dateStr: string) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-// --- Data hooks ---
+const EMPTY_SENDER_OVERVIEW: SenderOverviewStats = {
+  total: 0,
+  first_email_at: null,
+  latest_email_at: null,
+  tag_counts: [],
+  category_breakdowns: [],
+};
 
-function useDailyVolume(emails: IncomingEmail[], days: number) {
+const EMPTY_SPARKLINE = Array.from({ length: 60 }, () => 0);
+
+// --- Data helpers ---
+
+function useDailyVolumeFromSparkline(sparkline: number[], days: number) {
   return useMemo(() => {
-    const now = new Date();
-    const result: { date: string; label: string; count: number }[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
+    const today = new Date();
+    const window = sparkline.slice(-days);
+    return window.map((count, index) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (days - 1 - index));
       const key = d.toISOString().slice(0, 10);
-      result.push({ date: key, label: dayLabel(key), count: 0 });
-    }
-    for (const e of emails) {
-      const key = dateKey(e.created_at);
-      const entry = result.find((r) => r.date === key);
-      if (entry) entry.count++;
-    }
-    return result;
-  }, [emails, days]);
+      return { date: key, label: dayLabel(key), count };
+    });
+  }, [sparkline, days]);
 }
 
-function useTagBreakdown(emails: IncomingEmail[]) {
-  return useMemo(() => {
-    const tagCounts = new Map<
-      string,
-      { name: string; color: string; count: number }
-    >();
-    for (const e of emails) {
-      if (!e.tags || e.tags.length === 0) {
-        const existing = tagCounts.get("_untagged");
-        if (existing) {
-          existing.count++;
-        } else {
-          tagCounts.set("_untagged", {
-            name: "Untagged",
-            color: "#94a3b8",
-            count: 1,
-          });
-        }
-        continue;
-      }
-      for (const tag of e.tags) {
-        const existing = tagCounts.get(tag.id);
-        if (existing) {
-          existing.count++;
-        } else {
-          tagCounts.set(tag.id, {
-            name: tag.name,
-            color: tag.color,
-            count: 1,
-          });
-        }
-      }
+function sortBreakdownItems(items: BreakdownItem[]) {
+  return [...items].sort((a, b) => {
+    const aSpecial = a.id === "_untagged" || a.id === "_unclassified";
+    const bSpecial = b.id === "_untagged" || b.id === "_unclassified";
+    if (aSpecial !== bSpecial) return aSpecial ? 1 : -1;
+    if (b.count !== a.count) return b.count - a.count;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function isHexColor(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim());
+}
+
+function buildCategorySections(
+  categoryBreakdowns: SenderOverviewStats["category_breakdowns"],
+  totalEmails: number
+): BreakdownSection[] {
+  const groups = new Map<
+    string,
+    {
+      title: string;
+      order: number;
+      items: BreakdownItem[];
     }
-    return Array.from(tagCounts.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .map(([id, data]) => ({ id, ...data }));
-  }, [emails]);
+  >();
+
+  for (const row of categoryBreakdowns) {
+    const existing = groups.get(row.category_id);
+    const item: BreakdownItem = {
+      id: row.value_id,
+      label: row.value_label,
+      color: row.color,
+      count: Number(row.count),
+    };
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      groups.set(row.category_id, {
+        title: row.category_label || row.category_name,
+        order: Number(row.category_order),
+        items: [item],
+      });
+    }
+  }
+
+  return Array.from(groups.entries())
+    .sort((a, b) => a[1].order - b[1].order || a[1].title.localeCompare(b[1].title))
+    .map(([id, group]) => {
+      const items = sortBreakdownItems(group.items).map((item, index) => ({
+        ...item,
+        color:
+          item.id === "_unclassified"
+            ? (isHexColor(item.color) ? item.color : "#94a3b8")
+            : (isHexColor(item.color) ? item.color : TAG_COLORS[index % TAG_COLORS.length]),
+      }));
+      const unclassified = items.find((item) => item.id === "_unclassified")?.count ?? 0;
+      return {
+        id,
+        title: group.title,
+        subtitle: "Category",
+        items,
+        stats: [
+          { label: "Classified", value: Math.max(totalEmails - unclassified, 0) },
+          { label: "Unclassified", value: unclassified },
+        ],
+      };
+    });
+}
+
+function buildTagSection(
+  tagBreakdown: SenderOverviewStats["tag_counts"],
+  totalEmails: number
+): BreakdownSection | null {
+  if (tagBreakdown.length === 0) return null;
+  const items = sortBreakdownItems(
+    tagBreakdown.map((tag) => ({
+      id: tag.id,
+      label: tag.name,
+      color: tag.color,
+      count: tag.count,
+    }))
+  );
+  const untagged = items.find((item) => item.id === "_untagged")?.count ?? 0;
+  return {
+    id: "tags",
+    title: "Tags",
+    subtitle: "Applied labels",
+    items,
+    stats: [
+      { label: "Tagged", value: Math.max(totalEmails - untagged, 0) },
+      { label: "Untagged", value: untagged },
+    ],
+    note: "Tag counts are raw applications, so one email can appear under multiple tags.",
+  };
 }
 
 // --- KPI Card ---
@@ -731,14 +812,14 @@ function SenderList({
                   <ArrowsDownUp size={13} className="mr-1.5 text-muted-foreground/60" />
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="country">Region</SelectItem>
-                  <SelectItem value="total">Most emails</SelectItem>
-                  <SelectItem value="trending">Trending up</SelectItem>
-                  <SelectItem value="declining">Trending down</SelectItem>
-                </SelectContent>
-              </Select>
+                  <SelectContent>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="country">Region</SelectItem>
+                    <SelectItem value="total">Most emails ({timeframe}D)</SelectItem>
+                    <SelectItem value="trending">Trending up</SelectItem>
+                    <SelectItem value="declining">Trending down</SelectItem>
+                  </SelectContent>
+                </Select>
             </div>
           </div>
 
@@ -767,7 +848,7 @@ function SenderList({
                   onClick={() => toggleSort("total")}
                   className="w-20 shrink-0 flex items-center justify-end hover:text-foreground transition-colors"
                 >
-                  Vol
+                  Vol {timeframe}D
                   <SortIcon field="total" />
                 </button>
               </div>
@@ -814,9 +895,13 @@ function SenderList({
                         )}
                       </div>
                       <div className="w-20 shrink-0 text-right">
-                        <span className="text-[13px] font-bold tabular-nums text-foreground">
-                          {st ? periodTotal : s.email_count}
-                        </span>
+                        {st ? (
+                          <span className="text-[13px] font-bold tabular-nums text-foreground">
+                            {periodTotal}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground opacity-20">&mdash;</span>
+                        )}
                       </div>
                     </button>
                   );
@@ -1421,12 +1506,14 @@ function SenderDetail({
   sender,
   domains,
   allSenders,
+  stats,
   onBack,
   onRefresh,
 }: {
   sender: Sender;
   domains: Domain[];
   allSenders: Sender[];
+  stats: Record<string, SenderStats> | null;
   onBack: () => void;
   onRefresh: () => void;
 }) {
@@ -1442,6 +1529,7 @@ function SenderDetail({
   const [profile, setProfile] = useState<SenderProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [overview, setOverview] = useState<SenderOverviewStats | null>(null);
   const projectId = useProjectId();
 
   // Fetch sender emails from API instead of filtering in-memory
@@ -1505,33 +1593,47 @@ function SenderDetail({
     }
   };
 
-  const senderDomains = domains.filter((d) => d.sender_id === sender.id);
-  const volumeData = useDailyVolume(senderEmails, 14);
-  const tagBreakdown = useTagBreakdown(senderEmails);
-  const recent = senderEmails.slice(0, 5);
+  useEffect(() => {
+    let cancelled = false;
+    api.get<{ overview: SenderOverviewStats }>(
+      `/api/projects/${projectId}/senders/${sender.id}/overview`
+    ).then((data) => {
+      if (!cancelled) setOverview(data.overview ?? EMPTY_SENDER_OVERVIEW);
+    }).catch(() => {
+      if (!cancelled) setOverview(null);
+    });
 
-  const total = sender.email_count;
-  const avgPerDay = useMemo(() => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 14);
-    const recentCount = senderEmails.filter(
-      (e) => new Date(e.created_at) >= cutoff
-    ).length;
-    return (recentCount / 14).toFixed(1);
-  }, [senderEmails]);
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, sender.id, sender.email_count, sender.domain_count]);
+
+  const senderDomains = domains.filter((d) => d.sender_id === sender.id);
+  const senderSparkline = stats?.[sender.id]?.sparkline ?? EMPTY_SPARKLINE;
+  const volumeData = useDailyVolumeFromSparkline(senderSparkline, 14);
+  const tagBreakdown = overview?.tag_counts ?? [];
+  const categoryBreakdowns = overview?.category_breakdowns ?? [];
+  const recent = senderEmails.slice(0, 5);
+  const total = overview?.total ?? sender.email_count;
+  const avgPerWeek = useMemo(() => {
+    const recentDays = 28;
+    const recentCount = senderSparkline
+      .slice(-recentDays)
+      .reduce((sum, count) => sum + count, 0);
+    return (recentCount / (recentDays / 7)).toFixed(1);
+  }, [senderSparkline]);
+  const firstSeenAt = overview?.first_email_at;
+  const latestEmailAt = overview?.latest_email_at ?? senderEmails[0]?.created_at ?? null;
 
   const volumeConfig: ChartConfig = {
     count: { label: "Emails", color: "var(--color-primary)" },
   };
-
-  const tagConfig: ChartConfig = Object.fromEntries(
-    tagBreakdown.map((t) => [t.id, { label: t.name, color: t.color }])
-  );
-  const tagData = tagBreakdown.map((t) => ({
-    name: t.name,
-    count: t.count,
-    fill: t.color,
-  }));
+  const breakdownSections = useMemo(() => {
+    const sections = buildCategorySections(categoryBreakdowns, total);
+    const tagSection = buildTagSection(tagBreakdown, total);
+    if (tagSection) sections.push(tagSection);
+    return sections;
+  }, [categoryBreakdowns, tagBreakdown, total]);
 
   const mergeableSenders = allSenders.filter((s) => s.id !== sender.id);
 
@@ -1688,10 +1790,10 @@ function SenderDetail({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <KpiCard label="Total emails" value={total} icon={EnvelopeSimple} />
               <KpiCard
-                label="Avg / day"
-                value={avgPerDay}
+                label="Avg / wk"
+                value={avgPerWeek}
                 icon={TrendUp}
-                subtitle="Last 14 days"
+                subtitle="Last 4 weeks"
               />
               <KpiCard
                 label="Domains"
@@ -1699,8 +1801,8 @@ function SenderDetail({
                 icon={Globe}
               />
               <KpiCard
-                label="Created"
-                value={dayLabel(dateKey(sender.created_at))}
+                label="First seen"
+                value={firstSeenAt ? dayLabel(dateKey(firstSeenAt)) : "—"}
                 icon={CalendarBlank}
               />
             </div>
@@ -1763,8 +1865,10 @@ function SenderDetail({
                       value={senderDomains.length}
                     />
                     <StatBox
-                      label="First seen"
-                      value={new Date(sender.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      label="Latest email"
+                      value={latestEmailAt
+                        ? new Date(latestEmailAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                        : "—"}
                     />
                   </div>
                   {profile?.profile.tags && profile.profile.tags.length > 0 && (
@@ -1818,43 +1922,13 @@ function SenderDetail({
               </Card>
             </div>
 
-            {/* Tag breakdown */}
-            {tagData.length > 0 && (
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs font-medium text-foreground mb-3">Content distribution</p>
-                  <ChartContainer config={tagConfig} className="aspect-[2.5/1] w-full">
-                    <BarChart
-                      data={tagData}
-                      layout="vertical"
-                      margin={{ top: 0, right: 30, bottom: 0, left: 10 }}
-                    >
-                      <CartesianGrid horizontal={false} />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        tickLine={false}
-                        axisLine={false}
-                        width={100}
-                        tickMargin={4}
-                      />
-                      <XAxis
-                        type="number"
-                        tickLine={false}
-                        axisLine={false}
-                        allowDecimals={false}
-                      />
-                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                      <Bar
-                        dataKey="count"
-                        radius={[0, 4, 4, 0]}
-                        barSize={20}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                </CardContent>
-              </Card>
-            )}
+            <ContentBreakdownCard
+              heading="Content distribution"
+              subtitle="Categories and tags as available"
+              emptyMessage="No categories or tags yet"
+              sections={breakdownSections}
+              itemLimit={5}
+            />
           </TabsContent>
           <TabsContent value="company" className="mt-6 outline-none">
         {/* Company profile */}
@@ -2212,26 +2286,20 @@ export function SendersView() {
   const [senderStats, setSenderStats] = useState<Record<string, SenderStats> | null>(null);
 
   const fetchData = useCallback(async () => {
-    const [sendersRes, domainsRes] = await Promise.allSettled([
+    const [sendersRes, domainsRes, statsRes] = await Promise.allSettled([
       api.get<{ senders: Sender[] }>(`/api/projects/${projectId}/senders`),
       api.get<{ domains: Domain[] }>(`/api/projects/${projectId}/domains`),
+      api.get<{ stats: Record<string, SenderStats> }>(
+        `/api/projects/${projectId}/senders/stats`
+      ),
     ]);
     if (sendersRes.status === "fulfilled") setSenders(sendersRes.value.senders);
     else console.error("[SendersView] Failed to fetch senders:", sendersRes.reason);
     if (domainsRes.status === "fulfilled") setDomains(domainsRes.value.domains);
     else console.error("[SendersView] Failed to fetch domains:", domainsRes.reason);
+    if (statsRes.status === "fulfilled") setSenderStats(statsRes.value.stats);
+    else console.error("[SendersView] Failed to fetch sender stats:", statsRes.reason);
     setLoading(false);
-  }, [projectId]);
-
-  // Fetch sender stats
-  useEffect(() => {
-    api.get<{ stats: Record<string, SenderStats> }>(
-      `/api/projects/${projectId}/senders/stats`
-    ).then((data) => {
-      setSenderStats(data.stats);
-    }).catch((err) => {
-      console.error("[SendersView] Failed to fetch sender stats:", err);
-    });
   }, [projectId]);
 
   useEffect(() => {
@@ -2328,6 +2396,7 @@ export function SendersView() {
         sender={selectedSender}
         domains={domains}
         allSenders={senders}
+        stats={senderStats}
         onBack={handleBack}
         onRefresh={fetchData}
       />

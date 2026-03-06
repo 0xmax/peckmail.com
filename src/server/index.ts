@@ -27,6 +27,7 @@ import {
   listProjectEmails,
   addProjectEmail,
   listProjectIncomingEmailSummaries,
+  getProjectEmailStats,
   getProjectIncomingEmailWithTags,
   listProjectEmailTags,
   createProjectEmailTag,
@@ -51,6 +52,7 @@ import {
   getDashboardStats,
   refreshSenderDailyStats,
   getSenderDailyStats,
+  getSenderOverviewStats,
   getSenderProfile,
   getSenderStrategy,
   getSenderExtractions,
@@ -789,6 +791,20 @@ api.get("/projects/:id/emails", async (c) => {
   }
 });
 
+api.get("/projects/:id/email-stats", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const stats = await getProjectEmailStats(projectId);
+    return c.json(stats);
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load email stats" }, 500);
+  }
+});
+
 // Get a single email with body
 api.get("/projects/:id/emails/:emailId", async (c) => {
   const user = getUser(c);
@@ -1180,6 +1196,12 @@ api.get("/projects/:id/senders/stats", async (c) => {
 
   try {
     const rows = await getSenderDailyStats(projectId);
+    const { data: senderRows, error: senderErr } = await supabaseAdmin
+      .from("email_senders")
+      .select("id")
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
+    if (senderErr) throw senderErr;
 
     // Build per-sender stats
     const bySender = new Map<string, Map<string, number>>();
@@ -1195,7 +1217,9 @@ api.get("/projects/:id/senders/stats", async (c) => {
     const today = new Date();
     const stats: Record<string, any> = {};
 
-    for (const [senderId, dateMap] of bySender) {
+    for (const row of senderRows ?? []) {
+      const senderId = row.id;
+      const dateMap = bySender.get(senderId) ?? new Map<string, number>();
       // 60 daily values (oldest first), client slices per period
       const sparkline: number[] = [];
       for (let i = 59; i >= 0; i--) {
@@ -1227,6 +1251,21 @@ api.get("/projects/:id/senders/:senderId/emails", async (c) => {
     return c.json(result);
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to load sender emails" }, 500);
+  }
+});
+
+api.get("/projects/:id/senders/:senderId/overview", async (c) => {
+  const user = getUser(c);
+  const projectId = c.req.param("id");
+  const senderId = c.req.param("senderId");
+  const membership = await getProjectMembership(projectId, user.id);
+  if (!membership) return c.json({ error: "Access denied" }, 403);
+
+  try {
+    const overview = await getSenderOverviewStats(projectId, senderId);
+    return c.json({ overview });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Failed to load sender overview" }, 500);
   }
 });
 
@@ -1429,8 +1468,7 @@ api.post("/projects/:id/extractors", async (c) => {
     label: string;
     description?: string;
     value_type: string;
-    enum_values?: string[];
-    enum_colors?: string[];
+    enum_options?: Array<{ value: string; color?: string; condition?: string }>;
     required?: boolean;
     sort_order?: number;
     enabled?: boolean;
@@ -1448,8 +1486,7 @@ api.post("/projects/:id/extractors", async (c) => {
       label: body.label.trim(),
       description: body.description,
       value_type: body.value_type,
-      enum_values: body.enum_values,
-      enum_colors: body.enum_colors,
+      enum_options: body.enum_options,
       required: body.required,
       sort_order: body.sort_order,
       enabled: body.enabled,
@@ -1472,8 +1509,7 @@ api.patch("/projects/:id/extractors/:eid", async (c) => {
   const body = await c.req.json<{
     label?: string;
     description?: string;
-    enum_values?: string[];
-    enum_colors?: string[];
+    enum_options?: Array<{ value: string; color?: string; condition?: string }>;
     required?: boolean;
     sort_order?: number;
     enabled?: boolean;

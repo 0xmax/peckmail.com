@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
+import { Textarea } from "@/components/ui/textarea.js";
 import {
   Select,
   SelectContent,
@@ -47,6 +48,12 @@ interface ProjectTag {
   color: string;
   enabled: boolean;
   condition: string;
+}
+
+interface ProjectEmailStats {
+  total: number;
+  unread: number;
+  last_received_at: string | null;
 }
 
 const ROLE_OPTIONS = [
@@ -263,10 +270,23 @@ function MembersSection({ projectId }: { projectId: string }) {
 // --- Stats Section ---
 
 function StatsSection() {
+  const projectId = useProjectId();
   const emails = useIncomingEmails();
-  const total = emails.length;
-  const unread = emails.filter((e) => e.status === "received").length;
-  const lastEmail = emails.length > 0 ? emails[0] : null;
+  const [stats, setStats] = useState<ProjectEmailStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<ProjectEmailStats>(`/api/projects/${projectId}/email-stats`)
+      .then((nextStats) => {
+        if (!cancelled) setStats(nextStats);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, emails]);
 
   return (
     <section>
@@ -275,7 +295,7 @@ function StatsSection() {
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-foreground tabular-nums">
-              {total}
+              {stats?.total ?? 0}
             </div>
             <div className="text-xs text-muted-foreground mt-1">
               Total emails
@@ -285,7 +305,7 @@ function StatsSection() {
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-foreground tabular-nums">
-              {unread}
+              {stats?.unread ?? 0}
             </div>
             <div className="text-xs text-muted-foreground mt-1">Unread</div>
           </CardContent>
@@ -293,8 +313,8 @@ function StatsSection() {
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-sm font-medium text-foreground truncate">
-              {lastEmail
-                ? new Date(lastEmail.created_at).toLocaleDateString(undefined, {
+              {stats?.last_received_at
+                ? new Date(stats.last_received_at).toLocaleDateString(undefined, {
                     month: "short",
                     day: "numeric",
                     hour: "numeric",
@@ -610,8 +630,7 @@ interface CategoryTemplate {
   name: string;
   label: string;
   description: string;
-  enum_values: string[];
-  enum_colors: string[];
+  enum_options: EmailExtractor["enum_options"];
 }
 
 interface ExtractorTemplate {
@@ -619,8 +638,62 @@ interface ExtractorTemplate {
   label: string;
   description: string;
   value_type: string;
-  enum_values: string[];
-  enum_colors: string[];
+  enum_options: EmailExtractor["enum_options"];
+}
+
+type EnumOptionDraft = EmailExtractor["enum_options"][number];
+
+function createEnumOption(
+  index: number,
+  option?: Partial<EnumOptionDraft>
+): EnumOptionDraft {
+  return {
+    value: option?.value ?? "",
+    color: option?.color ?? TAG_COLORS[index % TAG_COLORS.length],
+    condition: option?.condition ?? "",
+  };
+}
+
+function cloneEnumOptions(options: EmailExtractor["enum_options"]) {
+  return options.map((option, index) => createEnumOption(index, option));
+}
+
+function buildEnumOptions(
+  options: Array<{ value: string; color?: string; condition?: string }>
+) {
+  return options.map((option, index) => ({
+    value: option.value.trim(),
+    color: option.color ?? TAG_COLORS[index % TAG_COLORS.length],
+    condition: option.condition?.trim() ?? "",
+  }));
+}
+
+function normalizeEnumOptionsForSave(options: EmailExtractor["enum_options"]) {
+  return buildEnumOptions(
+    options.filter((option) => option.value.trim())
+  );
+}
+
+function hasConfiguredEnumOptions(
+  options: EmailExtractor["enum_options"],
+  {
+    requireConditions = false,
+  }: {
+    requireConditions?: boolean;
+  } = {}
+) {
+  const configured = options.filter((option) => option.value.trim());
+  return (
+    configured.length > 0 &&
+    (!requireConditions || configured.every((option) => option.condition.trim()))
+  );
+}
+
+function formatEnumOptionLabel(value: string) {
+  return value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 const CATEGORY_TEMPLATES: CategoryTemplate[] = [
@@ -628,29 +701,144 @@ const CATEGORY_TEMPLATES: CategoryTemplate[] = [
     name: "email_type",
     label: "Email Type",
     description: "Classify the email into one of the provided categories based on its content and purpose.",
-    enum_values: ["welcome", "promotional", "newsletter", "cart_abandon", "winback", "transactional", "announcement", "survey", "loyalty", "seasonal", "other"],
-    enum_colors: ["#22c55e", "#ef4444", "#3b82f6", "#f97316", "#eab308", "#06b6d4", "#8b5cf6", "#ec4899", "#f59e0b", "#14b8a6", "#94a3b8"],
+    enum_options: buildEnumOptions([
+      {
+        value: "welcome",
+        color: "#22c55e",
+        condition: "Use for onboarding, welcome, sign-up confirmation, or first-purchase introduction emails.",
+      },
+      {
+        value: "promotional",
+        color: "#ef4444",
+        condition: "Use for broad sales, discounts, product pushes, or limited-time offers whose main goal is conversion.",
+      },
+      {
+        value: "newsletter",
+        color: "#3b82f6",
+        condition: "Use for recurring editorial or content-led emails focused on updates, stories, or curated reading rather than a direct sale.",
+      },
+      {
+        value: "cart_abandon",
+        color: "#f97316",
+        condition: "Use for reminders about an incomplete checkout, saved cart, or products left behind.",
+      },
+      {
+        value: "winback",
+        color: "#eab308",
+        condition: "Use for re-engagement emails aimed at inactive, lapsed, or dormant subscribers or customers.",
+      },
+      {
+        value: "transactional",
+        color: "#06b6d4",
+        condition: "Use for operational emails triggered by an account or order event, such as receipts, shipping, password resets, or confirmations.",
+      },
+      {
+        value: "announcement",
+        color: "#8b5cf6",
+        condition: "Use for product launches, major updates, news, or one-off announcements where informing is primary.",
+      },
+      {
+        value: "survey",
+        color: "#ec4899",
+        condition: "Use for feedback requests, NPS surveys, review asks, polls, or research outreach.",
+      },
+      {
+        value: "loyalty",
+        color: "#f59e0b",
+        condition: "Use for rewards, points, membership perks, VIP benefits, or retention-program communications.",
+      },
+      {
+        value: "seasonal",
+        color: "#14b8a6",
+        condition: "Use for holiday, seasonal, event-driven, or calendar-based campaigns like Black Friday, summer, or Valentine's Day.",
+      },
+      {
+        value: "other",
+        color: "#94a3b8",
+        condition: "Use only when none of the other category definitions fit clearly.",
+      },
+    ]),
   },
   {
     name: "mail_type",
     label: "Mail Type",
     description: "Classify the email as transactional or marketing.",
-    enum_values: ["transactional", "marketing"],
-    enum_colors: ["#06b6d4", "#ef4444"],
+    enum_options: buildEnumOptions([
+      {
+        value: "transactional",
+        color: "#06b6d4",
+        condition: "Use when the email is triggered by a specific user or system event and is primarily operational or informational.",
+      },
+      {
+        value: "marketing",
+        color: "#ef4444",
+        condition: "Use when the email is primarily intended to persuade, promote, nurture, or drive engagement or sales.",
+      },
+    ]),
   },
   {
     name: "funnel_stage",
     label: "Funnel Stage",
     description: "Classify which stage of the customer funnel this email targets.",
-    enum_values: ["awareness", "consideration", "conversion", "retention", "winback"],
-    enum_colors: ["#3b82f6", "#eab308", "#22c55e", "#8b5cf6", "#ef4444"],
+    enum_options: buildEnumOptions([
+      {
+        value: "awareness",
+        color: "#3b82f6",
+        condition: "Use when the email is introducing the brand, category, or problem space rather than pushing for immediate purchase.",
+      },
+      {
+        value: "consideration",
+        color: "#eab308",
+        condition: "Use when the email helps the reader evaluate options through education, comparisons, social proof, or product detail.",
+      },
+      {
+        value: "conversion",
+        color: "#22c55e",
+        condition: "Use when the email is primarily trying to drive a purchase, sign-up, checkout completion, or other direct conversion.",
+      },
+      {
+        value: "retention",
+        color: "#8b5cf6",
+        condition: "Use when the email focuses on keeping existing customers active through value, loyalty, replenishment, or ongoing usage.",
+      },
+      {
+        value: "winback",
+        color: "#ef4444",
+        condition: "Use when the email is specifically trying to reactivate or reclaim disengaged customers or subscribers.",
+      },
+    ]),
   },
   {
     name: "audience",
     label: "Audience",
     description: "Classify the intended audience segment for this email.",
-    enum_values: ["new_subscriber", "active_customer", "lapsed_customer", "vip", "general"],
-    enum_colors: ["#22c55e", "#3b82f6", "#f97316", "#8b5cf6", "#94a3b8"],
+    enum_options: buildEnumOptions([
+      {
+        value: "new_subscriber",
+        color: "#22c55e",
+        condition: "Use when the message is aimed at someone newly signed up or newly entering the list or program.",
+      },
+      {
+        value: "active_customer",
+        color: "#3b82f6",
+        condition: "Use when the message targets current engaged customers or repeat buyers.",
+      },
+      {
+        value: "lapsed_customer",
+        color: "#f97316",
+        condition: "Use when the message targets customers who have gone inactive or have not purchased recently.",
+      },
+      {
+        value: "vip",
+        color: "#8b5cf6",
+        condition: "Use when the message is clearly for high-value, premium, loyalty-tier, or exclusive members.",
+      },
+      {
+        value: "general",
+        color: "#94a3b8",
+        condition: "Use when the email appears broadly targeted and not clearly tailored to a narrower audience segment.",
+      },
+    ]),
   },
 ];
 
@@ -660,64 +848,98 @@ const EXTRACTOR_TEMPLATES: ExtractorTemplate[] = [
     label: "Offer",
     description: "Brief description of the offer/promotion. null if none.",
     value_type: "text",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
   },
   {
     name: "discount_pct",
     label: "Discount %",
     description: "Discount percentage (0-100). null if none.",
     value_type: "number",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
   },
   {
     name: "discount_codes",
     label: "Discount Codes",
     description: "Promo/discount codes mentioned in the email.",
     value_type: "text_array",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
   },
   {
     name: "products_mentioned",
     label: "Products",
     description: "Specific product names mentioned.",
     value_type: "text_array",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
   },
   {
     name: "urgency",
     label: "Urgency",
     description: "Urgency level of the email.",
     value_type: "enum",
-    enum_values: ["none", "soft", "hard"],
-    enum_colors: ["#94a3b8", "#eab308", "#ef4444"],
+    enum_options: buildEnumOptions([
+      {
+        value: "none",
+        color: "#94a3b8",
+        condition: "No meaningful time pressure, deadline, countdown, or scarcity language is present.",
+      },
+      {
+        value: "soft",
+        color: "#eab308",
+        condition: "Some time pressure or scarcity is implied, but the tone is moderate rather than forceful.",
+      },
+      {
+        value: "hard",
+        color: "#ef4444",
+        condition: "Strong urgency is explicit, such as final hours, ends tonight, low stock, or repeated deadline pressure.",
+      },
+    ]),
   },
   {
     name: "cta",
     label: "CTA",
     description: "Primary call-to-action text. null if none.",
     value_type: "text",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
   },
   {
     name: "tone",
     label: "Tone",
     description: "Overall tone of the email.",
     value_type: "enum",
-    enum_values: ["formal", "casual", "urgent", "friendly", "luxury"],
-    enum_colors: ["#3b82f6", "#22c55e", "#ef4444", "#f97316", "#8b5cf6"],
+    enum_options: buildEnumOptions([
+      {
+        value: "formal",
+        color: "#3b82f6",
+        condition: "Use when the writing is polished, reserved, professional, or corporate in style.",
+      },
+      {
+        value: "casual",
+        color: "#22c55e",
+        condition: "Use when the writing feels relaxed, conversational, or everyday.",
+      },
+      {
+        value: "urgent",
+        color: "#ef4444",
+        condition: "Use when the writing is pushy, deadline-driven, or explicitly high-pressure.",
+      },
+      {
+        value: "friendly",
+        color: "#f97316",
+        condition: "Use when the writing is warm, approachable, personable, or community-oriented.",
+      },
+      {
+        value: "luxury",
+        color: "#8b5cf6",
+        condition: "Use when the writing emphasizes exclusivity, premium positioning, aspiration, or high-end branding.",
+      },
+    ]),
   },
   {
     name: "has_unsubscribe",
     label: "Has Unsubscribe",
     description: "Whether the email contains an unsubscribe link.",
     value_type: "boolean",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
   },
 ];
 
@@ -762,6 +984,90 @@ function EnumColorDot({
   );
 }
 
+function EnumOptionsEditor({
+  options,
+  onChange,
+  requireConditions,
+}: {
+  options: EmailExtractor["enum_options"];
+  onChange: (options: EmailExtractor["enum_options"]) => void;
+  requireConditions: boolean;
+}) {
+  const updateOption = (index: number, updates: Partial<EnumOptionDraft>) => {
+    onChange(
+      options.map((option, optionIndex) =>
+        optionIndex === index ? { ...option, ...updates } : option
+      )
+    );
+  };
+
+  const addOption = () => {
+    onChange([...options, createEnumOption(options.length)]);
+  };
+
+  const removeOption = (index: number) => {
+    onChange(options.filter((_, optionIndex) => optionIndex !== index));
+  };
+
+  return (
+    <div className="space-y-2">
+      {options.map((option, index) => (
+        <div
+          key={`${option.value || "option"}-${index}`}
+          className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-2"
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              value={option.value}
+              onChange={(e) => updateOption(index, { value: e.target.value })}
+              placeholder="Token (e.g. newsletter)"
+              className="h-8 text-sm font-mono"
+            />
+            <EnumColorDot
+              color={option.color}
+              onChange={(color) => updateOption(index, { color })}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              onClick={() => removeOption(index)}
+            >
+              <Trash size={14} />
+            </Button>
+          </div>
+          <Textarea
+            value={option.condition}
+            onChange={(e) => updateOption(index, { condition: e.target.value })}
+            placeholder={
+              requireConditions
+                ? "Condition / rule used to decide when this category applies"
+                : "Optional condition / rule to help the model choose this value"
+            }
+            className="min-h-[72px] text-sm resize-y"
+          />
+        </div>
+      ))}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] text-muted-foreground">
+          These option rules are sent directly into the extraction prompt.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={addOption}
+        >
+          <Plus size={14} />
+          Add option
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ExtractorRow({
   extractor,
   onUpdate,
@@ -774,8 +1080,7 @@ function ExtractorRow({
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(extractor.label);
   const [description, setDescription] = useState(extractor.description);
-  const [enumValues, setEnumValues] = useState(extractor.enum_values.join(", "));
-  const [enumColors, setEnumColors] = useState<string[]>(extractor.enum_colors ?? []);
+  const [enumOptions, setEnumOptions] = useState(cloneEnumOptions(extractor.enum_options));
 
   const isCategory = extractor.kind === "category";
   const hasEnum = extractor.value_type === "enum" || isCategory;
@@ -783,30 +1088,11 @@ function ExtractorRow({
   const handleSave = async () => {
     const updates: Partial<EmailExtractor> = { label, description };
     if (hasEnum) {
-      const vals = enumValues
-        .split(",")
-        .map((v) => v.trim())
-        .filter(Boolean);
-      updates.enum_values = vals;
-      updates.enum_colors = enumColors.slice(0, vals.length);
+      updates.enum_options = normalizeEnumOptionsForSave(enumOptions);
     }
     await onUpdate(extractor.id, updates);
     setEditing(false);
   };
-
-  // Keep colors array in sync with values during editing
-  const parsedValues = enumValues
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
-  if (editing && hasEnum && parsedValues.length !== enumColors.length) {
-    const next = [...enumColors];
-    while (next.length < parsedValues.length) {
-      next.push(TAG_COLORS[next.length % TAG_COLORS.length]);
-    }
-    if (next.length > parsedValues.length) next.length = parsedValues.length;
-    if (next.join() !== enumColors.join()) setEnumColors(next);
-  }
 
   return (
     <div className="p-2 rounded-lg hover:bg-muted/50 transition-colors">
@@ -826,34 +1112,11 @@ function ExtractorRow({
             className="h-8 text-sm"
           />
           {hasEnum && (
-            <>
-              <Input
-                value={enumValues}
-                onChange={(e) => setEnumValues(e.target.value)}
-                placeholder="Comma-separated values"
-                className="h-8 text-sm"
-              />
-              {parsedValues.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {parsedValues.map((v, i) => (
-                    <span
-                      key={i}
-                      className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md bg-muted"
-                    >
-                      <EnumColorDot
-                        color={enumColors[i] ?? TAG_COLORS[i % TAG_COLORS.length]}
-                        onChange={(c) => {
-                          const next = [...enumColors];
-                          next[i] = c;
-                          setEnumColors(next);
-                        }}
-                      />
-                      {v}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </>
+            <EnumOptionsEditor
+              options={enumOptions}
+              onChange={setEnumOptions}
+              requireConditions={isCategory}
+            />
           )}
           <div className="flex items-center gap-2 justify-end">
             <Button
@@ -864,19 +1127,27 @@ function ExtractorRow({
                 setEditing(false);
                 setLabel(extractor.label);
                 setDescription(extractor.description);
-                setEnumValues(extractor.enum_values.join(", "));
-                setEnumColors(extractor.enum_colors ?? []);
+                setEnumOptions(cloneEnumOptions(extractor.enum_options));
               }}
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSave}>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={
+                hasEnum &&
+                !hasConfiguredEnumOptions(enumOptions, {
+                  requireConditions: isCategory,
+                })
+              }
+            >
               Save
             </Button>
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground truncate">
@@ -886,28 +1157,37 @@ function ExtractorRow({
                 {extractor.value_type}
               </span>
             </div>
-            {hasEnum && extractor.enum_values.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {extractor.enum_values.map((v, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: (extractor.enum_colors?.[i] ?? TAG_COLORS[i % TAG_COLORS.length]) + "1a",
-                      color: extractor.enum_colors?.[i] ?? TAG_COLORS[i % TAG_COLORS.length],
-                    }}
+            {hasEnum && extractor.enum_options.length > 0 && (
+              <div className="space-y-1.5 mt-1.5">
+                {extractor.enum_options.map((option) => (
+                  <div
+                    key={option.value}
+                    className="flex items-start gap-2"
                   >
                     <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{ backgroundColor: extractor.enum_colors?.[i] ?? TAG_COLORS[i % TAG_COLORS.length] }}
-                    />
-                    {v}
-                  </span>
+                      className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: option.color + "1a",
+                        color: option.color,
+                      }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{ backgroundColor: option.color }}
+                      />
+                      {formatEnumOptionLabel(option.value)}
+                    </span>
+                    {option.condition && (
+                      <p className="text-[11px] text-muted-foreground leading-relaxed pt-0.5">
+                        {option.condition}
+                      </p>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
-            {extractor.description && !hasEnum && (
-              <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {extractor.description && (
+              <p className="text-xs text-muted-foreground mt-1">
                 {extractor.description}
               </p>
             )}
@@ -945,8 +1225,9 @@ function CategoriesSection({ projectId }: { projectId: string }) {
   const [newName, setNewName] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [newEnumValues, setNewEnumValues] = useState("");
-  const [newEnumColors, setNewEnumColors] = useState<string[]>([]);
+  const [newEnumOptions, setNewEnumOptions] = useState<EmailExtractor["enum_options"]>([
+    createEnumOption(0),
+  ]);
   const [creating, setCreating] = useState(false);
 
   const closeNewForm = () => {
@@ -954,16 +1235,14 @@ function CategoriesSection({ projectId }: { projectId: string }) {
     setNewName("");
     setNewLabel("");
     setNewDescription("");
-    setNewEnumValues("");
-    setNewEnumColors([]);
+    setNewEnumOptions([createEnumOption(0)]);
   };
 
   const applyTemplate = (t: CategoryTemplate) => {
     setNewName(t.name);
     setNewLabel(t.label);
     setNewDescription(t.description);
-    setNewEnumValues(t.enum_values.join(", "));
-    setNewEnumColors(t.enum_colors);
+    setNewEnumOptions(cloneEnumOptions(t.enum_options));
     setNewMode("form");
   };
 
@@ -986,15 +1265,9 @@ function CategoriesSection({ projectId }: { projectId: string }) {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newLabel.trim() || !newEnumValues.trim()) return;
+    if (!newName.trim() || !newLabel.trim() || !hasConfiguredEnumOptions(newEnumOptions, { requireConditions: true })) return;
     setCreating(true);
     try {
-      const vals = newEnumValues
-        .split(",")
-        .map((v) => v.trim())
-        .filter(Boolean);
-      // Ensure colors array matches values length
-      const colors = vals.map((_, i) => newEnumColors[i] ?? TAG_COLORS[i % TAG_COLORS.length]);
       const { extractor } = await api.post<{ extractor: EmailExtractor }>(
         `/api/projects/${projectId}/extractors`,
         {
@@ -1003,8 +1276,7 @@ function CategoriesSection({ projectId }: { projectId: string }) {
           label: newLabel.trim(),
           description: newDescription.trim(),
           value_type: "enum",
-          enum_values: vals,
-          enum_colors: colors,
+          enum_options: normalizeEnumOptionsForSave(newEnumOptions),
         }
       );
       setCategories((prev) => [...prev, extractor]);
@@ -1065,7 +1337,7 @@ function CategoriesSection({ projectId }: { projectId: string }) {
                   >
                     <div className="text-sm font-medium text-foreground">{t.label}</div>
                     <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                      {t.enum_values.join(", ")}
+                      {t.enum_options.map((option) => option.value).join(", ")}
                     </div>
                   </button>
                 ))}
@@ -1116,36 +1388,11 @@ function CategoriesSection({ projectId }: { projectId: string }) {
                 placeholder="AI instruction (e.g. 'Classify the email type')"
                 className="h-8 text-sm"
               />
-              <Input
-                value={newEnumValues}
-                onChange={(e) => setNewEnumValues(e.target.value)}
-                placeholder="Comma-separated values (e.g. promotional, newsletter, transactional)"
-                className="h-8 text-sm"
+              <EnumOptionsEditor
+                options={newEnumOptions}
+                onChange={setNewEnumOptions}
+                requireConditions={true}
               />
-              {(() => {
-                const vals = newEnumValues.split(",").map((v) => v.trim()).filter(Boolean);
-                return vals.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {vals.map((v, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md bg-muted"
-                      >
-                        <EnumColorDot
-                          color={newEnumColors[i] ?? TAG_COLORS[i % TAG_COLORS.length]}
-                          onChange={(c) => {
-                            const next = [...newEnumColors];
-                            while (next.length <= i) next.push(TAG_COLORS[next.length % TAG_COLORS.length]);
-                            next[i] = c;
-                            setNewEnumColors(next);
-                          }}
-                        />
-                        {v}
-                      </span>
-                    ))}
-                  </div>
-                ) : null;
-              })()}
               <div className="flex items-center gap-2 justify-end">
                 <Button
                   type="button"
@@ -1162,7 +1409,7 @@ function CategoriesSection({ projectId }: { projectId: string }) {
                     creating ||
                     !newName.trim() ||
                     !newLabel.trim() ||
-                    !newEnumValues.trim()
+                    !hasConfiguredEnumOptions(newEnumOptions, { requireConditions: true })
                   }
                 >
                   {creating ? "Creating..." : "Create"}
@@ -1217,8 +1464,9 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
   const [newLabel, setNewLabel] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newValueType, setNewValueType] = useState("text");
-  const [newEnumValues, setNewEnumValues] = useState("");
-  const [newEnumColors, setNewEnumColors] = useState<string[]>([]);
+  const [newEnumOptions, setNewEnumOptions] = useState<EmailExtractor["enum_options"]>([
+    createEnumOption(0),
+  ]);
   const [creating, setCreating] = useState(false);
 
   const closeNewForm = () => {
@@ -1227,8 +1475,7 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
     setNewLabel("");
     setNewDescription("");
     setNewValueType("text");
-    setNewEnumValues("");
-    setNewEnumColors([]);
+    setNewEnumOptions([createEnumOption(0)]);
   };
 
   const applyTemplate = (t: ExtractorTemplate) => {
@@ -1236,8 +1483,7 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
     setNewLabel(t.label);
     setNewDescription(t.description);
     setNewValueType(t.value_type);
-    setNewEnumValues(t.enum_values.join(", "));
-    setNewEnumColors(t.enum_colors);
+    setNewEnumOptions(cloneEnumOptions(t.enum_options));
     setNewMode("form");
   };
 
@@ -1263,11 +1509,6 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
     if (!newName.trim() || !newLabel.trim()) return;
     setCreating(true);
     try {
-      const vals =
-        newValueType === "enum"
-          ? newEnumValues.split(",").map((v) => v.trim()).filter(Boolean)
-          : [];
-      const colors = vals.map((_, i) => newEnumColors[i] ?? TAG_COLORS[i % TAG_COLORS.length]);
       const { extractor } = await api.post<{ extractor: EmailExtractor }>(
         `/api/projects/${projectId}/extractors`,
         {
@@ -1275,8 +1516,7 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
           label: newLabel.trim(),
           description: newDescription.trim(),
           value_type: newValueType,
-          enum_values: vals,
-          enum_colors: colors,
+          enum_options: newValueType === "enum" ? normalizeEnumOptionsForSave(newEnumOptions) : [],
         }
       );
       setExtractors((prev) => [...prev, extractor]);
@@ -1339,7 +1579,7 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
                   >
                     <div className="text-sm font-medium text-foreground">{t.label}</div>
                     <div className="text-[11px] text-muted-foreground mt-0.5">
-                      {t.value_type}{t.enum_values.length > 0 ? `: ${t.enum_values.join(", ")}` : ""}
+                      {t.value_type}{t.enum_options.length > 0 ? `: ${t.enum_options.map((option) => option.value).join(", ")}` : ""}
                     </div>
                   </button>
                 ))}
@@ -1403,11 +1643,10 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
                 className="h-8 text-sm"
               />
               {newValueType === "enum" && (
-                <Input
-                  value={newEnumValues}
-                  onChange={(e) => setNewEnumValues(e.target.value)}
-                  placeholder="Comma-separated enum values (e.g. none, soft, hard)"
-                  className="h-8 text-sm"
+                <EnumOptionsEditor
+                  options={newEnumOptions}
+                  onChange={setNewEnumOptions}
+                  requireConditions={false}
                 />
               )}
               <div className="flex items-center gap-2 justify-end">
@@ -1422,7 +1661,12 @@ function ExtractorsSection({ projectId }: { projectId: string }) {
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={creating || !newName.trim() || !newLabel.trim()}
+                  disabled={
+                    creating ||
+                    !newName.trim() ||
+                    !newLabel.trim() ||
+                    (newValueType === "enum" && !hasConfiguredEnumOptions(newEnumOptions))
+                  }
                 >
                   {creating ? "Creating..." : "Create"}
                 </Button>

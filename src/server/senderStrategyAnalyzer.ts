@@ -34,10 +34,19 @@ function buildExtractionPrompt(extractors: EmailExtractorRow[]): string {
   const schemaLines: string[] = ['"email_id": "the id"'];
   const ruleLines: string[] = [];
 
+  const describeOptions = (name: string, options: EmailExtractorRow["enum_options"]) => {
+    ruleLines.push(`- "${name}" option rules:`);
+    for (const option of options) {
+      ruleLines.push(`  - "${option.value}": ${option.condition || `Use when the value is best described as ${option.value}.`}`);
+    }
+  };
+
   for (const category of categories) {
-    const vals = category.enum_values.join("|");
+    const vals = category.enum_options.map((option) => option.value).join("|");
     schemaLines.push(`"${category.name}": "${vals}"`);
     if (category.description) ruleLines.push(`- "${category.name}": ${category.description}`);
+    ruleLines.push(`- "${category.name}" must use exactly one of these tokens: ${vals}`);
+    describeOptions(category.name, category.enum_options);
   }
 
   for (const f of fields) {
@@ -56,13 +65,17 @@ function buildExtractionPrompt(extractors: EmailExtractorRow[]): string {
         typeHint = "boolean";
         break;
       case "enum":
-        typeHint = f.enum_values.join("|");
+        typeHint = f.enum_options.map((option) => option.value).join("|");
         break;
       default:
         typeHint = "any";
     }
     schemaLines.push(`"${f.name}": ${typeHint}`);
     if (f.description) ruleLines.push(`- "${f.name}": ${f.description}`);
+    if (f.value_type === "enum") {
+      ruleLines.push(`- "${f.name}" must use one of these exact tokens: ${typeHint}`);
+      describeOptions(f.name, f.enum_options);
+    }
   }
 
   return `You are an email marketing analyzer. Given a batch of emails, extract structured data from each one.
@@ -74,12 +87,110 @@ Return ONLY a valid JSON array with one object per email, in the same order as i
 
 Rules:
 ${ruleLines.join("\n")}
+- For category fields, apply the option rules literally and choose the single best match. If nothing fits clearly and "other" exists, use "other".
 - Be precise and factual. Only extract what you can determine from the content.`;
 }
 
 interface ExtractionResult {
   email_id: string;
   [key: string]: any;
+}
+
+function normalizeEnumToken(value: string | null | undefined): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function findEnumOption(
+  options: EmailExtractorRow["enum_options"],
+  rawValue: unknown
+) {
+  if (typeof rawValue !== "string") return null;
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+  const normalized = normalizeEnumToken(trimmed);
+  return (
+    options.find((option) => option.value === trimmed)
+    ?? options.find((option) => normalizeEnumToken(option.value) === normalized)
+    ?? null
+  );
+}
+
+function coerceBooleanValue(rawValue: unknown): boolean | null {
+  if (typeof rawValue === "boolean") return rawValue;
+  if (typeof rawValue !== "string") return null;
+  const normalized = rawValue.trim().toLowerCase();
+  if (["true", "yes", "y", "1"].includes(normalized)) return true;
+  if (["false", "no", "n", "0"].includes(normalized)) return false;
+  return null;
+}
+
+function coerceNumberValue(rawValue: unknown): number | null {
+  if (typeof rawValue === "number" && Number.isFinite(rawValue)) return rawValue;
+  if (typeof rawValue !== "string" || !rawValue.trim()) return null;
+  const parsed = Number(rawValue.trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function coerceTextArrayValue(rawValue: unknown): string[] {
+  if (!Array.isArray(rawValue)) return [];
+  return rawValue
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter(Boolean);
+}
+
+function sanitizeExtractionData(
+  rawData: Record<string, any>,
+  extractors: EmailExtractorRow[]
+) {
+  const sanitized: Record<string, any> = {};
+
+  for (const extractor of extractors) {
+    const rawValue = rawData[extractor.name];
+
+    switch (extractor.value_type) {
+      case "text": {
+        if (typeof rawValue === "string" && rawValue.trim()) {
+          sanitized[extractor.name] = rawValue.trim();
+        } else {
+          sanitized[extractor.name] = null;
+        }
+        break;
+      }
+      case "text_array": {
+        sanitized[extractor.name] = coerceTextArrayValue(rawValue);
+        break;
+      }
+      case "number": {
+        sanitized[extractor.name] = coerceNumberValue(rawValue);
+        break;
+      }
+      case "boolean": {
+        sanitized[extractor.name] = coerceBooleanValue(rawValue);
+        break;
+      }
+      case "enum": {
+        const matched = findEnumOption(extractor.enum_options, rawValue);
+        const fallbackOther = extractor.enum_options.find((option) => option.value === "other") ?? null;
+        if (matched) {
+          sanitized[extractor.name] = matched.value;
+        } else if (extractor.kind === "category" && fallbackOther) {
+          sanitized[extractor.name] = fallbackOther.value;
+        } else {
+          sanitized[extractor.name] = null;
+        }
+        break;
+      }
+      default: {
+        sanitized[extractor.name] = rawValue ?? null;
+      }
+    }
+  }
+
+  return sanitized;
 }
 
 function sanitizeImageUrl(raw: string): string | null {
@@ -230,14 +341,18 @@ export async function extractSenderEmails(
         const extractions = await extractBatch(batch, systemPrompt);
         const rows = extractions.map((e) => {
           const { email_id, ...rest } = e;
+          const sanitizedData = sanitizeExtractionData(rest, enabled);
           // Primary category goes into the dedicated column
-          const categoryValue = rest[primaryCategoryName] ?? null;
+          const categoryValue =
+            typeof sanitizedData[primaryCategoryName] === "string"
+              ? sanitizedData[primaryCategoryName]
+              : null;
           return {
             email_id,
             project_id: projectId,
             sender_id: senderId,
             category: categoryValue,
-            data: rest,
+            data: sanitizedData,
             model: EXTRACTION_MODEL,
             extracted_at: new Date().toISOString(),
           };
@@ -291,13 +406,17 @@ export async function extractAllProjectEmails(
         const extractions = await extractBatch(batch, systemPrompt);
         const rows = extractions.map((e) => {
           const { email_id, ...rest } = e;
-          const categoryValue = rest[primaryCategoryName] ?? null;
+          const sanitizedData = sanitizeExtractionData(rest, enabled);
+          const categoryValue =
+            typeof sanitizedData[primaryCategoryName] === "string"
+              ? sanitizedData[primaryCategoryName]
+              : null;
           return {
             email_id,
             project_id: projectId,
             sender_id: null,
             category: categoryValue,
-            data: rest,
+            data: sanitizedData,
             model: EXTRACTION_MODEL,
             extracted_at: new Date().toISOString(),
           };

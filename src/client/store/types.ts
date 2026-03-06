@@ -85,6 +85,12 @@ export interface EmailExtraction {
   extracted_at: string;
 }
 
+export interface EmailExtractorEnumOption {
+  value: string;
+  color: string;
+  condition: string;
+}
+
 export interface EmailExtractor {
   id: string;
   kind: "category" | "extractor";
@@ -92,8 +98,7 @@ export interface EmailExtractor {
   label: string;
   description: string;
   value_type: "text" | "text_array" | "number" | "boolean" | "enum";
-  enum_values: string[];
-  enum_colors: string[];
+  enum_options: EmailExtractorEnumOption[];
   required: boolean;
   sort_order: number;
   enabled: boolean;
@@ -191,6 +196,8 @@ export type StoreAction =
   // Connection
   | { type: "ws:connected" }
   | { type: "ws:disconnected" }
+  // Email
+  | { type: "email:set-read-at"; emailId: string; readAt: string | null }
   // Chat
   | { type: "chat:set-sessions"; sessions: ChatSession[] }
   | { type: "chat:load-session"; sessionId: string }

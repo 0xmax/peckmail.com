@@ -8,6 +8,18 @@ const PROJECT_EMAIL_TYPE_SET = new Set<string>(PROJECT_EMAIL_TYPES);
 const INCOMING_EMAIL_STATUSES = ["received", "processing", "processed", "failed"] as const;
 const INCOMING_EMAIL_STATUS_SET = new Set<string>(INCOMING_EMAIL_STATUSES);
 const EMAIL_TAG_COLOR_REGEX = /^#[0-9a-f]{6}$/i;
+const EMAIL_ENUM_OPTION_VALUE_REGEX = /^[a-z][a-z0-9_]*$/;
+const EMAIL_ENUM_OPTION_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#06b6d4",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
+  "#94a3b8",
+] as const;
 
 export type ProjectEmailType = (typeof PROJECT_EMAIL_TYPES)[number];
 export type IncomingEmailStatus = (typeof INCOMING_EMAIL_STATUSES)[number];
@@ -106,6 +118,12 @@ export interface ProjectIncomingEmailSummary {
   tags: IncomingEmailTagSummary[];
 }
 
+export interface ProjectEmailStats {
+  total: number;
+  unread: number;
+  last_received_at: string | null;
+}
+
 export interface InboundEmailRetryCandidate {
   id: string;
   project_id: string;
@@ -145,6 +163,77 @@ function normalizeEmailTagColor(color: string): string {
     throw new Error("Tag color must be a hex code like #c4956a");
   }
   return normalized;
+}
+
+function normalizeEmailEnumOptionValue(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!EMAIL_ENUM_OPTION_VALUE_REGEX.test(normalized)) {
+    throw new Error("Enum option values must be slug tokens like promotional or cart_abandon");
+  }
+  return normalized;
+}
+
+export interface EmailExtractorEnumOption {
+  value: string;
+  color: string;
+  condition: string;
+}
+
+function normalizeEmailExtractorEnumOptions(
+  options: Array<{ value: string; color?: string; condition?: string }> | undefined,
+  {
+    expectsOptions,
+    requiresConditions,
+  }: {
+    expectsOptions: boolean;
+    requiresConditions: boolean;
+  }
+): EmailExtractorEnumOption[] {
+  const normalizedOptions = (options ?? [])
+    .map((option, index) => ({
+      value: normalizeEmailEnumOptionValue(option.value),
+      color: normalizeEmailTagColor(
+        option.color ?? EMAIL_ENUM_OPTION_COLORS[index % EMAIL_ENUM_OPTION_COLORS.length]
+      ),
+      condition: option.condition?.trim() ?? "",
+    }));
+
+  const seen = new Set<string>();
+  for (const option of normalizedOptions) {
+    if (seen.has(option.value)) {
+      throw new Error(`Duplicate enum option value: ${option.value}`);
+    }
+    if (requiresConditions && !option.condition) {
+      throw new Error(`Category option "${option.value}" must include a condition`);
+    }
+    seen.add(option.value);
+  }
+
+  if (expectsOptions && normalizedOptions.length === 0) {
+    throw new Error("Enum extractors and categories must define at least one enum option");
+  }
+
+  if (!expectsOptions && normalizedOptions.length > 0) {
+    throw new Error("Only enum extractors and categories can define enum options");
+  }
+
+  return normalizedOptions;
+}
+
+function buildEnumOptions(
+  options: Array<{ value: string; color?: string; condition?: string }>
+): EmailExtractorEnumOption[] {
+  return options.map((option, index) => ({
+    value: normalizeEmailEnumOptionValue(option.value),
+    color: normalizeEmailTagColor(
+      option.color ?? EMAIL_ENUM_OPTION_COLORS[index % EMAIL_ENUM_OPTION_COLORS.length]
+    ),
+    condition: option.condition?.trim() ?? "",
+  }));
 }
 
 function normalizeSearchTerm(value: unknown): string | null {
@@ -885,6 +974,42 @@ export async function listProjectIncomingEmailSummaries(
   };
 }
 
+export async function getProjectEmailStats(
+  projectId: string
+): Promise<ProjectEmailStats> {
+  const [totalRes, unreadRes, lastRes] = await Promise.all([
+    supabaseAdmin
+      .from("incoming_emails")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .is("deleted_at", null),
+    supabaseAdmin
+      .from("incoming_emails")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .is("read_at", null),
+    supabaseAdmin
+      .from("incoming_emails")
+      .select("created_at")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (totalRes.error) throw totalRes.error;
+  if (unreadRes.error) throw unreadRes.error;
+  if (lastRes.error) throw lastRes.error;
+
+  return {
+    total: totalRes.count ?? 0,
+    unread: unreadRes.count ?? 0,
+    last_received_at: lastRes.data?.created_at ?? null,
+  };
+}
+
 export async function listSenderEmails(
   projectId: string,
   senderId: string,
@@ -1478,9 +1603,28 @@ export interface SenderDailyStatsRow {
   email_count: number;
 }
 
+export interface SenderOverviewStats {
+  total: number;
+  first_email_at: string | null;
+  latest_email_at: string | null;
+  tag_counts: { id: string; name: string; color: string; count: number }[];
+  category_breakdowns: {
+    category_id: string;
+    category_name: string;
+    category_label: string;
+    category_order: number;
+    value_id: string;
+    value_label: string;
+    color: string;
+    count: number;
+  }[];
+}
+
 export async function getSenderDailyStats(
   projectId: string
 ): Promise<SenderDailyStatsRow[]> {
+  await refreshSenderDailyStats(projectId);
+
   // Get sender IDs for this project
   const { data: senders, error: sErr } = await supabaseAdmin
     .from("email_senders")
@@ -1503,6 +1647,26 @@ export async function getSenderDailyStats(
 
   if (error) throw error;
   return (data ?? []) as SenderDailyStatsRow[];
+}
+
+export async function getSenderOverviewStats(
+  projectId: string,
+  senderId: string
+): Promise<SenderOverviewStats> {
+  const { data, error } = await supabaseAdmin.rpc("get_sender_overview_stats", {
+    p_project_id: projectId,
+    p_sender_id: senderId,
+  });
+  if (error) throw error;
+  return (
+    (data as SenderOverviewStats | null) ?? {
+      total: 0,
+      first_email_at: null,
+      latest_email_at: null,
+      tag_counts: [],
+      category_breakdowns: [],
+    }
+  );
 }
 
 export interface SenderProfileRow {
@@ -1732,8 +1896,19 @@ export async function getLatestEmailForDomain(
 // --- Dashboard Aggregates ---
 
 export interface DashboardStats {
-  kpis: { total: number; unread: number; processed: number; failed: number };
+  kpis: { total: number; unread: number; processed: number; failed: number; sender_count: number };
   tag_daily: { date: string; tag_id: string; tag_name: string; tag_color: string; count: number }[];
+  category_breakdowns: {
+    category_id: string;
+    category_name: string;
+    category_label: string;
+    category_order: number;
+    value_id: string;
+    value_label: string;
+    color: string;
+    count: number;
+  }[];
+  daily_volume: { date: string; count: number }[];
   top_domains: { domain: string; count: number; latest_date: string }[];
   activity_grid: { date: string; count: number }[];
   recent_emails: {
@@ -1774,8 +1949,7 @@ export interface EmailExtractorRow {
   label: string;
   description: string;
   value_type: "text" | "text_array" | "number" | "boolean" | "enum";
-  enum_values: string[];
-  enum_colors: string[];
+  enum_options: EmailExtractorEnumOption[];
   required: boolean;
   sort_order: number;
   enabled: boolean;
@@ -1841,12 +2015,19 @@ export async function createProjectExtractor(params: {
   label: string;
   description?: string;
   value_type: string;
-  enum_values?: string[];
-  enum_colors?: string[];
+  enum_options?: Array<{ value: string; color?: string; condition?: string }>;
   required?: boolean;
   sort_order?: number;
   enabled?: boolean;
 }): Promise<EmailExtractorRow> {
+  if (params.kind === "category" && params.value_type !== "enum") {
+    throw new Error("Categories must use enum value_type");
+  }
+  const requiresEnumOptions = params.kind === "category" || params.value_type === "enum";
+  const enumOptions = normalizeEmailExtractorEnumOptions(params.enum_options, {
+    expectsOptions: requiresEnumOptions,
+    requiresConditions: params.kind === "category",
+  });
   const { data, error } = await supabaseAdmin
     .from("email_extractors")
     .insert({
@@ -1856,8 +2037,7 @@ export async function createProjectExtractor(params: {
       label: params.label,
       description: params.description ?? "",
       value_type: params.value_type,
-      enum_values: params.enum_values ?? [],
-      enum_colors: params.enum_colors ?? [],
+      enum_options: enumOptions,
       required: params.required ?? false,
       sort_order: params.sort_order ?? 0,
       enabled: params.enabled ?? true,
@@ -1873,13 +2053,30 @@ export async function updateProjectExtractor(
   updates: Partial<
     Pick<
       EmailExtractorRow,
-      "label" | "description" | "enum_values" | "enum_colors" | "required" | "sort_order" | "enabled"
+      "label" | "description" | "enum_options" | "required" | "sort_order" | "enabled"
     >
   >
 ): Promise<EmailExtractorRow> {
+  const updatePayload: Record<string, unknown> = { ...updates };
+  if (updates.enum_options !== undefined) {
+    const { data: current, error: currentError } = await supabaseAdmin
+      .from("email_extractors")
+      .select("kind, value_type")
+      .eq("id", extractorId)
+      .is("deleted_at", null)
+      .single();
+    if (currentError) throw currentError;
+    updatePayload.enum_options = normalizeEmailExtractorEnumOptions(
+      updates.enum_options,
+      {
+        expectsOptions: current.kind === "category" || current.value_type === "enum",
+        requiresConditions: current.kind === "category",
+      }
+    );
+  }
   const { data, error } = await supabaseAdmin
     .from("email_extractors")
-    .update(updates)
+    .update(updatePayload)
     .eq("id", extractorId)
     .is("deleted_at", null)
     .select("*")
@@ -1910,32 +2107,63 @@ const DEFAULT_EXTRACTORS: Omit<
     description:
       "Classify the email into one of the provided categories based on its content and purpose.",
     value_type: "enum",
-    enum_values: [
-      "welcome",
-      "promotional",
-      "newsletter",
-      "cart_abandon",
-      "winback",
-      "transactional",
-      "announcement",
-      "survey",
-      "loyalty",
-      "seasonal",
-      "other",
-    ],
-    enum_colors: [
-      "#22c55e",
-      "#ef4444",
-      "#3b82f6",
-      "#f97316",
-      "#eab308",
-      "#06b6d4",
-      "#8b5cf6",
-      "#ec4899",
-      "#f59e0b",
-      "#14b8a6",
-      "#94a3b8",
-    ],
+    enum_options: buildEnumOptions([
+      {
+        value: "welcome",
+        color: "#22c55e",
+        condition: "Use for onboarding, welcome, sign-up confirmation, or first-purchase introduction emails.",
+      },
+      {
+        value: "promotional",
+        color: "#ef4444",
+        condition: "Use for broad sales, discounts, product pushes, or limited-time offers whose main goal is conversion.",
+      },
+      {
+        value: "newsletter",
+        color: "#3b82f6",
+        condition: "Use for recurring editorial or content-led emails focused on updates, stories, or curated reading rather than a direct sale.",
+      },
+      {
+        value: "cart_abandon",
+        color: "#f97316",
+        condition: "Use for reminders about an incomplete checkout, saved cart, or products left behind.",
+      },
+      {
+        value: "winback",
+        color: "#eab308",
+        condition: "Use for re-engagement emails aimed at inactive, lapsed, or dormant subscribers or customers.",
+      },
+      {
+        value: "transactional",
+        color: "#06b6d4",
+        condition: "Use for operational emails triggered by an account or order event, such as receipts, shipping, password resets, or confirmations.",
+      },
+      {
+        value: "announcement",
+        color: "#8b5cf6",
+        condition: "Use for product launches, major updates, news, or one-off announcements where informing is primary.",
+      },
+      {
+        value: "survey",
+        color: "#ec4899",
+        condition: "Use for feedback requests, NPS surveys, review asks, polls, or research outreach.",
+      },
+      {
+        value: "loyalty",
+        color: "#f59e0b",
+        condition: "Use for rewards, points, membership perks, VIP benefits, or retention-program communications.",
+      },
+      {
+        value: "seasonal",
+        color: "#14b8a6",
+        condition: "Use for holiday, seasonal, event-driven, or calendar-based campaigns like Black Friday, summer, or Valentine's Day.",
+      },
+      {
+        value: "other",
+        color: "#94a3b8",
+        condition: "Use only when none of the other category definitions fit clearly.",
+      },
+    ]),
     required: true,
     sort_order: 0,
     enabled: true,
@@ -1946,8 +2174,18 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "Mail Type",
     description: "Classify the email as transactional or marketing.",
     value_type: "enum",
-    enum_values: ["transactional", "marketing"],
-    enum_colors: ["#06b6d4", "#ef4444"],
+    enum_options: buildEnumOptions([
+      {
+        value: "transactional",
+        color: "#06b6d4",
+        condition: "Use when the email is triggered by a specific user or system event and is primarily operational or informational.",
+      },
+      {
+        value: "marketing",
+        color: "#ef4444",
+        condition: "Use when the email is primarily intended to persuade, promote, nurture, or drive engagement or sales.",
+      },
+    ]),
     required: true,
     sort_order: 1,
     enabled: true,
@@ -1958,8 +2196,7 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "Offer",
     description: "Brief description of the offer/promotion. null if none.",
     value_type: "text",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
     required: false,
     sort_order: 10,
     enabled: true,
@@ -1970,8 +2207,7 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "Discount %",
     description: "Discount percentage (0-100). null if none.",
     value_type: "number",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
     required: false,
     sort_order: 11,
     enabled: true,
@@ -1982,8 +2218,7 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "Discount Codes",
     description: "Promo/discount codes mentioned in the email.",
     value_type: "text_array",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
     required: false,
     sort_order: 12,
     enabled: true,
@@ -1994,8 +2229,7 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "Products",
     description: "Specific product names mentioned.",
     value_type: "text_array",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
     required: false,
     sort_order: 13,
     enabled: true,
@@ -2006,8 +2240,23 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "Urgency",
     description: "Urgency level of the email.",
     value_type: "enum",
-    enum_values: ["none", "soft", "hard"],
-    enum_colors: ["#94a3b8", "#eab308", "#ef4444"],
+    enum_options: buildEnumOptions([
+      {
+        value: "none",
+        color: "#94a3b8",
+        condition: "No meaningful time pressure, deadline, countdown, or scarcity language is present.",
+      },
+      {
+        value: "soft",
+        color: "#eab308",
+        condition: "Some time pressure or scarcity is implied, but the tone is moderate rather than forceful.",
+      },
+      {
+        value: "hard",
+        color: "#ef4444",
+        condition: "Strong urgency is explicit, such as final hours, ends tonight, low stock, or repeated deadline pressure.",
+      },
+    ]),
     required: false,
     sort_order: 14,
     enabled: true,
@@ -2018,8 +2267,7 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "CTA",
     description: "Primary call-to-action text. null if none.",
     value_type: "text",
-    enum_values: [],
-    enum_colors: [],
+    enum_options: [],
     required: false,
     sort_order: 15,
     enabled: true,
@@ -2030,8 +2278,33 @@ const DEFAULT_EXTRACTORS: Omit<
     label: "Tone",
     description: "Overall tone of the email.",
     value_type: "enum",
-    enum_values: ["formal", "casual", "urgent", "friendly", "luxury"],
-    enum_colors: ["#3b82f6", "#22c55e", "#ef4444", "#f97316", "#8b5cf6"],
+    enum_options: buildEnumOptions([
+      {
+        value: "formal",
+        color: "#3b82f6",
+        condition: "Use when the writing is polished, reserved, professional, or corporate in style.",
+      },
+      {
+        value: "casual",
+        color: "#22c55e",
+        condition: "Use when the writing feels relaxed, conversational, or everyday.",
+      },
+      {
+        value: "urgent",
+        color: "#ef4444",
+        condition: "Use when the writing is pushy, deadline-driven, or explicitly high-pressure.",
+      },
+      {
+        value: "friendly",
+        color: "#f97316",
+        condition: "Use when the writing is warm, approachable, personable, or community-oriented.",
+      },
+      {
+        value: "luxury",
+        color: "#8b5cf6",
+        condition: "Use when the writing emphasizes exclusivity, premium positioning, aspiration, or high-end branding.",
+      },
+    ]),
     required: false,
     sort_order: 16,
     enabled: true,

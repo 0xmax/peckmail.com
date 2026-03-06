@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext.js";
-import { useIncomingEmails, useProjectId, useHasMoreEmails, useLoadingMoreEmails, useLoadMoreEmails } from "../store/StoreContext.js";
+import {
+  useIncomingEmails,
+  useProjectId,
+  useHasMoreEmails,
+  useLoadingMoreEmails,
+  useLoadMoreEmails,
+  useStoreDispatch,
+} from "../store/StoreContext.js";
 import { api } from "../lib/api.js";
 import {
   Tray,
@@ -18,7 +25,7 @@ import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
-import type { IncomingEmail, EmailExtractor } from "../store/types.js";
+import type { IncomingEmail, EmailExtractor, EmailExtractorEnumOption } from "../store/types.js";
 import { EmailIframe } from "./EmailIframe.js";
 import { TAG_COLORS } from "../lib/presets.js";
 
@@ -76,6 +83,55 @@ function formatFullDate(iso: string) {
   });
 }
 
+function normalizeEnumToken(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function enumFallbackIndex(value: string) {
+  return Array.from(normalizeEnumToken(value)).reduce(
+    (sum, char) => sum + char.charCodeAt(0),
+    0
+  ) % TAG_COLORS.length;
+}
+
+function formatEnumLabel(value: string) {
+  const normalized = normalizeEnumToken(value);
+  if (!normalized) return value;
+  return normalized
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function resolveEnumOption(
+  options: EmailExtractorEnumOption[],
+  value: string
+) {
+  const normalizedValue = normalizeEnumToken(value);
+  const exactMatch = options.find((option) => option.value === value);
+  if (exactMatch) {
+    return { value: exactMatch.value, color: exactMatch.color, label: formatEnumLabel(exactMatch.value) };
+  }
+
+  const normalizedMatch = options.find(
+    (option) => normalizeEnumToken(option.value) === normalizedValue
+  );
+  if (normalizedMatch) {
+    return { value: normalizedMatch.value, color: normalizedMatch.color, label: formatEnumLabel(normalizedMatch.value) };
+  }
+
+  const canonicalValue = normalizedValue || value;
+  return {
+    value: canonicalValue,
+    color: TAG_COLORS[enumFallbackIndex(canonicalValue)],
+    label: formatEnumLabel(canonicalValue),
+  };
+}
+
 // --- Components ---
 
 function EmailListItem({
@@ -90,7 +146,7 @@ function EmailListItem({
   extractors: EmailExtractor[];
 }) {
   const ref = useRef<HTMLButtonElement>(null);
-  const isUnread = email.status === "received";
+  const isUnread = !email.read_at;
   const senderName = extractSenderName(email.from_address);
   const initial = senderName[0]?.toUpperCase() || "?";
 
@@ -203,22 +259,21 @@ function EmailListItem({
             for (const cat of cats) {
               const val = email.extraction_data[cat.name];
               if (!val) continue;
-              const idx = cat.enum_values.indexOf(val);
-              const color = cat.enum_colors?.[idx] ?? TAG_COLORS[(idx >= 0 ? idx : 0) % TAG_COLORS.length];
+              const option = resolveEnumOption(cat.enum_options, String(val));
               catChips.push(
                 <span
                   key={"cat-" + cat.name}
                   className="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded-full font-medium"
                   style={{
-                    backgroundColor: color + "1a",
-                    color,
+                    backgroundColor: option.color + "1a",
+                    color: option.color,
                   }}
                 >
                   <span
                     className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: color }}
+                    style={{ backgroundColor: option.color }}
                   />
-                  {val}
+                  {option.label}
                 </span>
               );
             }
@@ -318,16 +373,15 @@ function EmailDetailPanel({
                     {data && cats.map((cat) => {
                       const val = data[cat.name];
                       if (!val) return null;
-                      const idx = cat.enum_values.indexOf(val);
-                      const color = cat.enum_colors?.[idx] ?? TAG_COLORS[(idx >= 0 ? idx : 0) % TAG_COLORS.length];
+                      const option = resolveEnumOption(cat.enum_options, String(val));
                       return (
                         <span
                           key={"cat-" + cat.name}
                           className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium"
-                          style={{ backgroundColor: color + "1a", color }}
+                          style={{ backgroundColor: option.color + "1a", color: option.color }}
                         >
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                          {val}
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: option.color }} />
+                          {option.label}
                         </span>
                       );
                     })}
@@ -356,15 +410,14 @@ function EmailDetailPanel({
 
                       let display: React.ReactNode;
                       if (ext.value_type === "enum") {
-                        const idx = ext.enum_values.indexOf(val);
-                        const color = ext.enum_colors?.[idx] ?? TAG_COLORS[(idx >= 0 ? idx : 0) % TAG_COLORS.length];
+                        const option = resolveEnumOption(ext.enum_options, String(val));
                         display = (
                           <span
                             className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium"
-                            style={{ backgroundColor: color + "1a", color }}
+                            style={{ backgroundColor: option.color + "1a", color: option.color }}
                           >
-                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-                            {val}
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: option.color }} />
+                            {option.label}
                           </span>
                         );
                       } else if (ext.value_type === "boolean") {
@@ -472,10 +525,12 @@ function EmailDetailPanel({
 export function InboxView() {
   const { session } = useAuth();
   const projectId = useProjectId();
+  const dispatch = useStoreDispatch();
   const emails = useIncomingEmails();
   const hasMoreEmails = useHasMoreEmails();
   const loadingMoreEmails = useLoadingMoreEmails();
   const loadMoreEmails = useLoadMoreEmails();
+  const failedReadIds = useRef(new Set<string>());
   const [projectEmail, setProjectEmail] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(true);
   const [extractors, setExtractors] = useState<EmailExtractor[]>([]);
@@ -529,12 +584,44 @@ export function InboxView() {
     [projectId]
   );
 
+  const markEmailRead = useCallback(
+    async (emailId: string) => {
+      if (failedReadIds.current.has(emailId)) return;
+
+      const readAt = new Date().toISOString();
+      dispatch({ type: "email:set-read-at", emailId, readAt });
+      setSelectedEmail((prev) =>
+        prev?.id === emailId ? { ...prev, read_at: readAt } : prev
+      );
+
+      try {
+        await api.post(`/api/projects/${projectId}/emails/${emailId}/read`, {
+          read: true,
+        });
+        failedReadIds.current.delete(emailId);
+      } catch {
+        failedReadIds.current.add(emailId);
+        dispatch({ type: "email:set-read-at", emailId, readAt: null });
+        setSelectedEmail((prev) =>
+          prev?.id === emailId ? { ...prev, read_at: null } : prev
+        );
+      }
+    },
+    [dispatch, projectId]
+  );
+
   // Load email from URL param on mount
   useEffect(() => {
     if (selectedId && !selectedEmail && !detailLoading) {
       loadEmailDetail(selectedId);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedEmail?.id || selectedEmail.read_at) return;
+    if (failedReadIds.current.has(selectedEmail.id)) return;
+    void markEmailRead(selectedEmail.id);
+  }, [markEmailRead, selectedEmail?.id, selectedEmail?.read_at]);
 
   const updateEmailParam = (id: string | null) => {
     const url = new URL(window.location.href);
@@ -590,7 +677,7 @@ export function InboxView() {
   const filteredEmails = useMemo(() => {
     let list =
       filter === "unread"
-        ? emails.filter((e) => e.status === "received")
+        ? emails.filter((e) => !e.read_at)
         : emails;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -607,7 +694,7 @@ export function InboxView() {
     return list;
   }, [emails, filter, search, selectedId, selectedEmail]);
 
-  const unreadCount = emails.filter((e) => e.status === "received").length;
+  const unreadCount = emails.filter((e) => !e.read_at).length;
 
   return (
     <div className="flex-1 flex flex-col min-h-0">

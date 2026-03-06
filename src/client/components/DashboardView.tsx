@@ -14,17 +14,8 @@ import {
   XCircle,
 } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card.js";
-import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select.js";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -37,28 +28,22 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart.js";
 import {
-  Bar,
-  BarChart,
   Area,
   AreaChart,
   CartesianGrid,
   XAxis,
   YAxis,
-  PieChart,
-  Pie,
-  Cell,
-  Label,
 } from "recharts";
 import { useProjectId } from "../store/StoreContext.js";
 import { useAuth } from "../context/AuthContext.js";
 import { api } from "../lib/api.js";
+import { TAG_COLORS } from "../lib/presets.js";
 import { Logo } from "./Logo.js";
 import type { NavItem } from "./AppSidebar.js";
+import { ContentBreakdownCard, type BreakdownItem, type BreakdownSection } from "./ContentBreakdownCard.js";
 
 // --- Countries ---
 
@@ -124,8 +109,19 @@ function countryLabel(code: string): string {
 // --- Types ---
 
 interface DashboardStats {
-  kpis: { total: number; unread: number; processed: number; failed: number };
+  kpis: { total: number; unread: number; processed: number; failed: number; sender_count: number };
   tag_daily: { date: string; tag_id: string; tag_name: string; tag_color: string; count: number }[];
+  category_breakdowns: {
+    category_id: string;
+    category_name: string;
+    category_label: string;
+    category_order: number;
+    value_id: string;
+    value_label: string;
+    color: string;
+    count: number;
+  }[];
+  daily_volume: { date: string; count: number }[];
   top_domains: { domain: string; count: number; latest_date: string }[];
   activity_grid: { date: string; count: number }[];
   recent_emails: {
@@ -174,9 +170,139 @@ function dayLabel(dateStr: string) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateRangeLabel(startDate: string, endDate: string) {
+  if (startDate === endDate) return dayLabel(startDate);
+
+  const start = new Date(startDate + "T00:00:00");
+  const end = new Date(endDate + "T00:00:00");
+
+  if (start.getFullYear() !== end.getFullYear()) {
+    return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} - ${end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  }
+
+  if (start.getMonth() !== end.getMonth()) {
+    return `${dayLabel(startDate)} - ${dayLabel(endDate)}`;
+  }
+
+  return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} - ${end.toLocaleDateString(undefined, { day: "numeric" })}`;
+}
+
 function weekdayLabel(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
   return d.toLocaleDateString(undefined, { weekday: "short" });
+}
+
+function sortBreakdownItems(items: BreakdownItem[]) {
+  return [...items].sort((a, b) => {
+    const aSpecial = a.id === "_untagged" || a.id === "_unclassified";
+    const bSpecial = b.id === "_untagged" || b.id === "_unclassified";
+    if (aSpecial !== bSpecial) return aSpecial ? 1 : -1;
+    if (b.count !== a.count) return b.count - a.count;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function isHexColor(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim());
+}
+
+function buildCategorySections(
+  categoryBreakdowns: DashboardStats["category_breakdowns"],
+  totalEmails: number
+): BreakdownSection[] {
+  const groups = new Map<
+    string,
+    {
+      title: string;
+      order: number;
+      items: BreakdownItem[];
+    }
+  >();
+
+  for (const row of categoryBreakdowns) {
+    const existing = groups.get(row.category_id);
+    const item: BreakdownItem = {
+      id: row.value_id,
+      label: row.value_label,
+      color: row.color,
+      count: Number(row.count),
+    };
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      groups.set(row.category_id, {
+        title: row.category_label || row.category_name,
+        order: Number(row.category_order),
+        items: [item],
+      });
+    }
+  }
+
+  return Array.from(groups.entries())
+    .sort((a, b) => a[1].order - b[1].order || a[1].title.localeCompare(b[1].title))
+    .map(([id, group]) => {
+      const items = sortBreakdownItems(group.items).map((item, index) => ({
+        ...item,
+        color:
+          item.id === "_unclassified"
+            ? (isHexColor(item.color) ? item.color : "#94a3b8")
+            : (isHexColor(item.color) ? item.color : TAG_COLORS[index % TAG_COLORS.length]),
+      }));
+      const unclassified = items.find((item) => item.id === "_unclassified")?.count ?? 0;
+      return {
+        id,
+        title: group.title,
+        subtitle: "Category",
+        items,
+        stats: [
+          { label: "Classified", value: Math.max(totalEmails - unclassified, 0) },
+          { label: "Unclassified", value: unclassified },
+        ],
+      };
+    });
+}
+
+function buildTagSection(
+  tagDaily: DashboardStats["tag_daily"],
+  totalEmails: number
+): BreakdownSection | null {
+  const tagCounts = new Map<string, BreakdownItem>();
+  for (const row of tagDaily) {
+    const existing = tagCounts.get(row.tag_id);
+    if (existing) {
+      existing.count += Number(row.count);
+    } else {
+      tagCounts.set(row.tag_id, {
+        id: row.tag_id,
+        label: row.tag_name,
+        color: row.tag_color,
+        count: Number(row.count),
+      });
+    }
+  }
+
+  const items = sortBreakdownItems(Array.from(tagCounts.values()));
+  if (items.length === 0) return null;
+
+  const untagged = items.find((item) => item.id === "_untagged")?.count ?? 0;
+  return {
+    id: "tags",
+    title: "Tags",
+    subtitle: "Applied labels",
+    items,
+    stats: [
+      { label: "Tagged", value: Math.max(totalEmails - untagged, 0) },
+      { label: "Untagged", value: untagged },
+    ],
+    note: "Tag counts are raw applications, so one email can appear under multiple tags.",
+  };
 }
 
 // --- Components ---
@@ -217,36 +343,54 @@ function KpiCard({
 }
 
 function VolumeChart({
-  tagDaily,
+  dailyVolume,
   days,
 }: {
-  tagDaily: DashboardStats["tag_daily"];
+  dailyVolume: DashboardStats["daily_volume"];
   days: number;
 }) {
+  const useWeeklyBuckets = days >= 30;
   const data = useMemo(() => {
     const now = new Date();
-    const buckets: { key: string; label: string; count: number }[] = [];
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const buckets: { key: string; label: string; count: number; rangeLabel: string }[] = [];
+    const countsByDate = new Map(
+      (dailyVolume ?? []).map((row) => [
+        typeof row.date === "string" ? row.date.slice(0, 10) : row.date,
+        Number(row.count),
+      ])
+    );
 
     for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = dateKey(d);
       buckets.push({
         key,
-        label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-        count: 0,
+        label: dayLabel(key),
+        count: countsByDate.get(key) ?? 0,
+        rangeLabel: dayLabel(key),
       });
     }
 
-    for (const row of tagDaily) {
-      const dateStr = typeof row.date === "string" ? row.date.slice(0, 10) : row.date;
-      const bucket = buckets.find((b) => b.key === dateStr);
-      if (bucket) {
-        bucket.count += Number(row.count);
-      }
+    if (!useWeeklyBuckets) return buckets;
+
+    const weeklyBuckets: { key: string; label: string; count: number; rangeLabel: string }[] = [];
+    for (let end = buckets.length; end > 0; end -= 7) {
+      const start = Math.max(0, end - 7);
+      const slice = buckets.slice(start, end);
+      const startKey = slice[0].key;
+      const endKey = slice[slice.length - 1].key;
+      weeklyBuckets.unshift({
+        key: endKey,
+        label: dayLabel(endKey),
+        count: slice.reduce((sum, bucket) => sum + bucket.count, 0),
+        rangeLabel: dateRangeLabel(startKey, endKey),
+      });
     }
-    return buckets;
-  }, [tagDaily, days]);
+
+    return weeklyBuckets;
+  }, [dailyVolume, days, useWeeklyBuckets]);
 
   const config: ChartConfig = {
     count: { label: "Emails", color: "var(--color-primary)" },
@@ -256,7 +400,9 @@ function VolumeChart({
     <Card className="border-border/60">
       <CardContent className="p-5">
         <h3 className="text-sm font-bold text-foreground">Frequency</h3>
-        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-6">Volume over time</p>
+        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-6">
+          {useWeeklyBuckets ? "Weekly volume over time" : "Daily volume over time"}
+        </p>
         <ChartContainer config={config} className="aspect-[4/1] w-full">
           <AreaChart
             data={data}
@@ -284,8 +430,16 @@ function VolumeChart({
               tickMargin={4}
               fontSize={10}
               className="font-bold opacity-40"
+              allowDecimals={false}
             />
-            <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  indicator="line"
+                  labelFormatter={(_, payload) => payload?.[0]?.payload?.rangeLabel ?? ""}
+                />
+              }
+            />
             <Area
               dataKey="count"
               type="monotone"
@@ -301,120 +455,30 @@ function VolumeChart({
   );
 }
 
-function TagPieChart({
+function BreakdownCard({
   tagDaily,
+  categoryBreakdowns,
+  totalEmails,
 }: {
   tagDaily: DashboardStats["tag_daily"];
+  categoryBreakdowns: DashboardStats["category_breakdowns"];
+  totalEmails: number;
 }) {
-  const data = useMemo(() => {
-    const tagCounts = new Map<string, { name: string; count: number }>();
-    for (const row of tagDaily) {
-      const existing = tagCounts.get(row.tag_id);
-      if (existing) {
-        existing.count += Number(row.count);
-      } else {
-        tagCounts.set(row.tag_id, {
-          name: row.tag_name,
-          count: Number(row.count),
-        });
-      }
-    }
-    return Array.from(tagCounts.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .map(([id, d]) => ({ 
-        id, 
-        ...d
-      }));
-  }, [tagDaily]);
-
-  const total = data.reduce((sum, d) => sum + d.count, 0);
-  const config = useMemo(() => {
-    const cfg: ChartConfig = {};
-    data.forEach((d, i) => {
-      cfg[d.id] = { 
-        label: d.name, 
-        color: `oklch(var(--chart-${(i % 5) + 1}))` 
-      };
-    });
-    return cfg;
-  }, [data]);
-
-  if (data.length === 0) {
-    return (
-      <Card className="flex flex-col border-border/60">
-        <CardContent className="p-5 flex-1 flex flex-col">
-          <h3 className="text-sm font-bold text-foreground">Distribution</h3>
-          <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-4">By tag</p>
-          <div className="flex items-center justify-center flex-1 text-muted-foreground">
-            <p className="text-xs italic opacity-40 uppercase tracking-widest">No tagged emails</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const sections = useMemo(() => {
+    const nextSections = buildCategorySections(categoryBreakdowns, totalEmails);
+    const tagSection = buildTagSection(tagDaily, totalEmails);
+    if (tagSection) nextSections.push(tagSection);
+    return nextSections;
+  }, [categoryBreakdowns, tagDaily, totalEmails]);
 
   return (
-    <Card className="flex flex-col border-border/60">
-      <CardContent className="p-5 flex-1 flex flex-col">
-        <h3 className="text-sm font-bold text-foreground">Distribution</h3>
-        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 mb-2">By tag</p>
-        <div className="flex-1 flex items-center gap-6">
-          <ChartContainer config={config} className="aspect-square w-[140px] shrink-0">
-            <PieChart>
-              <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
-              <Pie
-                data={data}
-                dataKey="count"
-                nameKey="name"
-                innerRadius={44}
-                outerRadius={66}
-                strokeWidth={2}
-                stroke="var(--color-background)"
-              >
-                {data.map((entry) => (
-                  <Cell 
-                    key={entry.id} 
-                    fill={`var(--color-${entry.id})`} 
-                  />
-                ))}
-                <Label
-                  content={({ viewBox }) => {
-                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                      return (
-                        <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
-                          <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-xl font-bold tabular-nums">
-                            {total}
-                          </tspan>
-                          <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 16} className="fill-muted-foreground text-[8px] font-bold uppercase tracking-widest opacity-40">
-                            TOTAL
-                          </tspan>
-                        </text>
-                      );
-                    }
-                  }}
-                />
-              </Pie>
-            </PieChart>
-          </ChartContainer>
-          <div className="flex-1 space-y-2.5 min-w-0">
-            {data.slice(0, 5).map((t) => (
-              <div key={t.id} className="flex items-center gap-2">
-                <span 
-                  className="w-1.5 h-1.5 rounded-full shrink-0" 
-                  style={{ backgroundColor: `var(--color-${t.id})` }} 
-                />
-                <span className="text-[11px] font-bold text-foreground truncate flex-1 uppercase tracking-tight">
-                  {t.name}
-                </span>
-                <span className="text-[11px] tabular-nums font-bold text-muted-foreground/60 shrink-0 w-8 text-right">
-                  {total > 0 ? Math.round((t.count / total) * 100) : 0}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <ContentBreakdownCard
+      heading="Distribution"
+      subtitle="Categories and tags as available"
+      emptyMessage="No categories or tags yet"
+      sections={sections}
+      itemLimit={6}
+    />
   );
 }
 
@@ -429,7 +493,7 @@ function ActivityGrid({
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const dayOfWeek = today.getDay();
     const startDate = new Date(today);
-    startDate.setDate(startDate.getDate() - (weeks * 7 - 1) - dayOfWeek);
+    startDate.setDate(startDate.getDate() - dayOfWeek - (weeks - 1) * 7);
 
     const countMap = new Map<string, number>();
     for (const entry of activityGrid) {
@@ -615,7 +679,7 @@ function RecentEmails({
                 className="flex items-start gap-3 w-full text-left rounded-lg px-2 py-2.5 hover:bg-muted/50 transition-colors group"
               >
                 <div className="mt-1.5 shrink-0">
-                  {e.status === "received" ? (
+                  {e.read_at == null ? (
                     <span className="block w-2 h-2 rounded-full bg-primary" />
                   ) : e.status === "processing" ? (
                     <span className="block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -875,13 +939,22 @@ export function DashboardView({
     );
   }
 
-  if (!data || (data.recent_emails.length === 0 && selectedCountries.length === 0)) {
+  if (!data || (data.kpis.total === 0 && selectedCountries.length === 0)) {
     return <EmptyDashboard onNavigate={onNavigate} />;
   }
 
   const { kpis } = data;
   const daysNum = parseInt(range);
-  const avgPerDay = daysNum > 0 ? (kpis.total / daysNum).toFixed(1) : "0";
+  const senderCount = kpis.sender_count;
+  const weeksInRange = daysNum / 7;
+  const avgPerSender =
+    weeksInRange > 0 && senderCount > 0
+      ? (kpis.total / senderCount / weeksInRange).toFixed(1)
+      : "0";
+  const avgPerSenderSubtitle =
+    senderCount > 0
+      ? `PER WEEK / ${senderCount} ACTIVE ${senderCount === 1 ? "SENDER" : "SENDERS"}`
+      : "NO ACTIVE SENDERS";
 
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-background">
@@ -925,7 +998,7 @@ export function DashboardView({
             </div>
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Overview of your inbox volume, tag distribution, and recent activity{" "}
+            Overview of your inbox volume, content breakdowns, and recent activity{" "}
             {selectedCountries.length > 0
               ? `from ${selectedCountries.length} selected countries`
               : "globally"}.
@@ -940,22 +1013,31 @@ export function DashboardView({
             icon={EnvelopeSimple}
             subtitle={`L${range}D VOLUME`}
           />
-          <KpiCard label="Unread" value={kpis.unread} icon={Tray} subtitle="CURRENT BALANCE" />
-          <KpiCard label="Processed" value={kpis.processed} icon={CheckCircle} subtitle="TOTAL LIFETIME" />
+          <KpiCard label="Unread" value={kpis.unread} icon={Tray} subtitle={`L${range}D UNREAD`} />
           <KpiCard
-            label="Avg / day"
-            value={avgPerDay}
+            label="Processed"
+            value={kpis.processed}
+            icon={CheckCircle}
+            subtitle={`L${range}D PROCESSED`}
+          />
+          <KpiCard
+            label="Avg / sender / wk"
+            value={avgPerSender}
             icon={TrendUp}
-            subtitle={`L${range}D VELOCITY`}
+            subtitle={avgPerSenderSubtitle}
           />
         </div>
 
         {/* Activity Section */}
-        <VolumeChart tagDaily={data.tag_daily} days={daysNum} />
+        <VolumeChart dailyVolume={data.daily_volume} days={daysNum} />
 
         {/* Details Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TagPieChart tagDaily={data.tag_daily} />
+          <BreakdownCard
+            tagDaily={data.tag_daily}
+            categoryBreakdowns={data.category_breakdowns ?? []}
+            totalEmails={kpis.total}
+          />
           <RecentEmails emails={data.recent_emails} onNavigate={onNavigate} />
         </div>
 
